@@ -43,7 +43,7 @@ function fromApi(item: any): Row {
   };
 }
 
-export default function App()
+export default function App() {
   const [active, setActive] = useState('MAPA 1.0');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('Todos os status');
