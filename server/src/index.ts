@@ -1,15 +1,16 @@
-import { timingSafeEqual } from "node:crypto";
+import bcrypt from "bcryptjs";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient, UserRole } from "@prisma/client";
+import jwt, { type JwtPayload } from "jsonwebtoken";
 import { z } from "zod";
 
 const app = express();
 const prisma = new PrismaClient();
 const port = Number(process.env.PORT || 3001);
-const apiToken = process.env.MAPA_API_TOKEN || "";
+const jwtSecret = process.env.JWT_SECRET || "";
 const allowedOrigin = process.env.FRONTEND_ORIGIN || "";
 
 app.disable("x-powered-by");
@@ -27,26 +28,43 @@ app.use(cors({
 app.use(express.json({ limit: "1mb" }));
 app.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: "draft-7", legacyHeaders: false }));
 
-function tokenMatches(received: string, expected: string): boolean {
-  const a = Buffer.from(received);
-  const b = Buffer.from(expected);
-  return a.length === b.length && a.length > 0 && timingSafeEqual(a, b);
-}
+const loginSchema = z.object({
+  email: z.string().email().max(254),
+  password: z.string().min(1).max(200)
+});
 
-function requireApiToken(req: Request, res: Response, next: NextFunction) {
-  if (!apiToken) {
+async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!jwtSecret || jwtSecret.length < 32) {
     return res.status(503).json({
-      error: { code: "API_NOT_CONFIGURED", message: "A API ainda não foi configurada pelo administrador." }
+      error: { code: "AUTH_NOT_CONFIGURED", message: "A autenticação ainda não foi configurada pelo administrador." }
     });
   }
   const header = req.header("authorization") || "";
-  const received = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!tokenMatches(received, apiToken)) {
-    return res.status(401).json({
-      error: { code: "UNAUTHORIZED", message: "Autenticação necessária." }
-    });
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (!token) return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Faça login para continuar." } });
+  try {
+    const decoded = jwt.verify(token, jwtSecret);
+    if (typeof decoded === "string" || !decoded.sub) {
+      return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Sessão inválida." } });
+    }
+    const user = await prisma.user.findUnique({ where: { id: String(decoded.sub) } });
+    if (!user || !user.active) {
+      return res.status(401).json({ error: { code: "INACTIVE_USER", message: "Usuário inativo ou não encontrado." } });
+    }
+    req.authUser = { id: user.id, role: user.role };
+    return next();
+  } catch {
+    return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Sessão inválida ou expirada." } });
   }
-  return next();
+}
+
+function requireRole(...roles: UserRole[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.authUser || !roles.includes(req.authUser.role)) {
+      return res.status(403).json({ error: { code: "FORBIDDEN", message: "Seu perfil não permite esta ação." } });
+    }
+    return next();
+  };
 }
 
 const patchSchema = z.object({
@@ -64,7 +82,34 @@ app.get("/api/v1/health", (_req, res) => {
   res.json({ status: "ok", service: "mapa-costalog-api", databaseConfigured: Boolean(process.env.DATABASE_URL) });
 });
 
-app.use("/api/v1", requireApiToken);
+const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false });
+
+app.post("/api/v1/auth/login", loginLimiter, async (req, res, next) => {
+  try {
+    if (!jwtSecret || jwtSecret.length < 32) {
+      return res.status(503).json({ error: { code: "AUTH_NOT_CONFIGURED", message: "A autenticação ainda não foi configurada pelo administrador." } });
+    }
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Informe e-mail e senha válidos." } });
+    }
+    const email = parsed.data.email.trim().toLocaleLowerCase("pt-BR");
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !user.active || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) {
+      return res.status(401).json({ error: { code: "INVALID_CREDENTIALS", message: "E-mail ou senha incorretos." } });
+    }
+    const token = jwt.sign({ role: user.role }, jwtSecret, { subject: user.id, expiresIn: "8h", issuer: "mapa-costalog-api", audience: "mapa-costalog" });
+    return res.json({ token, expiresIn: 28800, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.use("/api/v1", requireAuth);
+
+app.get("/api/v1/auth/me", (req, res) => {
+  res.json({ user: req.authUser });
+});
 
 app.get("/api/v1/config/columns", async (_req, res, next) => {
   try {
@@ -110,7 +155,7 @@ app.get("/api/v1/mapa", async (req, res, next) => {
   }
 });
 
-app.patch("/api/v1/mapa/:id", async (req, res, next) => {
+app.patch("/api/v1/mapa/:id", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.OPERACAO), async (req, res, next) => {
   try {
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -171,7 +216,7 @@ app.patch("/api/v1/mapa/:id", async (req, res, next) => {
     const updated = await prisma.$transaction(async (tx) => {
       const row = await tx.mapaRow.update({
         where: { id: existing.id },
-        data: { data: after, ...indexFields }
+        data: { data: after, updatedById: req.authUser!.id, ...indexFields }
       });
       await tx.auditLog.create({
         data: {
@@ -181,7 +226,8 @@ app.patch("/api/v1/mapa/:id", async (req, res, next) => {
           action: "UPDATE",
           fieldKey: Object.keys(parsed.data.changes).join(","),
           beforeValue: before as Prisma.InputJsonValue,
-          afterValue: after
+          afterValue: after,
+          userId: req.authUser!.id
         }
       });
       return row;
