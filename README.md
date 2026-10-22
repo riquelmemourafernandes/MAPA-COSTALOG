@@ -1,31 +1,37 @@
 # MAPA Costalog — sistema substituto da planilha
 
-Projeto inicial para migrar a operação centralizada na aba **MAPA 1.0** para uma aplicação web própria.
+Projeto para migrar gradualmente a operação da aba MAPA 1.0 para uma aplicação web própria.
 
 ## Estado atual
-Este é um esqueleto inicial de interface, não uma migração concluída. Não importa dados reais automaticamente e não deve ser usado em produção até a implementação e validação do backend.
+- Interface inicial React + TypeScript + Vite.
+- Modelo inicial de dados PostgreSQL em `prisma/schema.prisma`.
+- Plano de migração e segurança em `docs/PLANO-MIGRACAO.md`.
+- Contrato inicial das rotas em `docs/CONTRATO-API.md`.
+- Catálogo preliminar de regras em `docs/REGRAS-PLANILHA.md`.
+- Dicionário sanitizado de colunas em `docs/dicionario-colunas.csv`.
 
-## Stack proposta
-- React + TypeScript + Vite (interface)
-- API Node.js + TypeScript
-- PostgreSQL para dados transacionais
-- WebSockets para atualizações simultâneas
-- Histórico/auditoria de alterações no backend
+**Ainda não está pronto para uso operacional.** A interface existente usa registros fictícios, e a API, autenticação, banco conectado e importação real ainda precisam ser implementados e testados.
 
-## Começar a interface
+## Stack planejada
+- Frontend: React + TypeScript + Vite.
+- API: Node.js + TypeScript.
+- Persistência: PostgreSQL + Prisma.
+- Histórico: auditoria no servidor.
+- Próxima evolução: grade virtualizada, importação com prévia e colaboração.
+
+## Executar a interface atual
 ```bash
 npm install
 npm run dev
 ```
 
-## Próximas etapas
-1. Confirmar dicionário de colunas e regras do MAPA 1.0.
-2. Modelar tabelas e importador de XLSX com validação e prévia.
-3. Criar API autenticada e migrações PostgreSQL.
-4. Implementar edição em grade, colagem em massa, filtros e ordenação.
-5. Implementar histórico, permissões e colaboração.
-6. Testar cálculos comparando os resultados com a planilha original.
-7. Configurar hospedagem e variáveis de ambiente.
-
 ## Segurança
-Nunca coloque senhas, tokens ou credenciais no frontend ou neste repositório. Use variáveis de ambiente no servidor.
+Não adicionar a planilha operacional, exportações com dados reais, senhas, tokens ou chaves ao repositório. Usar variáveis de ambiente no servidor. A migração deve ser validada com cópia controlada e backup antes de qualquer carga operacional.
+
+## Próximas etapas
+1. Validar o dicionário de colunas e regras de negócio.
+2. Configurar PostgreSQL e gerar/aplicar migrações Prisma.
+3. Implementar API autenticada, permissões e auditoria.
+4. Implementar importação XLSX com prévia, validação e idempotência.
+5. Conectar a grade à API e habilitar edição persistente.
+6. Comparar resultados com a planilha antes de liberar para a equipe.
