@@ -36,7 +36,7 @@ export default function App() {
     if (!raw.includes('\t') && !raw.includes('\n')) return;
     e.preventDefault();
     const matrix = raw.trimEnd().split(/\r?\n/).map(line => line.split('\t'));
-    setNotice(`Colagem detectada: ${matrix.length} linha(s) × ${Math.max(...matrix.map(r => r.length))} coluna(s). A gravação estará disponível quando a API e o banco forem implementados.`);
+    setNotice(`Colagem detectada: ${matrix.length} linha(s) × ${Math.max(...matrix.map(r => r.length))} coluna(s). A gravação em lote será habilitada após a conexão da grade com a API.`);
   }
 
   return <div className="app-shell">
@@ -50,21 +50,21 @@ export default function App() {
     <main className="main">
       <header className="topbar"><div className="breadcrumbs">Operações <span>/</span> <b>{active}</b></div><div className="top-actions"><button className="icon-button" title="Notificações"><Bell size={18}/></button><div className="avatar small">C</div></div></header>
       <section className="content">
-        <div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPERAÇÕES</div><h1>{active}</h1><p>Centralize o acompanhamento e a gestão operacional em um só lugar.</p></div><button className="primary" onClick={() => setNotice('A criação de registros será habilitada após a API e a persistência serem configuradas.')}><Plus size={17}/> Novo registro</button></div>
+        <div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPERAÇÕES</div><h1>{active}</h1><p>Centralize o acompanhamento e a gestão operacional em um só lugar.</p></div><button className="primary" onClick={() => setNotice('A criação de registros será habilitada quando a grade estiver conectada ao banco de dados.')}><Plus size={17}/> Novo registro</button></div>
         <div className="notice"><ClipboardList size={17}/><span>{notice}</span><button onClick={() => setNotice('Demonstração visual — os dados abaixo são fictícios.')}>Dispensar</button></div>
         <div className="metrics">
           <div className="metric-card"><div className="metric-top"><span>Registros exibidos</span><Table2 size={17}/></div><strong>{filtered.length}</strong><small>Somente dados de demonstração</small></div>
           <div className="metric-card"><div className="metric-top"><span>Em trânsito</span><Truck size={17}/></div><strong>{filtered.filter(r=>r.status==='Em trânsito').length}</strong><small>Exemplo de indicador operacional</small></div>
           <div className="metric-card"><div className="metric-top"><span>Aguardando</span><Activity size={17}/></div><strong>{filtered.filter(r=>r.status==='Aguardando').length}</strong><small>Exemplo de indicador operacional</small></div>
-          <div className="metric-card"><div className="metric-top"><span>Usuários</span><Users size={17}/></div><strong>—</strong><small>Autenticação ainda não configurada</small></div>
+          <div className="metric-card"><div className="metric-top"><span>Usuários</span><Users size={17}/></div><strong>—</strong><small>Disponível após configurar servidor e usuários</small></div>
         </div>
         <section className="panel">
-          <div className="panel-heading"><div><h2><Table2 size={19}/> Grade operacional</h2><p>Prévia da experiência de edição em formato de planilha</p></div><div className="panel-actions"><button className="secondary" onClick={()=>setNotice('Exportação real será ligada à API depois da modelagem do banco.')}><Download size={16}/> Exportar</button><button className="secondary" onClick={()=>setNotice('Selecione uma coluna quando a grade completa for implementada.')}><ArrowDownUp size={16}/> Ordenar</button></div></div>
+          <div className="panel-heading"><div><h2><Table2 size={19}/> Grade operacional</h2><p>Prévia da experiência de edição em formato de planilha</p></div><div className="panel-actions"><button className="secondary" onClick={()=>setNotice('A exportação será conectada à API junto com a grade operacional.')}><Download size={16}/> Exportar</button><button className="secondary" onClick={()=>setNotice('Selecione uma coluna quando a grade completa for implementada.')}><ArrowDownUp size={16}/> Ordenar</button></div></div>
           <div className="toolbar"><div className="searchbox"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>setStatus(e.target.value)}><option>Todos os status</option><option>Programado</option><option>Em trânsito</option><option>Aguardando</option></select></div><span className="rows-count">{filtered.length} linhas</span></div>
           <div className="table-wrap" tabIndex={0} onPaste={pasteGrid}><table><thead><tr>{columns.map(c=><th key={c.key}>{c.label}</th>)}</tr></thead><tbody>{filtered.map(row=><tr key={row.id}>{columns.map(c=><td key={c.key} contentEditable={c.key!=='id'} suppressContentEditableWarning onBlur={e=>{const value=e.currentTarget.textContent||'';setRows(prev=>prev.map(r=>r.id===row.id?{...r,[c.key]:c.key==='id'?r.id:value}:r));}}>{row[c.key]}</td>)}</tr>)}</tbody></table></div>
           <footer className="table-footer"><span>Prévia visual • {filtered.length} registros de demonstração</span><span><span className="green-dot"/> Alterações ainda não são persistidas</span></footer>
         </section>
-        <div className="next-step"><div className="next-icon"><Waypoints size={20}/></div><div><b>Próximo passo técnico</b><p>Modelar o banco de dados a partir dos cabeçalhos e regras reais do arquivo MAPA IMPORTAÇÃO, antes de conectar a grade a dados operacionais.</p></div></div>
+        <div className="next-step"><div className="next-icon"><Waypoints size={20}/></div><div><b>Próximo passo</b><p>Conectar esta grade à API, configurar o banco de homologação e validar a importação do Excel antes de usar dados operacionais.</p></div></div>
         <footer className="app-footer">MAPA COSTALOG <span>•</span> Protótipo inicial — não usar para operação real</footer>
       </section>
     </main>
