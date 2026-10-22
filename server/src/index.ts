@@ -271,7 +271,7 @@ function excelColumnKey(index: number): string {
 
 async function parseMapaWorkbook(buffer: Buffer) {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
+  await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
   const worksheet = workbook.worksheets.find((sheet) => sheet.name.trim().toLocaleUpperCase("pt-BR") === "MAPA 1.0");
   if (!worksheet) throw new Error('A aba "MAPA 1.0" não foi encontrada no arquivo.');
   if (worksheet.rowCount < 1) throw new Error('A aba "MAPA 1.0" está vazia.');
