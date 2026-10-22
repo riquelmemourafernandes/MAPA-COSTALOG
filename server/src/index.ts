@@ -252,8 +252,9 @@ const uploadXlsx = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024, files: 1 },
   fileFilter(_req, file, callback) {
-    const valid = /\\.xlsx?$/i.test(file.originalname);
-    callback(valid ? null : new Error("Envie um arquivo Excel .xlsx ou .xls."), valid);
+    const valid = /\.xlsx?$/i.test(file.originalname);
+    if (!valid) return callback(new Error("Envie um arquivo Excel .xlsx ou .xls."));
+    return callback(null, true);
   }
 });
 
@@ -276,6 +277,11 @@ function parseMapaWorkbook(buffer: Buffer) {
   if (!rows.length) throw new Error('A aba "MAPA 1.0" está vazia.');
   const headers = (rows[0] || []).map((value, index) => ({ key: excelColumnKey(index), label: String(value ?? "").trim() }));
   const labels = new Set(headers.map((item) => item.label.toLocaleUpperCase("pt-BR")));
+  const headerKey = (label: string) => headers.find((item) => item.label.toLocaleUpperCase("pt-BR") === label)?.key;
+  const containerKey = headerKey("CONTAINER");
+  const statusKey = headerKey("STATUS");
+  const clientKey = headerKey("CLIENTE");
+  const cteKey = headerKey("CTE");
   const missing = ["DATA", "CTE", "CLIENTE", "CONTAINER"].filter((label) => !labels.has(label));
   if (missing.length) throw new Error("Cabeçalhos obrigatórios não reconhecidos: " + missing.join(", "));
   const parsedRows: Array<{ data: Record<string, string | number | boolean>; excelRow: number }> = [];
@@ -290,10 +296,11 @@ function parseMapaWorkbook(buffer: Buffer) {
       else data[headers[c].key] = String(value);
     }
     if (!Object.keys(data).length) continue;
-    if (typeof data.T === "string" && data.T.length > 32) errors.push({ row: r + 1, message: "Container excede 32 caracteres." });
+    const containerValue = containerKey ? data[containerKey] : undefined;
+    if (typeof containerValue === "string" && containerValue.length > 32) errors.push({ row: r + 1, message: "Container excede 32 caracteres." });
     parsedRows.push({ data, excelRow: r + 1 });
   }
-  return { parsedRows, errors, sheetName, headers, sourceRowCount: Math.max(0, rows.length - 1) };
+  return { parsedRows, errors, sheetName, headers, headerKey, statusKey, clientKey, containerKey, cteKey, sourceRowCount: Math.max(0, rows.length - 1) };
 }
 
 app.post("/api/v1/imports/preview", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR), uploadXlsx.single("file"), async (req, res, next) => {
@@ -344,10 +351,10 @@ app.post("/api/v1/imports/:id/commit", requireRole(UserRole.ADMIN), uploadXlsx.s
     const now = new Date();
     const rows = parsed.parsedRows.map(({ data }) => ({
       data: data as Prisma.InputJsonObject,
-      status: typeof data.C === "string" ? data.C : null,
-      clientName: typeof data.L === "string" ? data.L : null,
-      container: typeof data.T === "string" ? data.T : null,
-      cte: data.D === undefined ? null : String(data.D),
+      status: parsed.statusKey && typeof data[parsed.statusKey] === "string" ? data[parsed.statusKey] as string : null,
+      clientName: parsed.clientKey && typeof data[parsed.clientKey] === "string" ? data[parsed.clientKey] as string : null,
+      container: parsed.containerKey && typeof data[parsed.containerKey] === "string" ? data[parsed.containerKey] as string : null,
+      cte: parsed.cteKey && data[parsed.cteKey] !== undefined ? String(data[parsed.cteKey]) : null,
       updatedById: req.authUser!.id, createdAt: now, updatedAt: now
     }));
     await prisma.$transaction(async (tx) => {
@@ -370,9 +377,22 @@ app.post("/api/v1/imports/:id/commit", requireRole(UserRole.ADMIN), uploadXlsx.s
 });
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  // Upload validation failures are client errors, not generic server failures.
+  if (error instanceof multer.MulterError) {
+    const tooLarge = error.code === "LIMIT_FILE_SIZE";
+    return res.status(tooLarge ? 413 : 400).json({
+      error: {
+        code: tooLarge ? "FILE_TOO_LARGE" : "UPLOAD_ERROR",
+        message: tooLarge ? "O arquivo excede o limite de 50 MB." : "Não foi possível receber o arquivo."
+      }
+    });
+  }
+  if (error instanceof Error && error.message === "Envie um arquivo Excel .xlsx ou .xls.") {
+    return res.status(400).json({ error: { code: "INVALID_FILE_TYPE", message: error.message } });
+  }
   // Keep internal error details out of HTTP responses.
   if (process.env.NODE_ENV !== "production") console.error(error);
-  res.status(500).json({
+  return res.status(500).json({
     error: { code: "INTERNAL_ERROR", message: "Não foi possível concluir a solicitação." }
   });
 });
