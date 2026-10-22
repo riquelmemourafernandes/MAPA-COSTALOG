@@ -252,7 +252,7 @@ const uploadXlsx = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024, files: 1 },
   fileFilter(_req, file, callback) {
-    const valid = /\.xlsx?$/i.test(file.originalname);
+    const valid = /\.xlsx$/i.test(file.originalname);
     if (!valid) return callback(new Error("Envie um arquivo Excel .xlsx."));
     return callback(null, true);
   }
@@ -434,7 +434,7 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
       }
     });
   }
-  if (error instanceof Error && error.message === "Envie um arquivo Excel .xlsx ou .xls.") {
+  if (error instanceof Error && error.message === "Envie um arquivo Excel .xlsx.") {
     return res.status(400).json({ error: { code: "INVALID_FILE_TYPE", message: error.message } });
   }
   // Keep internal error details out of HTTP responses.
