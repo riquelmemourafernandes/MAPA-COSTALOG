@@ -16,7 +16,9 @@ app.disable("x-powered-by");
 app.use(helmet());
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || !allowedOrigin || origin === allowedOrigin) return callback(null, true);
+    if (!origin) return callback(null, true);
+    if (!allowedOrigin && process.env.NODE_ENV !== "production") return callback(null, true);
+    if (allowedOrigin && origin === allowedOrigin) return callback(null, true);
     return callback(new Error("Origem não autorizada."));
   },
   methods: ["GET", "POST", "PATCH", "OPTIONS"],
@@ -48,7 +50,10 @@ function requireApiToken(req: Request, res: Response, next: NextFunction) {
 }
 
 const patchSchema = z.object({
-  changes: z.record(z.string().min(1).max(80), z.unknown()).refine(
+  changes: z.record(
+    z.string().min(1).max(80),
+    z.union([z.string().max(20000), z.number().finite(), z.boolean(), z.null()])
+  ).refine(
     (changes) => Object.keys(changes).length > 0 && Object.keys(changes).length <= 40,
     "Informe entre 1 e 40 campos por alteração."
   ),
@@ -132,6 +137,21 @@ app.patch("/api/v1/mapa/:id", async (req, res, next) => {
     if (rejected.length) {
       return res.status(400).json({
         error: { code: "FIELDS_NOT_EDITABLE", message: "Um ou mais campos não existem ou não podem ser editados.", details: rejected }
+      });
+    }
+    const invalidTypes = allowedColumns.filter((column) => {
+      const value = parsed.data.changes[column.key];
+      if (value === null) return false;
+      if (column.dataType === "number" || column.dataType === "currency") return typeof value !== "number";
+      if (column.dataType === "boolean") return typeof value !== "boolean";
+      if (column.dataType === "date" || column.dataType === "datetime") {
+        return typeof value !== "string" || Number.isNaN(Date.parse(value));
+      }
+      return typeof value !== "string";
+    }).map((column) => column.key);
+    if (invalidTypes.length) {
+      return res.status(400).json({
+        error: { code: "INVALID_FIELD_TYPE", message: "Um ou mais valores não correspondem ao tipo da coluna.", details: invalidTypes }
       });
     }
 
