@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, ArrowDownUp, Bell, ChevronDown, ClipboardList, Download, Filter, LayoutDashboard, Plus, Search, Settings2, Table2, Truck, Users, Waypoints } from 'lucide-react';
 
-type Row = { id: string | number; container: string; cliente: string; origem: string; destino: string; status: string; cavalo: string; motorista: string; previsao: string };
+type Row = { id: string | number; _updatedAt?: string; container: string; cliente: string; origem: string; destino: string; status: string; cavalo: string; motorista: string; previsao: string };
 const demoRows: Row[] = [
   { id: 1, container: 'ABCD1234567', cliente: 'CLIENTE DEMONSTRAÇÃO', origem: 'Santos/SP', destino: 'São Paulo/SP', status: 'Programado', cavalo: 'ABC1D23', motorista: 'Motorista exemplo', previsao: '22/10/2026' },
   { id: 2, container: 'EFGH7654321', cliente: 'CLIENTE DEMONSTRAÇÃO', origem: 'Santos/SP', destino: 'Campinas/SP', status: 'Em trânsito', cavalo: 'DEF4G56', motorista: 'Motorista exemplo', previsao: '23/10/2026' },
@@ -31,6 +31,7 @@ function fromApi(item: any): Row {
   const data = item?.data && typeof item.data === 'object' ? item.data : {};
   return {
     id: item.id ?? item.sequence ?? '',
+    _updatedAt: item.updatedAt,
     container: asText(item.container ?? data.T),
     cliente: asText(item.clientName ?? data.L),
     origem: asText(data.AK),
@@ -118,6 +119,39 @@ export default function App()
     setNotice('Sessão encerrada.');
   }
 
+  async function saveCell(row: Row, field: keyof Row, value: string) {
+    const columnKey: Partial<Record<keyof Row, string>> = {
+      container: 'T', cliente: 'L', origem: 'AK', destino: 'AQ',
+      status: 'C', cavalo: 'W', motorista: 'Y'
+    };
+    if (!apiBase || !token || !columnKey[field]) {
+      setRows(previous => previous.map(item => item.id === row.id ? { ...item, [field]: value } : item));
+      if (apiBase && token) setNotice('Este campo ainda não está habilitado para gravação pela API.');
+      return;
+    }
+    try {
+      const response = await fetch(apiBase + '/api/v1/mapa/' + encodeURIComponent(String(row.id)), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ changes: { [columnKey[field]!]: value }, expectedUpdatedAt: row._updatedAt })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar a alteração.');
+      const updatedAt = body.item?.updatedAt || new Date().toISOString();
+      setRows(previous => previous.map(item => item.id === row.id ? { ...item, [field]: value, _updatedAt: updatedAt } : item));
+      setNotice('Alteração salva e registrada no histórico.');
+      setApiError('');
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : 'Falha ao salvar.');
+      setNotice('A alteração não foi confirmada pelo servidor. Atualize os dados antes de continuar.');
+      const response = await fetch(apiBase + '/api/v1/mapa?page=1&pageSize=100', { headers: { Authorization: 'Bearer ' + token } }).catch(() => null);
+      if (response?.ok) {
+        const body = await response.json().catch(() => ({}));
+        setRows(Array.isArray(body.items) ? body.items.map(fromApi) : []);
+      }
+    }
+  }
+
   function pasteGrid(e: React.ClipboardEvent<HTMLDivElement>) {
     const raw = e.clipboardData.getData('text/plain');
     if (!raw.includes('\t') && !raw.includes('\n')) return;
@@ -154,7 +188,7 @@ export default function App()
         <section className="panel">
           <div className="panel-heading"><div><h2><Table2 size={19}/> Grade operacional</h2><p>Prévia da experiência de edição em formato de planilha</p></div><div className="panel-actions"><button className="secondary" onClick={()=>setNotice('A exportação será conectada à API junto com a grade operacional.')}><Download size={16}/> Exportar</button><button className="secondary" onClick={()=>setNotice('Selecione uma coluna quando a grade completa for implementada.')}><ArrowDownUp size={16}/> Ordenar</button></div></div>
           <div className="toolbar"><div className="searchbox"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>setStatus(e.target.value)}><option>Todos os status</option><option>Programado</option><option>Em trânsito</option><option>Aguardando</option></select></div><span className="rows-count">{filtered.length} linhas</span></div>
-          <div className="table-wrap" tabIndex={0} onPaste={pasteGrid}><table><thead><tr>{columns.map(c=><th key={c.key}>{c.label}</th>)}</tr></thead><tbody>{filtered.map(row=><tr key={row.id}>{columns.map(c=><td key={c.key} contentEditable={c.key!=='id'} suppressContentEditableWarning onBlur={e=>{const value=e.currentTarget.textContent||'';setRows(prev=>prev.map(r=>r.id===row.id?{...r,[c.key]:c.key==='id'?r.id:value}:r));}}>{row[c.key]}</td>)}</tr>)}</tbody></table></div>
+          <div className="table-wrap" tabIndex={0} onPaste={pasteGrid}><table><thead><tr>{columns.map(c=><th key={c.key}>{c.label}</th>)}</tr></thead><tbody>{filtered.map(row=><tr key={row.id}>{columns.map(c=><td key={c.key} contentEditable={c.key!=='id'} suppressContentEditableWarning onBlur={e=>{const value=e.currentTarget.textContent||'';if(c.key!=='id' && value!==String(row[c.key] ?? '')) void saveCell(row,c.key,value);}}>{row[c.key]}</td>)}</tr>)}</tbody></table></div>
           <footer className="table-footer"><span>{apiBase && token ? filtered.length + ' registros da API' : 'Prévia visual • ' + filtered.length + ' registros de demonstração'}</span><span><span className="green-dot"/> {apiBase && token ? 'Edição ainda não conectada ao salvamento' : 'Alterações ainda não são persistidas'}</span></footer>
         </section>
         <div className="next-step"><div className="next-icon"><Waypoints size={20}/></div><div><b>Próximo passo</b><p>Conectar esta grade à API, configurar o banco de homologação e validar a importação do Excel antes de usar dados operacionais.</p></div></div>
