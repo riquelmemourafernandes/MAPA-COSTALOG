@@ -37,6 +37,10 @@ A base PostgreSQL precisa existir antes de aplicar a migração. O script de adm
 - GET /api/v1/config/columns — metadados visíveis da grade.
 - GET /api/v1/mapa — pesquisa textual básica, filtro por status e paginação.
 - PATCH /api/v1/mapa/:id — aceita apenas campos marcados como editáveis no cadastro de colunas, valida tipos básicos, detecta conflito de edição e registra auditoria com o usuário autor.
+- POST /api/v1/imports/preview — ADMIN/SUPERVISOR; lê XLSX em memória, verifica a aba MAPA 1.0, calcula hash, mostra amostra e registra o resultado da prévia sem gravar as linhas operacionais.
+- POST /api/v1/imports/:id/commit — somente ADMIN; exige reenviar exatamente o mesmo arquivo validado na prévia e grava linhas + auditoria em uma transação.
+
+A importação aceita até 50 MB por requisição e atualmente importa somente a aba MAPA 1.0. A validação inicial é estrutural; não equivale à homologação de todas as fórmulas, status ou regras de negócio. Faça primeiro em banco de homologação e backup.
 
 ## Limitações ainda abertas
 A API ainda não possui importação XLSX, criação de registros, edição em lote, recuperação de senha, gestão de usuários por interface, controle fino por campo nem integração com a interface React. Antes de uso operacional, testar build, migração e permissões em ambiente de homologação.
