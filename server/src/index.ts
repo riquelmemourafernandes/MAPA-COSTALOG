@@ -332,7 +332,19 @@ app.post("/api/v1/imports/preview", requireRole(UserRole.ADMIN, UserRole.SUPERVI
     const fileHash = createHash("sha256").update(req.file.buffer).digest("hex");
     const duplicate = await prisma.importJob.findFirst({ where: { fileHash, status: ImportStatus.IMPORTED } });
     if (duplicate) return res.status(409).json({ error: { code: "DUPLICATE_IMPORT", message: "Este arquivo já foi importado.", importId: duplicate.id } });
-    const parsed = await parseMapaWorkbook(req.file.buffer);
+    let parsed: Awaited<ReturnType<typeof parseMapaWorkbook>>;
+    try {
+      parsed = await parseMapaWorkbook(req.file.buffer);
+    } catch (parseError) {
+      const message = parseError instanceof Error ? parseError.message : "";
+      const known = /aba|Cabeçalhos|vazia/i.test(message);
+      return res.status(400).json({
+        error: {
+          code: "INVALID_WORKBOOK",
+          message: known ? message : "O arquivo não é um Excel válido ou está corrompido."
+        }
+      });
+    }
     const job = await prisma.importJob.create({
       data: {
         fileName: req.file.originalname.slice(0, 255), fileHash,
@@ -369,7 +381,19 @@ app.post("/api/v1/imports/:id/commit", requireRole(UserRole.ADMIN), uploadXlsx.s
     if (await prisma.importJob.findFirst({ where: { fileHash, status: ImportStatus.IMPORTED } })) {
       return res.status(409).json({ error: { code: "DUPLICATE_IMPORT", message: "Este arquivo já foi importado." } });
     }
-    const parsed = await parseMapaWorkbook(req.file.buffer);
+    let parsed: Awaited<ReturnType<typeof parseMapaWorkbook>>;
+    try {
+      parsed = await parseMapaWorkbook(req.file.buffer);
+    } catch (parseError) {
+      const message = parseError instanceof Error ? parseError.message : "";
+      const known = /aba|Cabeçalhos|vazia/i.test(message);
+      return res.status(400).json({
+        error: {
+          code: "INVALID_WORKBOOK",
+          message: known ? message : "O arquivo não é um Excel válido ou está corrompido."
+        }
+      });
+    }
     if (parsed.errors.length) return res.status(400).json({ error: { code: "IMPORT_VALIDATION_FAILED", message: "O arquivo contém erros; gere uma nova prévia." }, errors: parsed.errors.slice(0, 50) });
     const now = new Date();
     const rows = parsed.parsedRows.map(({ data }) => ({
