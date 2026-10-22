@@ -253,7 +253,7 @@ const uploadXlsx = multer({
   limits: { fileSize: 50 * 1024 * 1024, files: 1 },
   fileFilter(_req, file, callback) {
     const valid = /\.xlsx?$/i.test(file.originalname);
-    if (!valid) return callback(new Error("Envie um arquivo Excel .xlsx ou .xls."));
+    if (!valid) return callback(new Error("Envie um arquivo Excel .xlsx."));
     return callback(null, true);
   }
 });
