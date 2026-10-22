@@ -42,22 +42,28 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.header("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token) return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Faça login para continuar." } });
+
+  let decoded: string | JwtPayload;
   try {
-    const decoded = jwt.verify(token, jwtSecret);
-    if (typeof decoded === "string" || !decoded.sub) {
-      return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Sessão inválida." } });
-    }
+    decoded = jwt.verify(token, jwtSecret, { issuer: "mapa-costalog-api", audience: "mapa-costalog" });
+  } catch {
+    return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Sessão inválida ou expirada." } });
+  }
+  if (typeof decoded === "string" || !decoded.sub) {
+    return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Sessão inválida." } });
+  }
+
+  try {
     const user = await prisma.user.findUnique({ where: { id: String(decoded.sub) } });
     if (!user || !user.active) {
       return res.status(401).json({ error: { code: "INACTIVE_USER", message: "Usuário inativo ou não encontrado." } });
     }
     req.authUser = { id: user.id, role: user.role };
     return next();
-  } catch {
-    return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Sessão inválida ou expirada." } });
+  } catch (error) {
+    return next(error);
   }
 }
-
 function requireRole(...roles: UserRole[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.authUser || !roles.includes(req.authUser.role)) {
