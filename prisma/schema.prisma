@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  OPERACAO
+  CONSULTA
+}
+
+enum ImportStatus {
+  PENDING
+  VALIDATING
+  READY
+  IMPORTED
+  FAILED
+}
+
+model User {
+  id           String      @id @default(cuid())
+  name         String
+  email        String      @unique
+  passwordHash String      @map("password_hash")
+  role         UserRole    @default(CONSULTA)
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  changes      AuditLog[]
+  imports      ImportJob[]
+  @@map("users")
+}
+
+model MapaRow {
+  id             String      @id @default(cuid())
+  sequence       Int         @unique @default(autoincrement())
+  operationalKey String?     @map("operational_key")
+  data           Json        @default("{}")
+  status         String?     @db.VarChar(120)
+  clientName     String?     @map("client_name") @db.VarChar(255)
+  container      String?     @db.VarChar(32)
+  cte            String?     @db.VarChar(80)
+  collectionDate DateTime?   @map("collection_date")
+  deliveryDate   DateTime?   @map("delivery_date")
+  archivedAt     DateTime?   @map("archived_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  updatedById    String?     @map("updated_by_id")
+  changes        AuditLog[]
+  @@index([status])
+  @@index([clientName])
+  @@index([container])
+  @@index([cte])
+  @@index([collectionDate])
+  @@index([deliveryDate])
+  @@index([updatedAt])
+  @@map("mapa_rows")
+}
+
+model MapaColumn {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  position  Int
+  dataType  String   @default("text") @map("data_type")
+  required  Boolean  @default(false)
+  editable  Boolean  @default(true)
+  visible   Boolean  @default(true)
+  groupName String?  @map("group_name")
+  helpText  String?  @map("help_text")
+  config    Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([position])
+  @@map("mapa_columns")
+}
+
+model LookupValue {
+  id         String   @id @default(cuid())
+  listName   String   @map("list_name")
+  code       String?
+  label      String
+  normalized String
+  active     Boolean  @default(true)
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  @@unique([listName, normalized])
+  @@index([listName, active])
+  @@map("lookup_values")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  action      String
+  fieldKey    String?  @map("field_key")
+  beforeValue Json?    @map("before_value")
+  afterValue  Json?    @map("after_value")
+  reason      String?
+  userId      String?  @map("user_id")
+  mapaRowId   String?  @map("mapa_row_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  mapaRow     MapaRow? @relation(fields: [mapaRowId], references: [id], onDelete: SetNull)
+  @@index([entityType, entityId, createdAt])
+  @@index([mapaRowId, createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
+
+model ImportJob {
+  id           String       @id @default(cuid())
+  fileName     String       @map("file_name")
+  fileHash     String       @map("file_hash")
+  status       ImportStatus @default(PENDING)
+  totalRows    Int?         @map("total_rows")
+  validRows    Int?         @map("valid_rows")
+  rejectedRows Int?         @map("rejected_rows")
+  summary      Json         @default("{}")
+  errors       Json         @default("[]")
+  createdById  String?      @map("created_by_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  finishedAt   DateTime?    @map("finished_at")
+  createdBy    User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  @@index([status, createdAt])
+  @@index([fileHash])
+  @@map("import_jobs")
+}
+
+model FormulaRule {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  label       String
+  description String
+  version     Int      @default(1)
+  enabled     Boolean  @default(false)
+  expression  Json     @default("{}")
+  testCases   Json     @default("[]") @map("test_cases")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  @@map("formula_rules")
+}
