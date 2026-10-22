@@ -1,4 +1,7 @@
 import bcrypt from "bcryptjs";
+import { createHash } from "node:crypto";
+import multer from "multer";
+import * as XLSX from "xlsx";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
@@ -239,6 +242,128 @@ app.patch("/api/v1/mapa/:id", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, U
       return row;
     });
     return res.json({ item: updated });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+
+const uploadXlsx = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024, files: 1 },
+  fileFilter(_req, file, callback) {
+    const valid = /\\.xlsx?$/i.test(file.originalname);
+    callback(valid ? null : new Error("Envie um arquivo Excel .xlsx ou .xls."), valid);
+  }
+});
+
+function excelColumnKey(index: number): string {
+  let n = index + 1;
+  let key = "";
+  while (n > 0) {
+    const remainder = (n - 1) % 26;
+    key = String.fromCharCode(65 + remainder) + key;
+    n = Math.floor((n - 1) / 26);
+  }
+  return key;
+}
+
+function parseMapaWorkbook(buffer: Buffer) {
+  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: false, dense: true });
+  const sheetName = workbook.SheetNames.find((name) => name.trim().toLocaleUpperCase("pt-BR") === "MAPA 1.0");
+  if (!sheetName) throw new Error('A aba "MAPA 1.0" não foi encontrada no arquivo.');
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], { header: 1, raw: false, defval: null, blankrows: false });
+  if (!rows.length) throw new Error('A aba "MAPA 1.0" está vazia.');
+  const headers = (rows[0] || []).map((value, index) => ({ key: excelColumnKey(index), label: String(value ?? "").trim() }));
+  const labels = new Set(headers.map((item) => item.label.toLocaleUpperCase("pt-BR")));
+  const missing = ["DATA", "CTE", "CLIENTE", "CONTAINER"].filter((label) => !labels.has(label));
+  if (missing.length) throw new Error("Cabeçalhos obrigatórios não reconhecidos: " + missing.join(", "));
+  const parsedRows: Array<{ data: Record<string, string | number | boolean>; excelRow: number }> = [];
+  const errors: Array<{ row: number; message: string }> = [];
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r] || [];
+    const data: Record<string, string | number | boolean> = {};
+    for (let c = 0; c < headers.length; c++) {
+      const value = cells[c];
+      if (value === null || value === undefined || value === "") continue;
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") data[headers[c].key] = value;
+      else data[headers[c].key] = String(value);
+    }
+    if (!Object.keys(data).length) continue;
+    if (typeof data.T === "string" && data.T.length > 32) errors.push({ row: r + 1, message: "Container excede 32 caracteres." });
+    parsedRows.push({ data, excelRow: r + 1 });
+  }
+  return { parsedRows, errors, sheetName, headers, sourceRowCount: Math.max(0, rows.length - 1) };
+}
+
+app.post("/api/v1/imports/preview", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR), uploadXlsx.single("file"), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: { code: "FILE_REQUIRED", message: "Selecione um arquivo Excel." } });
+    const fileHash = createHash("sha256").update(req.file.buffer).digest("hex");
+    const duplicate = await prisma.importJob.findFirst({ where: { fileHash, status: ImportStatus.IMPORTED } });
+    if (duplicate) return res.status(409).json({ error: { code: "DUPLICATE_IMPORT", message: "Este arquivo já foi importado.", importId: duplicate.id } });
+    const parsed = parseMapaWorkbook(req.file.buffer);
+    const job = await prisma.importJob.create({
+      data: {
+        fileName: req.file.originalname.slice(0, 255), fileHash,
+        status: parsed.errors.length ? ImportStatus.FAILED : ImportStatus.READY,
+        totalRows: parsed.parsedRows.length, validRows: parsed.parsedRows.length - parsed.errors.length,
+        rejectedRows: parsed.errors.length, createdById: req.authUser!.id,
+        summary: { sheetName: parsed.sheetName, sourceRowCount: parsed.sourceRowCount, columnCount: parsed.headers.length },
+        errors: parsed.errors.slice(0, 200)
+      }
+    });
+    return res.json({
+      importId: job.id, status: job.status, fileName: job.fileName, fileHash,
+      sheet: parsed.sheetName, sourceRowCount: parsed.sourceRowCount, rowsDetected: parsed.parsedRows.length,
+      validRows: parsed.parsedRows.length - parsed.errors.length, rejectedRows: parsed.errors.length,
+      errors: parsed.errors.slice(0, 50), columns: parsed.headers.filter((item) => item.label).slice(0, 140),
+      sample: parsed.parsedRows.slice(0, 10).map((row) => ({ excelRow: row.excelRow, data: row.data }))
+    });
+  } catch (error) {
+    if (error instanceof Error && /aba|Cabeçalhos|vazia/.test(error.message)) {
+      return res.status(400).json({ error: { code: "INVALID_WORKBOOK", message: error.message } });
+    }
+    return next(error);
+  }
+});
+
+app.post("/api/v1/imports/:id/commit", requireRole(UserRole.ADMIN), uploadXlsx.single("file"), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: { code: "FILE_REQUIRED", message: "Envie novamente o mesmo arquivo usado na prévia." } });
+    const job = await prisma.importJob.findUnique({ where: { id: req.params.id } });
+    if (!job) return res.status(404).json({ error: { code: "IMPORT_NOT_FOUND", message: "Prévia de importação não encontrada." } });
+    if (job.status !== ImportStatus.READY) return res.status(409).json({ error: { code: "IMPORT_NOT_READY", message: "A prévia não está liberada para importação." } });
+    const fileHash = createHash("sha256").update(req.file.buffer).digest("hex");
+    if (fileHash !== job.fileHash) return res.status(409).json({ error: { code: "FILE_MISMATCH", message: "O arquivo difere daquele validado na prévia." } });
+    if (await prisma.importJob.findFirst({ where: { fileHash, status: ImportStatus.IMPORTED } })) {
+      return res.status(409).json({ error: { code: "DUPLICATE_IMPORT", message: "Este arquivo já foi importado." } });
+    }
+    const parsed = parseMapaWorkbook(req.file.buffer);
+    if (parsed.errors.length) return res.status(400).json({ error: { code: "IMPORT_VALIDATION_FAILED", message: "O arquivo contém erros; gere uma nova prévia." }, errors: parsed.errors.slice(0, 50) });
+    const now = new Date();
+    const rows = parsed.parsedRows.map(({ data }) => ({
+      data: data as Prisma.InputJsonObject,
+      status: typeof data.C === "string" ? data.C : null,
+      clientName: typeof data.L === "string" ? data.L : null,
+      container: typeof data.T === "string" ? data.T : null,
+      cte: data.D === undefined ? null : String(data.D),
+      updatedById: req.authUser!.id, createdAt: now, updatedAt: now
+    }));
+    await prisma.$transaction(async (tx) => {
+      for (let offset = 0; offset < rows.length; offset += 400) {
+        await tx.mapaRow.createMany({ data: rows.slice(offset, offset + 400) });
+      }
+      await tx.importJob.update({
+        where: { id: job.id },
+        data: { status: ImportStatus.IMPORTED, totalRows: rows.length, validRows: rows.length, rejectedRows: 0, finishedAt: new Date() }
+      });
+      await tx.auditLog.create({
+        data: { entityType: "IMPORT_JOB", entityId: job.id, action: "IMPORT", fieldKey: "MAPA 1.0",
+          afterValue: { rowsImported: rows.length, fileHash }, userId: req.authUser!.id }
+      });
+    });
+    return res.json({ importId: job.id, status: "IMPORTED", rowsImported: rows.length });
   } catch (error) {
     return next(error);
   }
