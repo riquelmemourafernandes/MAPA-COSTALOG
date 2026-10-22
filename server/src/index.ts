@@ -6,7 +6,7 @@ import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
-import { Prisma, PrismaClient, UserRole } from "@prisma/client";
+import { ImportStatus, Prisma, PrismaClient, UserRole } from "@prisma/client";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import { z } from "zod";
 
