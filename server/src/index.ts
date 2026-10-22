@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { createHash } from "node:crypto";
 import multer from "multer";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
@@ -269,13 +269,18 @@ function excelColumnKey(index: number): string {
   return key;
 }
 
-function parseMapaWorkbook(buffer: Buffer) {
-  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: false, dense: true });
-  const sheetName = workbook.SheetNames.find((name) => name.trim().toLocaleUpperCase("pt-BR") === "MAPA 1.0");
-  if (!sheetName) throw new Error('A aba "MAPA 1.0" não foi encontrada no arquivo.');
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], { header: 1, raw: false, defval: null, blankrows: false });
-  if (!rows.length) throw new Error('A aba "MAPA 1.0" está vazia.');
-  const headers = (rows[0] || []).map((value, index) => ({ key: excelColumnKey(index), label: String(value ?? "").trim() }));
+async function parseMapaWorkbook(buffer: Buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const worksheet = workbook.worksheets.find((sheet) => sheet.name.trim().toLocaleUpperCase("pt-BR") === "MAPA 1.0");
+  if (!worksheet) throw new Error('A aba "MAPA 1.0" não foi encontrada no arquivo.');
+  if (worksheet.rowCount < 1) throw new Error('A aba "MAPA 1.0" está vazia.');
+
+  const headerRow = worksheet.getRow(1);
+  const headers = Array.from({ length: worksheet.columnCount }, (_, index) => ({
+    key: excelColumnKey(index),
+    label: String(headerRow.getCell(index + 1).text ?? "").trim()
+  }));
   const labels = new Set(headers.map((item) => item.label.toLocaleUpperCase("pt-BR")));
   const headerKey = (label: string) => headers.find((item) => item.label.toLocaleUpperCase("pt-BR") === label)?.key;
   const containerKey = headerKey("CONTAINER");
@@ -284,23 +289,41 @@ function parseMapaWorkbook(buffer: Buffer) {
   const cteKey = headerKey("CTE");
   const missing = ["DATA", "CTE", "CLIENTE", "CONTAINER"].filter((label) => !labels.has(label));
   if (missing.length) throw new Error("Cabeçalhos obrigatórios não reconhecidos: " + missing.join(", "));
+
   const parsedRows: Array<{ data: Record<string, string | number | boolean>; excelRow: number }> = [];
   const errors: Array<{ row: number; message: string }> = [];
-  for (let r = 1; r < rows.length; r++) {
-    const cells = rows[r] || [];
+  for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+    const row = worksheet.getRow(rowNumber);
     const data: Record<string, string | number | boolean> = {};
-    for (let c = 0; c < headers.length; c++) {
-      const value = cells[c];
+    for (let columnNumber = 1; columnNumber <= headers.length; columnNumber++) {
+      const cell = row.getCell(columnNumber);
+      let value: unknown = cell.value;
       if (value === null || value === undefined || value === "") continue;
-      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") data[headers[c].key] = value;
-      else data[headers[c].key] = String(value);
+      if (value instanceof Date) {
+        value = cell.text || value.toISOString();
+      } else if (typeof value === "object") {
+        const structured = value as { result?: unknown; text?: string; richText?: Array<{ text: string }> };
+        if ("result" in structured && structured.result !== undefined) value = structured.result;
+        else if (structured.text !== undefined) value = structured.text;
+        else if (structured.richText) value = structured.richText.map((part) => part.text).join("");
+        else value = cell.text || "";
+      }
+      if (value === null || value === undefined || value === "") continue;
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") data[headers[columnNumber - 1].key] = value;
+      else data[headers[columnNumber - 1].key] = String(value);
     }
     if (!Object.keys(data).length) continue;
     const containerValue = containerKey ? data[containerKey] : undefined;
-    if (typeof containerValue === "string" && containerValue.length > 32) errors.push({ row: r + 1, message: "Container excede 32 caracteres." });
-    parsedRows.push({ data, excelRow: r + 1 });
+    if (typeof containerValue === "string" && containerValue.length > 32) {
+      errors.push({ row: rowNumber, message: "Container excede 32 caracteres." });
+    }
+    parsedRows.push({ data, excelRow: rowNumber });
   }
-  return { parsedRows, errors, sheetName, headers, headerKey, statusKey, clientKey, containerKey, cteKey, sourceRowCount: Math.max(0, rows.length - 1) };
+  return {
+    parsedRows, errors, sheetName: worksheet.name, headers, headerKey,
+    statusKey, clientKey, containerKey, cteKey,
+    sourceRowCount: Math.max(0, worksheet.rowCount - 1)
+  };
 }
 
 app.post("/api/v1/imports/preview", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR), uploadXlsx.single("file"), async (req, res, next) => {
@@ -309,7 +332,7 @@ app.post("/api/v1/imports/preview", requireRole(UserRole.ADMIN, UserRole.SUPERVI
     const fileHash = createHash("sha256").update(req.file.buffer).digest("hex");
     const duplicate = await prisma.importJob.findFirst({ where: { fileHash, status: ImportStatus.IMPORTED } });
     if (duplicate) return res.status(409).json({ error: { code: "DUPLICATE_IMPORT", message: "Este arquivo já foi importado.", importId: duplicate.id } });
-    const parsed = parseMapaWorkbook(req.file.buffer);
+    const parsed = await parseMapaWorkbook(req.file.buffer);
     const job = await prisma.importJob.create({
       data: {
         fileName: req.file.originalname.slice(0, 255), fileHash,
@@ -346,7 +369,7 @@ app.post("/api/v1/imports/:id/commit", requireRole(UserRole.ADMIN), uploadXlsx.s
     if (await prisma.importJob.findFirst({ where: { fileHash, status: ImportStatus.IMPORTED } })) {
       return res.status(409).json({ error: { code: "DUPLICATE_IMPORT", message: "Este arquivo já foi importado." } });
     }
-    const parsed = parseMapaWorkbook(req.file.buffer);
+    const parsed = await parseMapaWorkbook(req.file.buffer);
     if (parsed.errors.length) return res.status(400).json({ error: { code: "IMPORT_VALIDATION_FAILED", message: "O arquivo contém erros; gere uma nova prévia." }, errors: parsed.errors.slice(0, 50) });
     const now = new Date();
     const rows = parsed.parsedRows.map(({ data }) => ({
