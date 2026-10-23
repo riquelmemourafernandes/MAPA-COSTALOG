@@ -1,40 +1,25 @@
-# MAPA Costalog — sistema substituto da planilha
+# MAPA Costalog — aplicação web operacional
 
-Projeto para migrar gradualmente a operação da aba MAPA 1.0 para uma aplicação web própria.
+O objetivo é substituir o uso diário da planilha por uma aplicação web conectada a um banco de dados próprio. O Excel enviado é a referência estrutural e funcional para construir a grade; a equipe trabalha no sistema, não enviando a planilha repetidamente.
 
-## Estado atual
-- Interface inicial React + TypeScript + Vite.
-- Modelo inicial de dados PostgreSQL em `prisma/schema.prisma`.
-- Plano de migração e segurança em `docs/PLANO-MIGRACAO.md`.
-- Contrato inicial das rotas em `docs/CONTRATO-API.md`.
-- Catálogo preliminar de regras em `docs/REGRAS-PLANILHA.md`.
-- Dicionário sanitizado de colunas em `docs/dicionario-colunas.csv`.
+## Direção funcional
+- Grade MAPA 1.0 baseada nas 128 colunas originais, de A até DX, mantendo chaves Excel para diferenciar cabeçalhos repetidos.
+- Cada usuário pode escolher quais colunas visualizar; a seleção fica salva no navegador por usuário.
+- Busca, filtro por status, paginação, edição individual de campos editáveis e auditoria de alterações.
+- Nenhum dado fictício é exibido como se fosse operacional.
+- A estrutura de dados usa JSON por linha para preservar todas as colunas sem limitar o sistema aos campos principais.
 
-**Ainda não está pronto para uso operacional.** Sem `VITE_API_URL`, a interface mostra somente registros fictícios; com essa variável, há integração inicial para login, leitura paginada e edição individual de alguns campos com auditoria. A API e a importação XLSX com prévia estão em desenvolvimento; o banco de produção/homologação ainda não está configurado, as regras completas não foram migradas e a homologação ainda está pendente.
+## Estado atual e limites
+A interface dinâmica e a seleção de colunas foram implementadas no frontend; os metadados das 128 colunas são cadastrados por `server/src/seed-columns.ts`. O sistema ainda depende de configurar o PostgreSQL e cadastrar/carregar os registros operacionais iniciais no banco. Fórmulas, automações e regras específicas do Google Sheets (incluindo IMPORTRANGE, QUERY e VALIDAR_CONTAINER) ainda precisam ser reproduzidas e homologadas antes do uso operacional.
 
-## Stack planejada e arquivos
+## Stack
 - Frontend: React + TypeScript + Vite.
-- API inicial: Node.js + TypeScript + Express em `server/`.
-- Persistência: PostgreSQL + Prisma, com schema em `prisma/schema.prisma` e migração inicial em `prisma/migrations/`.
-- Histórico: tabela de auditoria no servidor.
-- Documentação da migração e regras: `docs/`.
-- API inicial: autenticação individual por JWT, permissões por perfil, leitura paginada, edição com auditoria e importação XLSX com prévia protegida.
-- Próxima evolução: validar build e importação, configurar banco de homologação, ligar a grade à API e testar as regras da planilha.
+- API: Node.js + TypeScript + Express.
+- Persistência: PostgreSQL + Prisma.
+- Acesso: login individual, perfis de usuário e histórico de alterações.
 
-## Executar a interface atual
-```bash
-npm install
-npm run dev
-```
+## Executar interface
+`npm install` e `npm run dev`. Configure `VITE_API_URL` para apontar à API. Sem API configurada, a aplicação não mostra dados de demonstração.
 
 ## Segurança
-Não adicionar a planilha operacional, exportações com dados reais, senhas, tokens ou chaves ao repositório. Usar variáveis de ambiente no servidor. A migração deve ser validada com cópia controlada e backup antes de qualquer carga operacional.
-
-## Próximas etapas
-1. Validar o dicionário de colunas e regras de negócio.
-2. Configurar PostgreSQL e gerar/aplicar migrações Prisma.
-3. Concluir os testes automatizados de compilação e validação da API.
-4. Configurar PostgreSQL de homologação e executar migração + cadastro inicial de colunas/administrador.
-5. Testar a importação XLSX com cópia controlada, incluindo duplicidade e arquivo inválido.
-6. Completar a grade operacional (edição em lote, criação de registros, paginação e exportação) e validar edição persistente com auditoria.
-7. Comparar resultados e regras com a planilha antes de liberar para a equipe.
+Não adicionar o arquivo Excel operacional, exportações com dados reais, senhas, tokens ou chaves ao repositório. Configure segredos por variáveis de ambiente. Antes de liberar, validar permissões, regras operacionais e consistência dos dados.
