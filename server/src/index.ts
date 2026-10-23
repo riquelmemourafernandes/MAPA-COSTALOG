@@ -261,6 +261,126 @@ app.patch("/api/v1/mapa/:id", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, U
 });
 
 
+
+const profileSchema = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  email: z.string().email().max(254).optional(),
+  currentPassword: z.string().min(1).max(200).optional(),
+  newPassword: z.string().min(10).max(200).optional()
+}).refine(data => Boolean(data.name || data.email || data.newPassword), "Informe ao menos um campo para alterar.");
+
+const createUserSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  email: z.string().email().max(254),
+  password: z.string().min(10).max(200),
+  role: z.nativeEnum(UserRole).default(UserRole.CONSULTA),
+  active: z.boolean().default(true)
+});
+
+app.get("/api/v1/auth/profile", async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.authUser!.id }, select: { id: true, name: true, email: true, role: true, active: true, createdAt: true, updatedAt: true } });
+    if (!user) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Usuário não encontrado." } });
+    return res.json({ user });
+  } catch (error) { return next(error); }
+});
+
+app.patch("/api/v1/auth/profile", async (req, res, next) => {
+  try {
+    const parsed = profileSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Revise os dados do perfil." } });
+    const current = await prisma.user.findUnique({ where: { id: req.authUser!.id } });
+    if (!current) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Usuário não encontrado." } });
+    const data: Prisma.UserUpdateInput = {};
+    if (parsed.data.name) data.name = parsed.data.name;
+    if (parsed.data.email) data.email = parsed.data.email.trim().toLocaleLowerCase("pt-BR");
+    if (parsed.data.newPassword) {
+      if (!parsed.data.currentPassword || !(await bcrypt.compare(parsed.data.currentPassword, current.passwordHash))) {
+        return res.status(400).json({ error: { code: "CURRENT_PASSWORD_INVALID", message: "A senha atual está incorreta." } });
+      }
+      data.passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+    }
+    const user = await prisma.user.update({ where: { id: current.id }, data, select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true } });
+    await prisma.auditLog.create({ data: { entityType: "USER", entityId: user.id, action: "PROFILE_UPDATE", userId: current.id, afterValue: { name: user.name, email: user.email } } });
+    return res.json({ user });
+  } catch (error) { return next(error); }
+});
+
+app.get("/api/v1/users", requireRole(UserRole.ADMIN), async (_req, res, next) => {
+  try {
+    const items = await prisma.user.findMany({ select: { id: true, name: true, email: true, role: true, active: true, createdAt: true, updatedAt: true }, orderBy: { name: "asc" } });
+    return res.json({ items });
+  } catch (error) { return next(error); }
+});
+
+app.post("/api/v1/users", requireRole(UserRole.ADMIN), async (req, res, next) => {
+  try {
+    const parsed = createUserSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Informe nome, e-mail, senha com pelo menos 10 caracteres e perfil válido." } });
+    const email = parsed.data.email.trim().toLocaleLowerCase("pt-BR");
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) return res.status(409).json({ error: { code: "EMAIL_IN_USE", message: "Já existe um usuário com este e-mail." } });
+    const user = await prisma.user.create({ data: { name: parsed.data.name, email, passwordHash: await bcrypt.hash(parsed.data.password, 12), role: parsed.data.role, active: parsed.data.active }, select: { id: true, name: true, email: true, role: true, active: true, createdAt: true } });
+    await prisma.auditLog.create({ data: { entityType: "USER", entityId: user.id, action: "USER_CREATE", userId: req.authUser!.id, afterValue: { name: user.name, email: user.email, role: user.role, active: user.active } } });
+    return res.status(201).json({ user });
+  } catch (error) { return next(error); }
+});
+
+app.patch("/api/v1/users/:id", requireRole(UserRole.ADMIN), async (req, res, next) => {
+  try {
+    const schema = z.object({ name: z.string().trim().min(2).max(120).optional(), email: z.string().email().max(254).optional(), role: z.nativeEnum(UserRole).optional(), active: z.boolean().optional(), newPassword: z.string().min(10).max(200).optional() }).refine(data => Object.keys(data).length > 0);
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Dados de usuário inválidos." } });
+    if (req.params.id === req.authUser!.id && parsed.data.active === false) return res.status(400).json({ error: { code: "SELF_DEACTIVATION", message: "Não é possível bloquear sua própria conta." } });
+    const before = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!before) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Usuário não encontrado." } });
+    const data: Prisma.UserUpdateInput = {};
+    if (parsed.data.name) data.name = parsed.data.name;
+    if (parsed.data.email) data.email = parsed.data.email.trim().toLocaleLowerCase("pt-BR");
+    if (parsed.data.role) data.role = parsed.data.role;
+    if (typeof parsed.data.active === "boolean") data.active = parsed.data.active;
+    if (parsed.data.newPassword) data.passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+    const user = await prisma.user.update({ where: { id: before.id }, data, select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true } });
+    await prisma.auditLog.create({ data: { entityType: "USER", entityId: user.id, action: "USER_ADMIN_UPDATE", userId: req.authUser!.id, beforeValue: { name: before.name, email: before.email, role: before.role, active: before.active }, afterValue: { name: user.name, email: user.email, role: user.role, active: user.active } } });
+    return res.json({ user });
+  } catch (error) { return next(error); }
+});
+
+app.get("/api/v1/preferences", async (req, res, next) => {
+  try {
+    const record = await prisma.lookupValue.findUnique({ where: { listName_normalized: { listName: "USER_PREFERENCES", normalized: req.authUser!.id } } });
+    return res.json({ preferences: record?.metadata || {} });
+  } catch (error) { return next(error); }
+});
+
+app.put("/api/v1/preferences", async (req, res, next) => {
+  try {
+    const schema = z.object({ visibleKeys: z.array(z.string().max(80)).max(128).optional(), columnOrder: z.array(z.string().max(80)).max(128).optional(), savedViews: z.array(z.object({ name: z.string().trim().min(1).max(80), visibleKeys: z.array(z.string().max(80)).max(128), query: z.string().max(120).default(""), status: z.string().max(120).default("") })).max(50).optional() }).strict();
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Preferências inválidas." } });
+    const metadata = parsed.data as Prisma.InputJsonObject;
+    const record = await prisma.lookupValue.upsert({
+      where: { listName_normalized: { listName: "USER_PREFERENCES", normalized: req.authUser!.id } },
+      create: { listName: "USER_PREFERENCES", normalized: req.authUser!.id, label: "Preferências do usuário", metadata },
+      update: { metadata, label: "Preferências do usuário" }
+    });
+    return res.json({ preferences: record.metadata });
+  } catch (error) { return next(error); }
+});
+
+app.get("/api/v1/mapa/:id/history", async (req, res, next) => {
+  try {
+    const field = String(req.query.field || "").slice(0, 80);
+    const row = await prisma.mapaRow.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!row) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Registro não encontrado." } });
+    const items = await prisma.auditLog.findMany({
+      where: { mapaRowId: row.id, ...(field ? { OR: [{ fieldKey: field }, { fieldKey: { contains: field } }, { action: "CREATE" }] } : {}) },
+      include: { user: { select: { name: true, email: true } } }, orderBy: { createdAt: "desc" }, take: 100
+    });
+    return res.json({ items });
+  } catch (error) { return next(error); }
+});
+
 app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
   // Log diagnostic details privately; never expose internal errors to the client.
   const diagnostic = error instanceof Error
