@@ -7,8 +7,8 @@ async function main() {
   const name = process.env.ADMIN_NAME?.trim();
   const email = process.env.ADMIN_EMAIL?.trim().toLocaleLowerCase("pt-BR");
   const password = process.env.ADMIN_PASSWORD || "";
-  if (!name || !email || !email.includes("@") || password.length < 14) {
-    throw new Error("Configure ADMIN_NAME, ADMIN_EMAIL e ADMIN_PASSWORD com pelo menos 14 caracteres.");
+  if (!name || !email || !email.includes("@") || password.length < 8) {
+    throw new Error("Configure ADMIN_NAME, ADMIN_EMAIL e ADMIN_PASSWORD com uma senha de pelo menos 8 caracteres.");
   }
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw new Error("Este e-mail já existe. O script não altera usuários existentes.");
