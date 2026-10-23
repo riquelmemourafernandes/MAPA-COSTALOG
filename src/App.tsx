@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, ArrowDown, ArrowUp, Bell, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound } from 'lucide-react';
+import { Activity, Bell, Bold, GripVertical, Palette, PaintBucket, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound } from 'lucide-react';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean };
 type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
 type SavedView = { name: string; visibleKeys: string[]; query: string; status: string };
+type CellStyle = { bold?: boolean; color?: string; background?: string };
 type AuditEntry = { id: string; action: string; fieldKey?: string | null; beforeValue?: unknown; afterValue?: unknown; createdAt: string; user?: { name?: string; email?: string } | null };
 type UserProfile = { id: string; name: string; email: string; role: string; active: boolean };
 type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string };
@@ -38,6 +39,10 @@ export default function App() {
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [viewName, setViewName] = useState('');
   const [showViewTools, setShowViewTools] = useState(false);
+  const [selectedCell, setSelectedCell] = useState<{row: RecordRow; column: Column} | null>(null);
+  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+  const [sortConfig, setSortConfig] = useState<{key:string; direction:'asc'|'desc'} | null>(null);
+  const [cellStyles, setCellStyles] = useState<Record<string, CellStyle>>({});
   const [historyTarget, setHistoryTarget] = useState<{row: RecordRow; column: Column} | null>(null);
   const [historyItems, setHistoryItems] = useState<AuditEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -88,7 +93,7 @@ export default function App() {
   async function persistPreferences(next: {visibleKeys?: string[]; savedViews?: SavedView[]}) {
     if (!apiBase || !token) return;
     try {
-      const response = await fetch(apiBase + '/api/v1/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ visibleKeys: next.visibleKeys ?? visibleKeys, columnOrder: next.visibleKeys ?? visibleKeys, savedViews: next.savedViews ?? savedViews }) });
+      const response = await fetch(apiBase + '/api/v1/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ visibleKeys: next.visibleKeys ?? visibleKeys, columnOrder: next.visibleKeys ?? visibleKeys, savedViews: next.savedViews ?? savedViews, cellStyles }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar as preferências.');
       setNotice('Preferências salvas na sua conta.');
@@ -108,6 +113,7 @@ export default function App() {
       const preferences = preferencesBody.preferences || {};
       if (Array.isArray(preferences.visibleKeys)) { setVisibleKeys(preferences.visibleKeys); localStorage.setItem(preferenceKey, JSON.stringify(preferences.visibleKeys)); }
       if (Array.isArray(preferences.savedViews)) setSavedViews(preferences.savedViews);
+      if (preferences.cellStyles && typeof preferences.cellStyles === 'object') setCellStyles(preferences.cellStyles as Record<string, CellStyle>);
       if (profileBody.user) { setProfile(profileBody.user); setProfileName(profileBody.user.name); setProfileEmail(profileBody.user.email); }
     }).catch(() => {});
     if (userRole === 'ADMIN') fetch(apiBase + '/api/v1/users', { headers: { Authorization: 'Bearer ' + token } }).then(async response => {
@@ -115,13 +121,28 @@ export default function App() {
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [token, userKey, userRole, preferenceKey]);
-  function moveColumn(key: string, direction: -1 | 1) {
+  function reorderColumn(sourceKey: string, targetKey: string) {
+    if (sourceKey === targetKey) return;
     setVisibleKeys(previous => {
-      const ordered = [...previous]; const index = ordered.indexOf(key); const nextIndex = index + direction;
-      if (index < 0 || nextIndex < 0 || nextIndex >= ordered.length) return previous;
-      [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]];
+      const ordered = [...previous]; const from = ordered.indexOf(sourceKey); const to = ordered.indexOf(targetKey);
+      if (from < 0 || to < 0) return previous;
+      ordered.splice(from, 1); ordered.splice(to, 0, sourceKey);
       localStorage.setItem(preferenceKey, JSON.stringify(ordered)); void persistPreferences({visibleKeys: ordered}); return ordered;
     });
+  }
+  function styleKey(row: RecordRow, column: Column) { return row.id + ':' + column.key; }
+  function updateSelectedStyle(change: CellStyle) {
+    if (!selectedCell) return;
+    const key = styleKey(selectedCell.row, selectedCell.column);
+    const next = { ...cellStyles, [key]: { ...(cellStyles[key] || {}), ...change } };
+    setCellStyles(next);
+    void (async () => {
+      try {
+        const response = await fetch(apiBase + '/api/v1/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ visibleKeys, columnOrder: visibleKeys, savedViews, cellStyles: next }) });
+        const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar a formatação.');
+        setNotice('Formatação da célula salva na sua conta.');
+      } catch (error) { setApiError(error instanceof Error ? error.message : 'Falha ao salvar formatação.'); }
+    })();
   }
   async function saveCurrentView() {
     const name = viewName.trim();
@@ -239,11 +260,21 @@ export default function App() {
       setNotice('A alteração não foi confirmada. Atualize a tela antes de continuar.');
     }
   }
-  const visibleColumns = useMemo(() => columns.filter(c => visibleKeys.includes(c.key)).sort((a,b) => a.position-b.position), [columns, visibleKeys]);
-  const displayedRows = useMemo(() => rows.filter(row => {
-    const values = Object.values(row.data || {}).map(valueText).join(' ') + ' ' + [row.status,row.clientName,row.container,row.cte].map(valueText).join(' ');
-    return values.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR'));
-  }), [rows, query]);
+  const visibleColumns = useMemo(() => columns.filter(c => visibleKeys.includes(c.key)).sort((a,b) => visibleKeys.indexOf(a.key)-visibleKeys.indexOf(b.key)), [columns, visibleKeys]);
+  const displayedRows = useMemo(() => {
+    const filtered = rows.filter(row => {
+      const values = Object.values(row.data || {}).map(valueText).join(' ') + ' ' + [row.status,row.clientName,row.container,row.cte].map(valueText).join(' ');
+      return values.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR'));
+    });
+    if (!sortConfig) return filtered;
+    return [...filtered].sort((a,b) => {
+      const av = valueText(a.data?.[sortConfig.key]).trim(); const bv = valueText(b.data?.[sortConfig.key]).trim();
+      const an = Number(av.replace(/\\./g,'').replace(',','.')); const bn = Number(bv.replace(/\\./g,'').replace(',','.'));
+      const bothNumeric = av !== '' && bv !== '' && Number.isFinite(an) && Number.isFinite(bn);
+      const compared = bothNumeric ? an-bn : av.localeCompare(bv,'pt-BR',{numeric:true,sensitivity:'base'});
+      return sortConfig.direction === 'asc' ? compared : -compared;
+    });
+  }, [rows, query, sortConfig]);
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Truck size={22}/></div><div><strong>COSTALOG</strong><span>OPERAÇÕES</span></div></div>
@@ -285,8 +316,8 @@ export default function App() {
         {active === 'MAPA 1.0' && <>
         <section className="panel mapa-grid-panel">
           <div className="panel-heading compact-map-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>Planilha operacional · edite as células autorizadas diretamente na grade.</p></div><div className="panel-actions">{token && userRole !== 'CONSULTA' && <button className="primary" disabled={loading} onClick={()=>void createRow()}><Plus size={16}/> Novo registro</button>}<button className="secondary" onClick={()=>setColumnMenu(value=>!value)}><Columns3 size={16}/> Escolher colunas ({visibleColumns.length})</button></div></div>
-          {columnMenu && <div className="column-picker"><div className="column-picker-actions"><b>Colunas exibidas e sequência</b><button className="secondary" onClick={()=>{const all=columns.map(c=>c.key);setVisibleKeys(all);localStorage.setItem(preferenceKey,JSON.stringify(all));void persistPreferences({visibleKeys:all});}}>Mostrar todas</button><button className="secondary" onClick={()=>{const defaults=columns.filter(c=>c.visible).map(c=>c.key);setVisibleKeys(defaults);localStorage.setItem(preferenceKey,JSON.stringify(defaults));void persistPreferences({visibleKeys:defaults});}}>Restaurar padrão</button></div><div className="column-options">{columns.map(column=><label key={column.key}><input type="checkbox" checked={visibleKeys.includes(column.key)} onChange={()=>toggleColumn(column.key)}/><span>{column.label || '(coluna sem título)'}</span><span className="column-order"><button type="button" title="Mover para cima" disabled={!visibleKeys.includes(column.key)||visibleKeys.indexOf(column.key)===0} onClick={()=>moveColumn(column.key,-1)}><ArrowUp size={13}/></button><button type="button" title="Mover para baixo" disabled={!visibleKeys.includes(column.key)||visibleKeys.indexOf(column.key)===visibleKeys.length-1} onClick={()=>moveColumn(column.key,1)}><ArrowDown size={13}/></button></span></label>)}</div><div className="saved-view-tools"><button className="secondary" onClick={()=>setShowViewTools(value=>!value)}><Filter size={14}/> Filtros personalizados</button>{showViewTools&&<div className="saved-view-editor"><div className="saved-view-save"><input value={viewName} onChange={event=>setViewName(event.target.value)} placeholder="Nome da configuração"/><button className="primary" onClick={()=>void saveCurrentView()}><Save size={14}/> Salvar filtro</button></div>{savedViews.map(view=><div className="saved-view-item" key={view.name}><button onClick={()=>applyView(view)}>{view.name}</button><small>{view.visibleKeys.length} colunas · {view.status||'Todos os status'}{view.query?' · busca: '+view.query:''}</small><button title="Excluir filtro" onClick={()=>{const next=savedViews.filter(item=>item.name!==view.name);setSavedViews(next);void persistPreferences({savedViews:next});}}><X size={14}/></button></div>)}</div>}</div></div>}<div className="toolbar"><div className="searchbox"><Search size={16}/><input value={query} onChange={e=>{setPage(1);setQuery(e.target.value)}} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="">Todos os status</option>{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><option key={value} value={value}>{value}</option>)}</select></div><span className="rows-count">{total} registros</span></div>
-          <div className="table-wrap" tabIndex={0}><table><thead><tr>{visibleColumns.map(column=><th key={column.key} title={column.label || 'Coluna sem título'}>{column.label || '(sem título)'}</th>)}</tr></thead><tbody>{displayedRows.map(row=><tr key={row.id}>{visibleColumns.map(column=><td key={column.key} className={column.editable&&token&&userRole!=='CONSULTA'?'editable-cell':''}><div className="cell-content"><span contentEditable={Boolean(token&&userRole!=='CONSULTA'&&column.editable)} suppressContentEditableWarning onBlur={event=>void saveCell(row,column,event.currentTarget.textContent||'')}>{valueText(row.data?.[column.key])}</span>{token&&<button className="cell-history" title="Ver histórico da célula" onClick={()=>void openHistory(row,column)}><History size={13}/></button>}</div></td>)}</tr>)}</tbody></table>{!loading && displayedRows.length===0 && <div className="empty-state">{token ? 'Nenhum registro encontrado no banco para esta consulta.' : 'Conecte-se à API para visualizar os registros reais.'}</div>}</div>
+          {columnMenu && <div className="column-picker"><div className="column-picker-actions"><b>Colunas exibidas e sequência</b><button className="secondary" onClick={()=>{const all=columns.map(c=>c.key);setVisibleKeys(all);localStorage.setItem(preferenceKey,JSON.stringify(all));void persistPreferences({visibleKeys:all});}}>Mostrar todas</button><button className="secondary" onClick={()=>{const defaults=columns.filter(c=>c.visible).map(c=>c.key);setVisibleKeys(defaults);localStorage.setItem(preferenceKey,JSON.stringify(defaults));void persistPreferences({visibleKeys:defaults});}}>Restaurar padrão</button></div><div className="column-options">{[...columns].sort((a,b)=>{const ai=visibleKeys.indexOf(a.key),bi=visibleKeys.indexOf(b.key);return ai<0?(bi<0?a.position-b.position:1):bi<0?-1:ai-bi}).map(column=><div className={"column-option "+(draggedColumn===column.key?"dragging":"")} key={column.key} draggable onDragStart={()=>setDraggedColumn(column.key)} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();if(draggedColumn)reorderColumn(draggedColumn,column.key);setDraggedColumn(null)}} onDragEnd={()=>setDraggedColumn(null)}><GripVertical size={15} className="drag-handle"/><input type="checkbox" checked={visibleKeys.includes(column.key)} onChange={()=>toggleColumn(column.key)}/><span>{column.label || '(coluna sem título)'}</span></div>)}</div><div className="saved-view-tools"><button className="secondary" onClick={()=>setShowViewTools(value=>!value)}><Filter size={14}/> Filtros personalizados</button>{showViewTools&&<div className="saved-view-editor"><div className="saved-view-save"><input value={viewName} onChange={event=>setViewName(event.target.value)} placeholder="Nome da configuração"/><button className="primary" onClick={()=>void saveCurrentView()}><Save size={14}/> Salvar filtro</button></div>{savedViews.map(view=><div className="saved-view-item" key={view.name}><button onClick={()=>applyView(view)}>{view.name}</button><small>{view.visibleKeys.length} colunas · {view.status||'Todos os status'}{view.query?' · busca: '+view.query:''}</small><button title="Excluir filtro" onClick={()=>{const next=savedViews.filter(item=>item.name!==view.name);setSavedViews(next);void persistPreferences({savedViews:next});}}><X size={14}/></button></div>)}</div>}</div></div>}<div className="toolbar"><div className="searchbox"><Search size={16}/><input value={query} onChange={e=>{setPage(1);setQuery(e.target.value)}} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="">Todos os status</option>{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><option key={value} value={value}>{value}</option>)}</select></div><button className="secondary" disabled={!selectedCell} onClick={()=>selectedCell&&void openHistory(selectedCell.row,selectedCell.column)}><History size={14}/> Histórico da célula selecionada</button><button className="secondary" disabled={!selectedCell||userRole==='CONSULTA'} onClick={()=>updateSelectedStyle({bold:!cellStyles[selectedCell?styleKey(selectedCell.row,selectedCell.column):'']?.bold})}><Bold size={14}/> Negrito</button><label className="format-color" title="Cor do texto"><Palette size={14}/><input type="color" aria-label="Cor do texto" disabled={!selectedCell||userRole==='CONSULTA'} value={selectedCell?(cellStyles[styleKey(selectedCell.row,selectedCell.column)]?.color||'#47584e'):'#47584e'} onChange={event=>updateSelectedStyle({color:event.target.value})}/></label><label className="format-color" title="Cor de fundo"><PaintBucket size={14}/><input type="color" aria-label="Cor de fundo" disabled={!selectedCell||userRole==='CONSULTA'} value={selectedCell?(cellStyles[styleKey(selectedCell.row,selectedCell.column)]?.background||'#ffffff'):'#ffffff'} onChange={event=>updateSelectedStyle({background:event.target.value})}/></label><span className="rows-count">{total} registros</span></div>
+          <div className="table-wrap" tabIndex={0}><table><thead><tr>{visibleColumns.map(column=><th key={column.key} title="Clique para classificar por esta coluna"><button className="sort-header" onClick={()=>setSortConfig(current=>current?.key===column.key?{key:column.key,direction:current.direction==='asc'?'desc':'asc'}:{key:column.key,direction:'asc'})}>{column.label || '(sem título)'}{sortConfig?.key===column.key?(sortConfig.direction==='asc'?' ↑':' ↓'):' ↕'}</button></th>)}</tr></thead><tbody>{displayedRows.map(row=><tr key={row.id}>{visibleColumns.map(column=><td key={column.key} className={(column.editable&&token&&userRole!=='CONSULTA'?'editable-cell ':'')+(selectedCell?.row.id===row.id&&selectedCell.column.key===column.key?'selected-cell':'')} style={{fontWeight:cellStyles[styleKey(row,column)]?.bold?'bold':'normal',color:cellStyles[styleKey(row,column)]?.color,backgroundColor:cellStyles[styleKey(row,column)]?.background}} onClick={()=>setSelectedCell({row,column})}><div className="cell-content"><span contentEditable={Boolean(token&&userRole!=='CONSULTA'&&column.editable)} suppressContentEditableWarning onFocus={()=>setSelectedCell({row,column})} onBlur={event=>void saveCell(row,column,event.currentTarget.textContent||'')}>{valueText(row.data?.[column.key])}</span></div></td>)}</tr>)}</tbody></table>{!loading && displayedRows.length===0 && <div className="empty-state">{token ? 'Nenhum registro encontrado no banco para esta consulta.' : 'Conecte-se à API para visualizar os registros reais.'}</div>}</div>
           <footer className="table-footer"><span>{apiBase && token ? 'Dados do banco • edição individual com auditoria' : 'Sem dados de demonstração'}</span><span><span className="green-dot"/> {visibleColumns.length} coluna(s) selecionada(s)</span></footer>
           <div className="pagination"><button className="secondary" disabled={page<=1 || loading} onClick={()=>setPage(value=>Math.max(1,value-1))}>Anterior</button><span>Página {page} de {Math.max(1,Math.ceil(total/pageSize))}</span><button className="secondary" disabled={page>=Math.ceil(total/pageSize) || loading} onClick={()=>setPage(value=>value+1)}>Próxima</button></div>
         </section>
