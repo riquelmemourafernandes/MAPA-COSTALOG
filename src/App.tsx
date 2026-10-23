@@ -1,198 +1,156 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, ArrowDownUp, Bell, ChevronDown, ClipboardList, Download, Filter, LayoutDashboard, Plus, Search, Settings2, Table2, Truck, Users, Waypoints } from 'lucide-react';
+import { Activity, Bell, ChevronDown, ClipboardList, Columns3, Filter, LayoutDashboard, LogOut, Search, Settings2, Table2, Truck, Users, Waypoints } from 'lucide-react';
 
-type Row = { id: string | number; _updatedAt?: string; container: string; cliente: string; origem: string; destino: string; status: string; cavalo: string; motorista: string; previsao: string };
-const demoRows: Row[] = [
-  { id: 1, container: 'ABCD1234567', cliente: 'CLIENTE DEMONSTRAÇÃO', origem: 'Santos/SP', destino: 'São Paulo/SP', status: 'Programado', cavalo: 'ABC1D23', motorista: 'Motorista exemplo', previsao: '22/10/2026' },
-  { id: 2, container: 'EFGH7654321', cliente: 'CLIENTE DEMONSTRAÇÃO', origem: 'Santos/SP', destino: 'Campinas/SP', status: 'Em trânsito', cavalo: 'DEF4G56', motorista: 'Motorista exemplo', previsao: '23/10/2026' },
-  { id: 3, container: 'IJKL1234567', cliente: 'CLIENTE DEMONSTRAÇÃO', origem: 'Guarujá/SP', destino: 'Jundiaí/SP', status: 'Aguardando', cavalo: 'GHI7J89', motorista: 'Motorista exemplo', previsao: '24/10/2026' },
-];
-const nav = [
-  { name: 'Visão geral', icon: LayoutDashboard },
-  { name: 'MAPA 1.0', icon: Table2 },
-  { name: 'Status operacional', icon: Activity },
-  { name: 'Cadastros', icon: Users },
-  { name: 'Integrações', icon: Waypoints },
-];
-const columns: { key: keyof Row; label: string }[] = [
-  { key: 'id', label: 'ID' }, { key: 'container', label: 'Container' }, { key: 'cliente', label: 'Cliente' },
-  { key: 'origem', label: 'Origem' }, { key: 'destino', label: 'Destino' }, { key: 'status', label: 'Status' },
-  { key: 'cavalo', label: 'Cavalo' }, { key: 'motorista', label: 'Motorista' }, { key: 'previsao', label: 'Previsão' }
-];
-
+type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean };
+type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
 const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
-
-function asText(value: unknown): string {
+const nav = [
+  { name: 'Visão geral', icon: LayoutDashboard }, { name: 'MAPA 1.0', icon: Table2 },
+  { name: 'Status operacional', icon: Activity }, { name: 'Cadastros', icon: Users }, { name: 'Integrações', icon: Waypoints }
+];
+function valueText(value: unknown): string {
   if (value === null || value === undefined) return '';
-  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? String(value) : '';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
 }
-
-function fromApi(item: any): Row {
-  const data = item?.data && typeof item.data === 'object' ? item.data : {};
-  return {
-    id: item.id ?? item.sequence ?? '',
-    _updatedAt: item.updatedAt,
-    container: asText(item.container ?? data.T),
-    cliente: asText(item.clientName ?? data.L),
-    origem: asText(data.AK),
-    destino: asText(data.AQ ?? data.AN),
-    status: asText(item.status ?? data.C) || 'Sem status',
-    cavalo: asText(data.W),
-    motorista: asText(data.Y),
-    previsao: asText(data.AP ?? data.AL)
-  };
-}
-
 export default function App() {
   const [active, setActive] = useState('MAPA 1.0');
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('Todos os status');
+  const [status, setStatus] = useState('');
   const [token, setToken] = useState(() => apiBase ? sessionStorage.getItem('mapa-costalog-token') || '' : '');
+  const [userKey, setUserKey] = useState(() => sessionStorage.getItem('mapa-costalog-user') || 'usuario');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [apiError, setApiError] = useState('');
+  const [notice, setNotice] = useState('Conecte a API e o banco de dados para acessar os registros operacionais.');
   const [loading, setLoading] = useState(false);
-  const [rows, setRows] = useState<Row[]>(apiBase ? [] : demoRows);
-  const [notice, setNotice] = useState('Demonstração visual — os dados abaixo são fictícios.');
-  const filtered = useMemo(() => rows.filter(r =>
-    Object.values(r).some(v => String(v).toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR'))) &&
-    (status === 'Todos os status' || r.status === status)
-  ), [rows, query, status]);
+  const [columns, setColumns] = useState<Column[]>([]);
+  const [rows, setRows] = useState<RecordRow[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [columnMenu, setColumnMenu] = useState(false);
+  const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
+  const pageSize = 100;
+  const preferenceKey = 'mapa-costalog-columns:' + userKey;
 
   useEffect(() => {
     if (!apiBase || !token) return;
     let cancelled = false;
     setLoading(true);
     setApiError('');
-    fetch(apiBase + '/api/v1/mapa?page=1&pageSize=100', { headers: { Authorization: 'Bearer ' + token } })
-      .then(async response => {
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body?.error?.message || 'Falha ao carregar registros (' + response.status + ').');
-        return body;
-      })
-      .then(body => {
-        if (cancelled) return;
-        setRows(Array.isArray(body.items) ? body.items.map(fromApi) : []);
-        setNotice('Dados reais carregados da API: ' + (body.total ?? body.items?.length ?? 0) + ' registro(s) no total.');
-      })
-      .catch(error => {
-        if (cancelled) return;
-        if (error instanceof Error && /Sessão|token|login/i.test(error.message)) {
-          sessionStorage.removeItem('mapa-costalog-token');
-          setToken('');
-        }
-        setApiError(error instanceof Error ? error.message : 'Não foi possível conectar à API.');
-        setRows([]);
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    Promise.all([
+      fetch(apiBase + '/api/v1/config/columns', { headers: { Authorization: 'Bearer ' + token } }),
+      fetch(apiBase + '/api/v1/mapa?page=' + page + '&pageSize=' + pageSize + '&search=' + encodeURIComponent(query) + '&status=' + encodeURIComponent(status), { headers: { Authorization: 'Bearer ' + token } })
+    ]).then(async ([columnsResponse, rowsResponse]) => {
+      const columnsBody = await columnsResponse.json().catch(() => ({}));
+      const rowsBody = await rowsResponse.json().catch(() => ({}));
+      if (!columnsResponse.ok) throw new Error(columnsBody?.error?.message || 'Falha ao carregar as colunas.');
+      if (!rowsResponse.ok) throw new Error(rowsBody?.error?.message || 'Falha ao carregar os registros.');
+      if (cancelled) return;
+      const nextColumns = Array.isArray(columnsBody.items) ? columnsBody.items as Column[] : [];
+      setColumns(nextColumns);
+      const saved = localStorage.getItem(preferenceKey);
+      const savedKeys = saved ? JSON.parse(saved) as string[] : null;
+      setVisibleKeys(savedKeys ? savedKeys.filter(key => nextColumns.some(c => c.key === key)) : nextColumns.filter(c => c.visible).map(c => c.key));
+      setRows(Array.isArray(rowsBody.items) ? rowsBody.items as RecordRow[] : []);
+      setTotal(Number(rowsBody.total || 0));
+      setNotice('Dados carregados do banco de dados. As colunas visíveis são personalizadas por usuário.');
+    }).catch(error => {
+      if (cancelled) return;
+      const message = error instanceof Error ? error.message : 'Não foi possível conectar à API.';
+      setApiError(message);
+      if (/sessão|token|login/i.test(message)) { sessionStorage.removeItem('mapa-costalog-token'); setToken(''); }
+    }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, page, query, status, preferenceKey]);
 
   async function login(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!apiBase) return;
-    setLoading(true);
-    setApiError('');
+    setLoading(true); setApiError('');
     try {
-      const response = await fetch(apiBase + '/api/v1/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
+      const response = await fetch(apiBase + '/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível entrar.');
       sessionStorage.setItem('mapa-costalog-token', body.token);
-      setToken(body.token);
-      setPassword('');
-      setNotice('Conectado como ' + (body.user?.name || body.user?.email || 'usuário autenticado') + '.');
-    } catch (error) {
-      setApiError(error instanceof Error ? error.message : 'Falha no login.');
-    } finally {
-      setLoading(false);
-    }
+      sessionStorage.setItem('mapa-costalog-user', body.user?.id || body.user?.email || 'usuario');
+      setUserKey(body.user?.id || body.user?.email || 'usuario');
+      setToken(body.token); setPassword('');
+      setNotice('Conectado como ' + (body.user?.name || body.user?.email || 'usuário autorizado') + '.');
+    } catch (error) { setApiError(error instanceof Error ? error.message : 'Falha no login.'); }
+    finally { setLoading(false); }
   }
-
   function logout() {
-    sessionStorage.removeItem('mapa-costalog-token');
-    setToken('');
-    setRows([]);
-    setNotice('Sessão encerrada.');
+    sessionStorage.removeItem('mapa-costalog-token'); sessionStorage.removeItem('mapa-costalog-user');
+    setToken(''); setRows([]); setNotice('Sessão encerrada.');
   }
-
-  async function saveCell(row: Row, field: keyof Row, value: string) {
-    const columnKey: Partial<Record<keyof Row, string>> = {
-      container: 'T', cliente: 'L', origem: 'AK', destino: 'AQ',
-      status: 'C', cavalo: 'W', motorista: 'Y'
-    };
-    if (!apiBase || !token || !columnKey[field]) {
-      setRows(previous => previous.map(item => item.id === row.id ? { ...item, [field]: value } : item));
-      if (apiBase && token) setNotice('Este campo ainda não está habilitado para gravação pela API.');
-      return;
+  function toggleColumn(key: string) {
+    setVisibleKeys(previous => {
+      const next = previous.includes(key) ? previous.filter(item => item !== key) : [...previous, key];
+      localStorage.setItem(preferenceKey, JSON.stringify(next));
+      return next;
+    });
+  }
+  async function saveCell(row: RecordRow, column: Column, value: string) {
+    if (!apiBase || !token || !column.editable) return;
+    const previousValue = valueText(row.data?.[column.key]);
+    if (value === previousValue) return;
+    const parsedValue: unknown = value === '' ? null :
+      (column.dataType === 'number' || column.dataType === 'currency' ? Number(value.replace(',', '.')) :
+      column.dataType === 'boolean' ? value.toLocaleLowerCase('pt-BR') === 'true' || value.toLocaleLowerCase('pt-BR') === 'sim' : value);
+    if ((column.dataType === 'number' || column.dataType === 'currency') && value !== '' && !Number.isFinite(parsedValue as number)) {
+      setApiError('Informe um número válido na coluna ' + column.label + '.'); return;
     }
     try {
-      const response = await fetch(apiBase + '/api/v1/mapa/' + encodeURIComponent(String(row.id)), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({ changes: { [columnKey[field]!]: value }, expectedUpdatedAt: row._updatedAt })
+      const response = await fetch(apiBase + '/api/v1/mapa/' + encodeURIComponent(row.id), {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ changes: { [column.key]: parsedValue }, expectedUpdatedAt: row.updatedAt })
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar a alteração.');
-      const updatedAt = body.item?.updatedAt || new Date().toISOString();
-      setRows(previous => previous.map(item => item.id === row.id ? { ...item, [field]: value, _updatedAt: updatedAt } : item));
-      setNotice('Alteração salva e registrada no histórico.');
+      if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar.');
+      setRows(previous => previous.map(item => item.id === row.id ? body.item as RecordRow : item));
+      setNotice('Alteração salva no banco e registrada no histórico.');
       setApiError('');
     } catch (error) {
       setApiError(error instanceof Error ? error.message : 'Falha ao salvar.');
-      setNotice('A alteração não foi confirmada pelo servidor. Atualize os dados antes de continuar.');
-      const response = await fetch(apiBase + '/api/v1/mapa?page=1&pageSize=100', { headers: { Authorization: 'Bearer ' + token } }).catch(() => null);
-      if (response?.ok) {
-        const body = await response.json().catch(() => ({}));
-        setRows(Array.isArray(body.items) ? body.items.map(fromApi) : []);
-      }
+      setNotice('A alteração não foi confirmada. Atualize a tela antes de continuar.');
     }
   }
-
-  function pasteGrid(e: React.ClipboardEvent<HTMLDivElement>) {
-    const raw = e.clipboardData.getData('text/plain');
-    if (!raw.includes('\t') && !raw.includes('\n')) return;
-    e.preventDefault();
-    const matrix = raw.trimEnd().split(/\r?\n/).map(line => line.split('\t'));
-    setNotice(`Colagem detectada: ${matrix.length} linha(s) × ${Math.max(...matrix.map(r => r.length))} coluna(s). A gravação em lote será habilitada após a conexão da grade com a API.`);
-  }
-
+  const visibleColumns = useMemo(() => columns.filter(c => visibleKeys.includes(c.key)).sort((a,b) => a.position-b.position), [columns, visibleKeys]);
+  const displayedRows = useMemo(() => rows.filter(row => {
+    const values = Object.values(row.data || {}).map(valueText).join(' ') + ' ' + [row.status,row.clientName,row.container,row.cte].map(valueText).join(' ');
+    return values.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR'));
+  }), [rows, query]);
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Truck size={22}/></div><div><strong>COSTALOG</strong><span>OPERAÇÕES</span></div></div>
-      <div className="workspace"><span className="workspace-dot"/> Ambiente de desenvolvimento <ChevronDown size={15}/></div>
+      <div className="workspace"><span className="workspace-dot"/> MAPA operacional <ChevronDown size={15}/></div>
       <div className="nav-label">MENU PRINCIPAL</div>
-      <nav>{nav.map(item => <button key={item.name} className={`nav-item ${active === item.name ? 'active' : ''}`} onClick={() => setActive(item.name)}><item.icon size={18}/><span>{item.name}</span>{item.name === 'MAPA 1.0' && <span className="nav-count">1</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="connection"><span className="connection-dot"/> Interface local</div><div className="user"><div className="avatar">C</div><div><b>Costalog</b><small>Projeto inicial</small></div><Settings2 size={17}/></div></div>
+      <nav>{nav.map(item => <button key={item.name} className={`nav-item ${active === item.name ? 'active' : ''}`} onClick={() => setActive(item.name)}><item.icon size={18}/><span>{item.name}</span>{item.name === 'MAPA 1.0' && <span className="nav-count">{columns.length}</span>}</button>)}</nav>
+      <div className="sidebar-bottom"><div className="connection"><span className="connection-dot"/> {apiBase && token ? 'Conectado à API' : 'API não conectada'}</div><div className="user"><div className="avatar">C</div><div><b>Costalog</b><small>{token ? 'Usuário autenticado' : 'Acesso operacional'}</small></div><Settings2 size={17}/></div></div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="breadcrumbs">Operações <span>/</span> <b>{active}</b></div><div className="top-actions"><button className="icon-button" title="Notificações"><Bell size={18}/></button><div className="avatar small">C</div></div></header>
+      <header className="topbar"><div className="breadcrumbs">Operações <span>/</span> <b>{active}</b></div><div className="top-actions">{token && <button className="secondary" onClick={logout}><LogOut size={15}/> Sair</button>}<button className="icon-button" title="Notificações"><Bell size={18}/></button><div className="avatar small">C</div></div></header>
       <section className="content">
-        <div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPERAÇÕES</div><h1>{active}</h1><p>Centralize o acompanhamento e a gestão operacional em um só lugar.</p></div><button className="primary" onClick={() => setNotice('A criação de registros será habilitada quando a grade estiver conectada ao banco de dados.')}><Plus size={17}/> Novo registro</button></div>
-        <div className="notice"><ClipboardList size={17}/><span>{apiBase ? (token ? notice : 'API configurada — entre com sua conta para carregar os dados operacionais.') : notice}</span>{token && apiBase && <button onClick={logout}>Sair</button>}</div>
-        {apiBase && !token && <form className="panel login-panel" onSubmit={login}>
-          <div><h2>Acessar MAPA COSTALOG</h2><p>Entre com seu usuário autorizado. A senha não é salva no navegador.</p></div>
-          <div className="login-fields"><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail corporativo" autoComplete="username"/><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha" autoComplete="current-password"/><button className="primary" disabled={loading}>{loading ? 'Conectando...' : 'Entrar'}</button></div>
-          {apiError && <p className="api-error">{apiError}</p>}
-        </form>}
+        <div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPERAÇÕES</div><h1>{active}</h1><p>Grade operacional completa, com colunas configuráveis para cada usuário.</p></div></div>
+        <div className="notice"><ClipboardList size={17}/><span>{apiBase ? (token ? notice : 'Entre com sua conta para acessar os dados reais.') : 'Configure VITE_API_URL para conectar a aplicação à API. Nenhum dado fictício será exibido.'}</span></div>
+        {apiBase && !token && <form className="panel login-panel" onSubmit={login}><div><h2>Acessar MAPA COSTALOG</h2><p>Entre com seu usuário autorizado.</p></div><div className="login-fields"><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail corporativo" autoComplete="username"/><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha" autoComplete="current-password"/><button className="primary" disabled={loading}>{loading ? 'Conectando...' : 'Entrar'}</button></div>{apiError && <p className="api-error">{apiError}</p>}</form>}
         {apiBase && apiError && token && <div className="notice api-error"><span>{apiError}</span><button onClick={logout}>Fazer login novamente</button></div>}
         <div className="metrics">
-          <div className="metric-card"><div className="metric-top"><span>Registros exibidos</span><Table2 size={17}/></div><strong>{loading ? '…' : filtered.length}</strong><small>{apiBase && token ? 'Dados da API' : 'Somente dados de demonstração'}</small></div>
-          <div className="metric-card"><div className="metric-top"><span>Em trânsito</span><Truck size={17}/></div><strong>{filtered.filter(r=>r.status.toLocaleLowerCase('pt-BR').includes('trânsito')).length}</strong><small>{apiBase && token ? 'Registros carregados' : 'Exemplo de indicador operacional'}</small></div>
-          <div className="metric-card"><div className="metric-top"><span>Aguardando</span><Activity size={17}/></div><strong>{filtered.filter(r=>r.status.toLocaleLowerCase('pt-BR').includes('aguard')).length}</strong><small>{apiBase && token ? 'Registros carregados' : 'Exemplo de indicador operacional'}</small></div>
-          <div className="metric-card"><div className="metric-top"><span>Usuários</span><Users size={17}/></div><strong>—</strong><small>Disponível após configurar servidor e usuários</small></div>
+          <div className="metric-card"><div className="metric-top"><span>Registros na página</span><Table2 size={17}/></div><strong>{loading ? '…' : displayedRows.length}</strong><small>{total} registro(s) no banco</small></div>
+          <div className="metric-card"><div className="metric-top"><span>Colunas disponíveis</span><Columns3 size={17}/></div><strong>{columns.length}</strong><small>Estrutura baseada no Excel original</small></div>
+          <div className="metric-card"><div className="metric-top"><span>Colunas visíveis</span><Filter size={17}/></div><strong>{visibleColumns.length}</strong><small>Preferência deste usuário</small></div>
+          <div className="metric-card"><div className="metric-top"><span>Estado</span><Activity size={17}/></div><strong>{loading ? '…' : token ? 'Online' : '—'}</strong><small>Conexão com dados operacionais</small></div>
         </div>
         <section className="panel">
-          <div className="panel-heading"><div><h2><Table2 size={19}/> Grade operacional</h2><p>Prévia da experiência de edição em formato de planilha</p></div><div className="panel-actions"><button className="secondary" onClick={()=>setNotice('A exportação será conectada à API junto com a grade operacional.')}><Download size={16}/> Exportar</button><button className="secondary" onClick={()=>setNotice('Selecione uma coluna quando a grade completa for implementada.')}><ArrowDownUp size={16}/> Ordenar</button></div></div>
-          <div className="toolbar"><div className="searchbox"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>setStatus(e.target.value)}><option>Todos os status</option><option>Programado</option><option>Em trânsito</option><option>Aguardando</option></select></div><span className="rows-count">{filtered.length} linhas</span></div>
-          <div className="table-wrap" tabIndex={0} onPaste={pasteGrid}><table><thead><tr>{columns.map(c=><th key={c.key}>{c.label}</th>)}</tr></thead><tbody>{filtered.map(row=><tr key={row.id}>{columns.map(c=><td key={c.key} contentEditable={c.key!=='id' && (!apiBase || (Boolean(token) && ['container','cliente','origem','destino','status','cavalo','motorista'].includes(c.key)))} suppressContentEditableWarning onBlur={e=>{const value=e.currentTarget.textContent||'';if(c.key!=='id' && value!==String(row[c.key] ?? '')) void saveCell(row,c.key,value);}}>{row[c.key]}</td>)}</tr>)}</tbody></table></div>
-          <footer className="table-footer"><span>{apiBase && token ? filtered.length + ' registros da API' : 'Prévia visual • ' + filtered.length + ' registros de demonstração'}</span><span><span className="green-dot"/> {apiBase && token ? 'Edição individual com auditoria' : 'Alterações de demonstração não são persistidas'}</span></footer>
+          <div className="panel-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>As colunas originais são preservadas pelo identificador Excel (A até DX).</p></div><div className="panel-actions"><button className="secondary" onClick={()=>setColumnMenu(value=>!value)}><Columns3 size={16}/> Escolher colunas ({visibleColumns.length})</button></div></div>
+          {columnMenu && <div className="column-picker"><div className="column-picker-actions"><b>Colunas exibidas nesta tela</b><button className="secondary" onClick={()=>{const all=columns.map(c=>c.key);setVisibleKeys(all);localStorage.setItem(preferenceKey,JSON.stringify(all));}}>Mostrar todas</button><button className="secondary" onClick={()=>{const defaults=columns.filter(c=>c.visible).map(c=>c.key);setVisibleKeys(defaults);localStorage.setItem(preferenceKey,JSON.stringify(defaults));}}>Restaurar padrão</button></div><div className="column-options">{columns.map(column=><label key={column.key}><input type="checkbox" checked={visibleKeys.includes(column.key)} onChange={()=>toggleColumn(column.key)}/><span>{column.key} — {column.label || '(coluna sem título no Excel)'}</span></label>)}</div></div>}
+          <div className="toolbar"><div className="searchbox"><Search size={16}/><input value={query} onChange={e=>{setPage(1);setQuery(e.target.value)}} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="">Todos os status</option>{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><option key={value} value={value}>{value}</option>)}</select></div><span className="rows-count">{total} registros</span></div>
+          <div className="table-wrap" tabIndex={0}><table><thead><tr>{visibleColumns.map(column=><th key={column.key} title={column.key}>{column.label || column.key}</th>)}</tr></thead><tbody>{displayedRows.map(row=><tr key={row.id}>{visibleColumns.map(column=><td key={column.key} contentEditable={Boolean(token && column.editable)} suppressContentEditableWarning onBlur={event=>void saveCell(row,column,event.currentTarget.textContent||'')} title={column.key}>{valueText(row.data?.[column.key])}</td>)}</tr>)}</tbody></table>{!loading && displayedRows.length===0 && <div className="empty-state">{token ? 'Nenhum registro encontrado no banco para esta consulta.' : 'Conecte-se à API para visualizar os registros reais.'}</div>}</div>
+          <footer className="table-footer"><span>{apiBase && token ? 'Dados do banco • edição individual com auditoria' : 'Sem dados de demonstração'}</span><span><span className="green-dot"/> {visibleColumns.length} coluna(s) selecionada(s)</span></footer>
+          <div className="pagination"><button className="secondary" disabled={page<=1 || loading} onClick={()=>setPage(value=>Math.max(1,value-1))}>Anterior</button><span>Página {page} de {Math.max(1,Math.ceil(total/pageSize))}</span><button className="secondary" disabled={page>=Math.ceil(total/pageSize) || loading} onClick={()=>setPage(value=>value+1)}>Próxima</button></div>
         </section>
-        <div className="next-step"><div className="next-icon"><Waypoints size={20}/></div><div><b>Próximo passo</b><p>Conectar esta grade à API, configurar o banco de homologação e validar a importação do Excel antes de usar dados operacionais.</p></div></div>
-        <footer className="app-footer">MAPA COSTALOG <span>•</span> Protótipo inicial — não usar para operação real</footer>
+        <footer className="app-footer">MAPA COSTALOG <span>•</span> Aplicação web operacional em desenvolvimento</footer>
       </section>
     </main>
   </div>;
