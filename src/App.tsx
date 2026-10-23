@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Activity, ArrowDown, ArrowUp, Bell, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound } from 'lucide-react';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean };
-type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };\ntype SavedView = { name: string; visibleKeys: string[]; query: string; status: string };\ntype AuditEntry = { id: string; action: string; fieldKey?: string | null; beforeValue?: unknown; afterValue?: unknown; createdAt: string; user?: { name?: string; email?: string } | null };\ntype UserProfile = { id: string; name: string; email: string; role: string; active: boolean };\ntype UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string };
+type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
+type SavedView = { name: string; visibleKeys: string[]; query: string; status: string };
+type AuditEntry = { id: string; action: string; fieldKey?: string | null; beforeValue?: unknown; afterValue?: unknown; createdAt: string; user?: { name?: string; email?: string } | null };
+type UserProfile = { id: string; name: string; email: string; role: string; active: boolean };
+type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string };
 const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const nav = [
   { name: 'Visão geral', icon: LayoutDashboard }, { name: 'MAPA 1.0', icon: Table2 },
@@ -30,7 +34,23 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [columnMenu, setColumnMenu] = useState(false);
-  const [visibleKeys, setVisibleKeys] = useState<string[]>([]);\n  const [savedViews, setSavedViews] = useState<SavedView[]>([]);\n  const [viewName, setViewName] = useState('');\n  const [showViewTools, setShowViewTools] = useState(false);\n  const [historyTarget, setHistoryTarget] = useState<{row: RecordRow; column: Column} | null>(null);\n  const [historyItems, setHistoryItems] = useState<AuditEntry[]>([]);\n  const [historyLoading, setHistoryLoading] = useState(false);\n  const [profile, setProfile] = useState<UserProfile | null>(null);\n  const [profileName, setProfileName] = useState('');\n  const [profileEmail, setProfileEmail] = useState('');\n  const [currentPassword, setCurrentPassword] = useState('');\n  const [newPassword, setNewPassword] = useState('');\n  const [users, setUsers] = useState<UserAdminItem[]>([]);\n  const [newUserName, setNewUserName] = useState('');\n  const [newUserEmail, setNewUserEmail] = useState('');\n  const [newUserPassword, setNewUserPassword] = useState('');\n  const [newUserRole, setNewUserRole] = useState('CONSULTA');
+  const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [viewName, setViewName] = useState('');
+  const [showViewTools, setShowViewTools] = useState(false);
+  const [historyTarget, setHistoryTarget] = useState<{row: RecordRow; column: Column} | null>(null);
+  const [historyItems, setHistoryItems] = useState<AuditEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileName, setProfileName] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [users, setUsers] = useState<UserAdminItem[]>([]);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState('CONSULTA');
   const pageSize = 100;
   const preferenceKey = 'mapa-costalog-columns:' + userKey;
 
