@@ -1,0 +1,65 @@
+name: Configurar banco Supabase
+
+on:
+  workflow_dispatch:
+    inputs:
+      aplicar_schema:
+        description: "Criar/atualizar tabelas com prisma db push"
+        required: true
+        type: boolean
+        default: true
+      cadastrar_colunas:
+        description: "Cadastrar metadados das colunas do MAPA 1.0"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  configurar-banco:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package.json
+
+      - name: Instalar dependências da API
+        working-directory: server
+        run: npm install
+
+      - name: Gerar Prisma Client
+        working-directory: server
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate --schema ../prisma/schema.prisma
+
+      - name: Verificar se a conexão foi configurada
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Crie o secret DATABASE_URL nas configurações do repositório."
+            exit 1
+          fi
+
+      - name: Aplicar schema no Supabase
+        if: ${{ inputs.aplicar_schema }}
+        working-directory: server
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma db push --schema ../prisma/schema.prisma
+
+      - name: Cadastrar metadados das colunas
+        if: ${{ inputs.cadastrar_colunas }}
+        working-directory: server
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run seed:columns
