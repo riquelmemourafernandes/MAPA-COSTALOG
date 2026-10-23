@@ -329,6 +329,9 @@ async function parseMapaWorkbook(buffer: Buffer) {
     }
     parsedRows.push({ data, excelRow: rowNumber });
   }
+  if (parsedRows.length === 0) {
+    errors.push({ row: 1, message: "Nenhum registro foi encontrado abaixo do cabeçalho da aba MAPA 1.0." });
+  }
   return {
     parsedRows, errors, sheetName: worksheet.name, headers, headerKey,
     statusKey, clientKey, containerKey, cteKey,
@@ -359,8 +362,8 @@ app.post("/api/v1/imports/preview", requireRole(UserRole.ADMIN, UserRole.SUPERVI
       data: {
         fileName: req.file.originalname.slice(0, 255), fileHash,
         status: parsed.errors.length ? ImportStatus.FAILED : ImportStatus.READY,
-        totalRows: parsed.parsedRows.length, validRows: parsed.parsedRows.length - parsed.errors.length,
-        rejectedRows: parsed.errors.length, createdById: req.authUser!.id,
+        totalRows: parsed.parsedRows.length, validRows: parsed.errors.length ? 0 : parsed.parsedRows.length,
+        rejectedRows: parsed.errors.length ? parsed.parsedRows.length || 1 : 0, createdById: req.authUser!.id,
         summary: { sheetName: parsed.sheetName, sourceRowCount: parsed.sourceRowCount, columnCount: parsed.headers.length },
         errors: parsed.errors.slice(0, 200)
       }
@@ -368,7 +371,7 @@ app.post("/api/v1/imports/preview", requireRole(UserRole.ADMIN, UserRole.SUPERVI
     return res.json({
       importId: job.id, status: job.status, fileName: job.fileName, fileHash,
       sheet: parsed.sheetName, sourceRowCount: parsed.sourceRowCount, rowsDetected: parsed.parsedRows.length,
-      validRows: parsed.parsedRows.length - parsed.errors.length, rejectedRows: parsed.errors.length,
+      validRows: parsed.errors.length ? 0 : parsed.parsedRows.length, rejectedRows: parsed.errors.length ? parsed.parsedRows.length || 1 : 0,
       errors: parsed.errors.slice(0, 50), columns: parsed.headers.filter((item) => item.label).slice(0, 140),
       sample: parsed.parsedRows.slice(0, 10).map((row) => ({ excelRow: row.excelRow, data: row.data }))
     });
@@ -405,6 +408,9 @@ app.post("/api/v1/imports/:id/commit", requireRole(UserRole.ADMIN), uploadXlsx.s
       });
     }
     if (parsed.errors.length) return res.status(400).json({ error: { code: "IMPORT_VALIDATION_FAILED", message: "O arquivo contém erros; gere uma nova prévia." }, errors: parsed.errors.slice(0, 50) });
+    if (parsed.parsedRows.length === 0) {
+      return res.status(400).json({ error: { code: "EMPTY_IMPORT", message: "Nenhuma linha operacional foi encontrada para importar." } });
+    }
     const now = new Date();
     const rows = parsed.parsedRows.map(({ data }) => ({
       data: data as Prisma.InputJsonObject,
@@ -414,7 +420,13 @@ app.post("/api/v1/imports/:id/commit", requireRole(UserRole.ADMIN), uploadXlsx.s
       cte: parsed.cteKey && data[parsed.cteKey] !== undefined ? String(data[parsed.cteKey]) : null,
       updatedById: req.authUser!.id, createdAt: now, updatedAt: now
     }));
-    await prisma.$transaction(async (tx) => {
+    const imported = await prisma.$transaction(async (tx) => {
+      // Atomically claim the preview so two simultaneous commit requests cannot import it twice.
+      const claimed = await tx.importJob.updateMany({
+        where: { id: job.id, status: ImportStatus.READY },
+        data: { status: ImportStatus.VALIDATING }
+      });
+      if (claimed.count !== 1) return false;
       for (let offset = 0; offset < rows.length; offset += 400) {
         await tx.mapaRow.createMany({ data: rows.slice(offset, offset + 400) });
       }
@@ -426,7 +438,9 @@ app.post("/api/v1/imports/:id/commit", requireRole(UserRole.ADMIN), uploadXlsx.s
         data: { entityType: "IMPORT_JOB", entityId: job.id, action: "IMPORT", fieldKey: "MAPA 1.0",
           afterValue: { rowsImported: rows.length, fileHash }, userId: req.authUser!.id }
       });
+      return true;
     });
+    if (!imported) return res.status(409).json({ error: { code: "IMPORT_ALREADY_PROCESSING", message: "Esta prévia já foi utilizada ou está sendo processada. Gere uma nova prévia se necessário." } });
     return res.json({ importId: job.id, status: "IMPORTED", rowsImported: rows.length });
   } catch (error) {
     return next(error);
