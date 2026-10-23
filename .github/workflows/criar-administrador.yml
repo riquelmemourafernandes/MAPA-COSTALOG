@@ -39,7 +39,7 @@ jobs:
           [ -n "$ADMIN_NAME" ] || { echo "::error::Falta o secret ADMIN_NAME."; exit 1; }
           [ -n "$ADMIN_EMAIL" ] || { echo "::error::Falta o secret ADMIN_EMAIL."; exit 1; }
           [ -n "$ADMIN_PASSWORD" ] || { echo "::error::Falta o secret ADMIN_PASSWORD."; exit 1; }
-          [ "${#ADMIN_PASSWORD}" -ge 14 ] || { echo "::error::ADMIN_PASSWORD precisa ter pelo menos 14 caracteres."; exit 1; }
+          [ "${#ADMIN_PASSWORD}" -ge 8 ] || { echo "::error::ADMIN_PASSWORD precisa ter pelo menos 8 caracteres."; exit 1; }
 
       - name: Criar administrador inicial
         working-directory: server
