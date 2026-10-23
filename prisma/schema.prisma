@@ -14,14 +14,6 @@ enum UserRole {
   CONSULTA
 }
 
-enum ImportStatus {
-  PENDING
-  VALIDATING
-  READY
-  IMPORTED
-  FAILED
-}
-
 model User {
   id           String      @id @default(cuid())
   name         String
@@ -32,7 +24,6 @@ model User {
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
   changes      AuditLog[]
-  imports      ImportJob[]
   @@map("users")
 }
 
@@ -115,24 +106,6 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-model ImportJob {
-  id           String       @id @default(cuid())
-  fileName     String       @map("file_name")
-  fileHash     String       @map("file_hash")
-  status       ImportStatus @default(PENDING)
-  totalRows    Int?         @map("total_rows")
-  validRows    Int?         @map("valid_rows")
-  rejectedRows Int?         @map("rejected_rows")
-  summary      Json         @default("{}")
-  errors       Json         @default("[]")
-  createdById  String?      @map("created_by_id")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  finishedAt   DateTime?    @map("finished_at")
-  createdBy    User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  @@index([status, createdAt])
-  @@index([fileHash])
-  @@map("import_jobs")
-}
 
 model FormulaRule {
   id          String   @id @default(cuid())
