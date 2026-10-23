@@ -10,7 +10,7 @@ Projeto para migrar gradualmente a operação da aba MAPA 1.0 para uma aplicaç�
 - Catálogo preliminar de regras em `docs/REGRAS-PLANILHA.md`.
 - Dicionário sanitizado de colunas em `docs/dicionario-colunas.csv`.
 
-**Ainda não está pronto para uso operacional.** A interface existente usa registros fictícios. A API inicial, autenticação e importação XLSX com prévia estão em desenvolvimento; banco conectado, integração da interface, validação completa das regras e homologação ainda estão pendentes.
+**Ainda não está pronto para uso operacional.** Sem `VITE_API_URL`, a interface mostra somente registros fictícios; com essa variável, há integração inicial para login, leitura paginada e edição individual de alguns campos com auditoria. A API e a importação XLSX com prévia estão em desenvolvimento; o banco de produção/homologação ainda não está configurado, as regras completas não foram migradas e a homologação ainda está pendente.
 
 ## Stack planejada e arquivos
 - Frontend: React + TypeScript + Vite.
@@ -36,5 +36,5 @@ Não adicionar a planilha operacional, exportações com dados reais, senhas, to
 3. Concluir os testes automatizados de compilação e validação da API.
 4. Configurar PostgreSQL de homologação e executar migração + cadastro inicial de colunas/administrador.
 5. Testar a importação XLSX com cópia controlada, incluindo duplicidade e arquivo inválido.
-6. Conectar a grade à API e habilitar edição persistente com auditoria.
+6. Completar a grade operacional (edição em lote, criação de registros, paginação e exportação) e validar edição persistente com auditoria.
 7. Comparar resultados e regras com a planilha antes de liberar para a equipe.
