@@ -775,8 +775,8 @@ function columnNumber(letters: string): number { return [...letters].reduce((val
 async function main() {
  for (const column of columns) await prisma.mapaColumn.upsert({
   where: { key: column.key },
-  create: { key: column.key, label: column.label, position: columnNumber(column.key), dataType: column.dataType, editable: true, visible: true, config: { formulaCount: column.formulaCount, source: "MAPA 1.0 original workbook" } },
-  update: { label: column.label, position: columnNumber(column.key), dataType: column.dataType, config: { formulaCount: column.formulaCount, source: "MAPA 1.0 original workbook" } }
+  create: { key: column.key, label: column.label, position: columnNumber(column.key), dataType: column.dataType, editable: column.formulaCount === 0, visible: true, config: { formulaCount: column.formulaCount, source: "MAPA 1.0 original workbook" } },
+  update: { label: column.label, position: columnNumber(column.key), dataType: column.dataType, editable: column.formulaCount === 0, config: { formulaCount: column.formulaCount, source: "MAPA 1.0 original workbook" } }
  });
  console.log(`Metadados de ${columns.length} colunas (A:DX) inseridos/atualizados.`);
 }
