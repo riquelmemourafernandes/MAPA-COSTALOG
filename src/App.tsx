@@ -158,6 +158,27 @@ export default function App() {
         <div className="notice"><ClipboardList size={17}/><span>{apiBase ? (token ? notice : 'Entre com sua conta para acessar os dados reais.') : 'Configure VITE_API_URL para conectar a aplicação à API. Nenhum dado fictício será exibido.'}</span></div>
         {apiBase && !token && <form className="panel login-panel" onSubmit={login}><div><h2>Acessar MAPA COSTALOG</h2><p>Entre com seu usuário autorizado.</p></div><div className="login-fields"><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail corporativo" autoComplete="username"/><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha" autoComplete="current-password"/><button className="primary" disabled={loading}>{loading ? 'Conectando...' : 'Entrar'}</button></div>{apiError && <p className="api-error">{apiError}</p>}</form>}
         {apiBase && apiError && token && <div className="notice api-error"><span>{apiError}</span><button onClick={logout}>Fazer login novamente</button></div>}
+        {active === 'Visão geral' && <section className="workspace-page">
+          <div className="section-intro"><span className="eyebrow">RESUMO DO DIA</span><h2>Visão geral da operação</h2><p>Indicadores dos registros atualmente carregados.</p></div>
+          <div className="overview-grid"><div className="overview-card"><span>Registros encontrados</span><strong>{total}</strong><small>Na consulta atual</small></div><div className="overview-card"><span>Registros nesta página</span><strong>{displayedRows.length}</strong><small>Até {pageSize} por página</small></div><div className="overview-card"><span>Colunas configuradas</span><strong>{columns.length}</strong><small>Estrutura MAPA 1.0</small></div></div>
+          <div className="panel quick-panel"><div><h3>Acesso rápido</h3><p>Consulte e edite os registros operacionais na grade.</p></div><button className="primary" onClick={()=>setActive('MAPA 1.0')}><Table2 size={16}/> Abrir MAPA 1.0</button></div>
+          {total === 0 && <div className="empty-state">Ainda não há registros operacionais no banco. Nenhum dado fictício é exibido.</div>}
+        </section>}
+        {active === 'Status operacional' && <section className="workspace-page">
+          <div className="section-intro"><span className="eyebrow">ACOMPANHAMENTO</span><h2>Status dos registros</h2><p>Selecione um status para abrir os registros correspondentes.</p></div>
+          <div className="status-grid">{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><button className="status-card" key={value} onClick={()=>{setStatus(value);setPage(1);setActive('MAPA 1.0')}}><span className="status-indicator"/><b>{value}</b><small>Ver registros com este status</small></button>)}</div>
+          {rows.every(row=>!row.status) && <div className="empty-state">Não há status preenchidos nos registros carregados.</div>}
+          <button className="secondary" onClick={()=>{setStatus('');setActive('MAPA 1.0')}}>Limpar filtro e abrir grade</button>
+        </section>}
+        {active === 'Cadastros' && <section className="workspace-page">
+          <div className="section-intro"><span className="eyebrow">DADOS DE APOIO</span><h2>Cadastros</h2><p>Listas de referência utilizadas pela operação.</p></div>
+          <div className="feature-list"><div className="feature-row"><div className="feature-icon"><Users size={19}/></div><div><b>Listas de apoio</b><p>A estrutura de armazenamento existe; a manutenção dos cadastros pela interface ainda precisa ser conectada à API.</p></div><span className="feature-state">Em implementação</span></div><div className="feature-row"><div className="feature-icon"><Settings2 size={19}/></div><div><b>Colunas do MAPA</b><p>Configure as colunas exibidas diretamente na grade MAPA 1.0.</p></div><button className="secondary" onClick={()=>setActive('MAPA 1.0')}>Abrir grade</button></div></div>
+        </section>}
+        {active === 'Integrações' && <section className="workspace-page">
+          <div className="section-intro"><span className="eyebrow">CONEXÕES DO SISTEMA</span><h2>Integrações</h2><p>Estado de acesso aos recursos centrais do MAPA COSTALOG.</p></div>
+          <div className="feature-list"><div className="feature-row"><div className="feature-icon"><Waypoints size={19}/></div><div><b>API MAPA COSTALOG</b><p>{apiBase || 'Endereço da API não configurado no frontend.'}</p></div><span className={apiBase && token ? 'feature-state connected' : 'feature-state'}>{apiBase && token ? 'Sessão ativa' : 'Sem sessão'}</span></div><div className="feature-row"><div className="feature-icon"><Activity size={19}/></div><div><b>Banco de dados</b><p>Registros consultados pela API e armazenados no PostgreSQL/Supabase.</p></div><span className="feature-state">{token ? 'Acesso autenticado' : 'Aguardando login'}</span></div><div className="notice"><ClipboardList size={17}/><span>Sincronizações externas adicionais ainda precisam ser implementadas e testadas.</span></div></div>
+        </section>}
+        {active === 'MAPA 1.0' && <>
         <div className="metrics">
           <div className="metric-card"><div className="metric-top"><span>Registros na página</span><Table2 size={17}/></div><strong>{loading ? '…' : displayedRows.length}</strong><small>{total} registro(s) no banco</small></div>
           <div className="metric-card"><div className="metric-top"><span>Colunas disponíveis</span><Columns3 size={17}/></div><strong>{columns.length}</strong><small>Estrutura baseada no Excel original</small></div>
@@ -172,6 +193,7 @@ export default function App() {
           <footer className="table-footer"><span>{apiBase && token ? 'Dados do banco • edição individual com auditoria' : 'Sem dados de demonstração'}</span><span><span className="green-dot"/> {visibleColumns.length} coluna(s) selecionada(s)</span></footer>
           <div className="pagination"><button className="secondary" disabled={page<=1 || loading} onClick={()=>setPage(value=>Math.max(1,value-1))}>Anterior</button><span>Página {page} de {Math.max(1,Math.ceil(total/pageSize))}</span><button className="secondary" disabled={page>=Math.ceil(total/pageSize) || loading} onClick={()=>setPage(value=>value+1)}>Próxima</button></div>
         </section>
+        </>}
         <footer className="app-footer">MAPA COSTALOG <span>•</span> Aplicação web operacional em desenvolvimento</footer>
       </section>
     </main>
