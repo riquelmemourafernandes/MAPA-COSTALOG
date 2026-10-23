@@ -3,9 +3,8 @@ services:
     name: mapa-costalog-api
     runtime: node
     plan: free
-    rootDir: server
-    buildCommand: npm install && npm run prisma:generate && npm run build
-    startCommand: npm start
+    buildCommand: cd server && npm install && npm run prisma:generate && npm run build
+    startCommand: cd server && npm start
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
