@@ -19,6 +19,7 @@ export default function App() {
   const [status, setStatus] = useState('');
   const [token, setToken] = useState(() => apiBase ? sessionStorage.getItem('mapa-costalog-token') || '' : '');
   const [userKey, setUserKey] = useState(() => sessionStorage.getItem('mapa-costalog-user') || 'usuario');
+  const [userRole, setUserRole] = useState(() => sessionStorage.getItem('mapa-costalog-role') || '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [apiError, setApiError] = useState('');
@@ -74,15 +75,17 @@ export default function App() {
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível entrar.');
       sessionStorage.setItem('mapa-costalog-token', body.token);
       sessionStorage.setItem('mapa-costalog-user', body.user?.id || body.user?.email || 'usuario');
+      sessionStorage.setItem('mapa-costalog-role', body.user?.role || 'CONSULTA');
       setUserKey(body.user?.id || body.user?.email || 'usuario');
+      setUserRole(body.user?.role || 'CONSULTA');
       setToken(body.token); setPassword('');
       setNotice('Conectado como ' + (body.user?.name || body.user?.email || 'usuário autorizado') + '.');
     } catch (error) { setApiError(error instanceof Error ? error.message : 'Falha no login.'); }
     finally { setLoading(false); }
   }
   function logout() {
-    sessionStorage.removeItem('mapa-costalog-token'); sessionStorage.removeItem('mapa-costalog-user');
-    setToken(''); setRows([]); setNotice('Sessão encerrada.');
+    sessionStorage.removeItem('mapa-costalog-token'); sessionStorage.removeItem('mapa-costalog-user'); sessionStorage.removeItem('mapa-costalog-role');
+    setUserRole(''); setToken(''); setRows([]); setNotice('Sessão encerrada.');
   }
   function toggleColumn(key: string) {
     setVisibleKeys(previous => {
@@ -162,10 +165,10 @@ export default function App() {
           <div className="metric-card"><div className="metric-top"><span>Estado</span><Activity size={17}/></div><strong>{loading ? '…' : token ? 'Online' : '—'}</strong><small>Conexão com dados operacionais</small></div>
         </div>
         <section className="panel">
-          <div className="panel-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>As colunas originais são preservadas pelo identificador Excel (A até DX).</p></div><div className="panel-actions">{token && <button className="primary" disabled={loading} onClick={()=>void createRow()}><Plus size={16}/> Novo registro</button>}<button className="secondary" onClick={()=>setColumnMenu(value=>!value)}><Columns3 size={16}/> Escolher colunas ({visibleColumns.length})</button></div></div>
+          <div className="panel-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>As colunas originais são preservadas pelo identificador Excel (A até DX).</p></div><div className="panel-actions">{token && userRole !== 'CONSULTA' && <button className="primary" disabled={loading} onClick={()=>void createRow()}><Plus size={16}/> Novo registro</button>}<button className="secondary" onClick={()=>setColumnMenu(value=>!value)}><Columns3 size={16}/> Escolher colunas ({visibleColumns.length})</button></div></div>
           {columnMenu && <div className="column-picker"><div className="column-picker-actions"><b>Colunas exibidas nesta tela</b><button className="secondary" onClick={()=>{const all=columns.map(c=>c.key);setVisibleKeys(all);localStorage.setItem(preferenceKey,JSON.stringify(all));}}>Mostrar todas</button><button className="secondary" onClick={()=>{const defaults=columns.filter(c=>c.visible).map(c=>c.key);setVisibleKeys(defaults);localStorage.setItem(preferenceKey,JSON.stringify(defaults));}}>Restaurar padrão</button></div><div className="column-options">{columns.map(column=><label key={column.key}><input type="checkbox" checked={visibleKeys.includes(column.key)} onChange={()=>toggleColumn(column.key)}/><span>{column.key} — {column.label || '(coluna sem título no Excel)'}</span></label>)}</div></div>}
           <div className="toolbar"><div className="searchbox"><Search size={16}/><input value={query} onChange={e=>{setPage(1);setQuery(e.target.value)}} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="">Todos os status</option>{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><option key={value} value={value}>{value}</option>)}</select></div><span className="rows-count">{total} registros</span></div>
-          <div className="table-wrap" tabIndex={0}><table><thead><tr>{visibleColumns.map(column=><th key={column.key} title={column.key}>{column.label || column.key}</th>)}</tr></thead><tbody>{displayedRows.map(row=><tr key={row.id}>{visibleColumns.map(column=><td key={column.key} contentEditable={Boolean(token && column.editable)} suppressContentEditableWarning onBlur={event=>void saveCell(row,column,event.currentTarget.textContent||'')} title={column.key}>{valueText(row.data?.[column.key])}</td>)}</tr>)}</tbody></table>{!loading && displayedRows.length===0 && <div className="empty-state">{token ? 'Nenhum registro encontrado no banco para esta consulta.' : 'Conecte-se à API para visualizar os registros reais.'}</div>}</div>
+          <div className="table-wrap" tabIndex={0}><table><thead><tr>{visibleColumns.map(column=><th key={column.key} title={column.key}>{column.label || column.key}</th>)}</tr></thead><tbody>{displayedRows.map(row=><tr key={row.id}>{visibleColumns.map(column=><td key={column.key} contentEditable={Boolean(token && userRole !== 'CONSULTA' && column.editable)} suppressContentEditableWarning onBlur={event=>void saveCell(row,column,event.currentTarget.textContent||'')} title={column.key}>{valueText(row.data?.[column.key])}</td>)}</tr>)}</tbody></table>{!loading && displayedRows.length===0 && <div className="empty-state">{token ? 'Nenhum registro encontrado no banco para esta consulta.' : 'Conecte-se à API para visualizar os registros reais.'}</div>}</div>
           <footer className="table-footer"><span>{apiBase && token ? 'Dados do banco • edição individual com auditoria' : 'Sem dados de demonstração'}</span><span><span className="green-dot"/> {visibleColumns.length} coluna(s) selecionada(s)</span></footer>
           <div className="pagination"><button className="secondary" disabled={page<=1 || loading} onClick={()=>setPage(value=>Math.max(1,value-1))}>Anterior</button><span>Página {page} de {Math.max(1,Math.ceil(total/pageSize))}</span><button className="secondary" disabled={page>=Math.ceil(total/pageSize) || loading} onClick={()=>setPage(value=>value+1)}>Próxima</button></div>
         </section>
