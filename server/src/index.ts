@@ -73,6 +73,10 @@ function requireRole(...roles: UserRole[]) {
   };
 }
 
+const createRowSchema = z.object({
+  data: z.record(z.string().min(1).max(80), z.union([z.string().max(20000), z.number().finite(), z.boolean(), z.null()])).default({})
+});
+
 const patchSchema = z.object({
   changes: z.record(
     z.string().min(1).max(80),
@@ -120,7 +124,6 @@ app.get("/api/v1/auth/me", (req, res) => {
 app.get("/api/v1/config/columns", async (_req, res, next) => {
   try {
     const columns = await prisma.mapaColumn.findMany({
-      where: { visible: true },
       orderBy: { position: "asc" }
     });
     res.json({ items: columns });
@@ -159,6 +162,36 @@ app.get("/api/v1/mapa", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+
+app.post("/api/v1/mapa", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.OPERACAO), async (req, res, next) => {
+  try {
+    const parsed = createRowSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Dados do novo registro inválidos.", details: parsed.error.issues } });
+    const keys = Object.keys(parsed.data.data);
+    if (keys.length > 128) return res.status(400).json({ error: { code: "TOO_MANY_FIELDS", message: "O registro excede as 128 colunas do MAPA." } });
+    const cols = await prisma.mapaColumn.findMany({ where: { key: { in: keys }, editable: true } });
+    const allowed = new Map(cols.map(col => [col.key, col]));
+    const rejected = keys.filter(key => !allowed.has(key));
+    if (rejected.length) return res.status(400).json({ error: { code: "FIELDS_NOT_EDITABLE", message: "Existem colunas inválidas ou não editáveis.", details: rejected } });
+    for (const [key, value] of Object.entries(parsed.data.data)) {
+      const type = allowed.get(key)!.dataType;
+      const valid = value === null || ((type === "number" || type === "currency") ? typeof value === "number" : type === "boolean" ? typeof value === "boolean" : typeof value === "string");
+      if (!valid) return res.status(400).json({ error: { code: "INVALID_FIELD_TYPE", message: `Valor inválido para a coluna ${key}.` } });
+    }
+    const data = parsed.data.data as Prisma.InputJsonObject;
+    const valueFor = (key: string) => typeof data[key] === "string" ? data[key] as string : null;
+    const row = await prisma.$transaction(async tx => {
+      const created = await tx.mapaRow.create({ data: {
+        data,
+        status: valueFor("C"), clientName: valueFor("L"), container: valueFor("T"), cte: valueFor("D"), updatedById: req.authUser!.id
+      } });
+      await tx.auditLog.create({ data: { entityType: "MAPA_ROW", entityId: created.id, mapaRowId: created.id, action: "CREATE", userId: req.authUser!.id, afterValue: data } });
+      return created;
+    });
+    return res.status(201).json({ item: row });
+  } catch (error) { return next(error); }
 });
 
 app.patch("/api/v1/mapa/:id", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.OPERACAO), async (req, res, next) => {
