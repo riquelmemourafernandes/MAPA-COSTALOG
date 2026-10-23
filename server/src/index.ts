@@ -421,12 +421,19 @@ app.post("/api/v1/imports/:id/commit", requireRole(UserRole.ADMIN), uploadXlsx.s
       updatedById: req.authUser!.id, createdAt: now, updatedAt: now
     }));
     const imported = await prisma.$transaction(async (tx) => {
+      // Serialize commits for the same file hash, including separate previews of identical files.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${fileHash}))`;
+      const alreadyImported = await tx.importJob.findFirst({
+        where: { fileHash, status: ImportStatus.IMPORTED },
+        select: { id: true }
+      });
+      if (alreadyImported) return "DUPLICATE";
       // Atomically claim the preview so two simultaneous commit requests cannot import it twice.
       const claimed = await tx.importJob.updateMany({
         where: { id: job.id, status: ImportStatus.READY },
         data: { status: ImportStatus.VALIDATING }
       });
-      if (claimed.count !== 1) return false;
+      if (claimed.count !== 1) return "CLAIMED";
       for (let offset = 0; offset < rows.length; offset += 400) {
         await tx.mapaRow.createMany({ data: rows.slice(offset, offset + 400) });
       }
@@ -438,9 +445,10 @@ app.post("/api/v1/imports/:id/commit", requireRole(UserRole.ADMIN), uploadXlsx.s
         data: { entityType: "IMPORT_JOB", entityId: job.id, action: "IMPORT", fieldKey: "MAPA 1.0",
           afterValue: { rowsImported: rows.length, fileHash }, userId: req.authUser!.id }
       });
-      return true;
+      return "IMPORTED";
     });
-    if (!imported) return res.status(409).json({ error: { code: "IMPORT_ALREADY_PROCESSING", message: "Esta prévia já foi utilizada ou está sendo processada. Gere uma nova prévia se necessário." } });
+    if (imported === "DUPLICATE") return res.status(409).json({ error: { code: "DUPLICATE_IMPORT", message: "Este arquivo já foi importado." } });
+    if (imported !== "IMPORTED") return res.status(409).json({ error: { code: "IMPORT_ALREADY_PROCESSING", message: "Esta prévia já foi utilizada ou está sendo processada. Gere uma nova prévia se necessário." } });
     return res.json({ importId: job.id, status: "IMPORTED", rowsImported: rows.length });
   } catch (error) {
     return next(error);
