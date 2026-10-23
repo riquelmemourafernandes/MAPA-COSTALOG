@@ -261,9 +261,12 @@ app.patch("/api/v1/mapa/:id", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, U
 });
 
 
-app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-  // Keep internal error details out of HTTP responses.
-  if (process.env.NODE_ENV !== "production") console.error(error);
+app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
+  // Log diagnostic details privately; never expose internal errors to the client.
+  const diagnostic = error instanceof Error
+    ? { name: error.name, message: error.message }
+    : { name: "UnknownError", message: String(error) };
+  console.error("[API_ERROR]", { method: req.method, path: req.path, ...diagnostic });
   return res.status(500).json({
     error: { code: "INTERNAL_ERROR", message: "Não foi possível concluir a solicitação." }
   });
