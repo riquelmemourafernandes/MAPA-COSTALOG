@@ -355,7 +355,7 @@ app.get("/api/v1/preferences", async (req, res, next) => {
 
 app.put("/api/v1/preferences", async (req, res, next) => {
   try {
-    const schema = z.object({ visibleKeys: z.array(z.string().max(80)).max(128).optional(), columnOrder: z.array(z.string().max(80)).max(128).optional(), savedViews: z.array(z.object({ name: z.string().trim().min(1).max(80), visibleKeys: z.array(z.string().max(80)).max(128), query: z.string().max(120).default(""), status: z.string().max(120).default("") })).max(50).optional() }).strict();
+    const schema = z.object({ visibleKeys: z.array(z.string().max(80)).max(128).optional(), columnOrder: z.array(z.string().max(80)).max(128).optional(), savedViews: z.array(z.object({ name: z.string().trim().min(1).max(80), visibleKeys: z.array(z.string().max(80)).max(128), query: z.string().max(120).default(""), status: z.string().max(120).default("") })).max(50).optional(), cellStyles: z.record(z.string().max(200), z.object({ bold: z.boolean().optional(), color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(), background: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional() })).optional() }).strict();
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Preferências inválidas." } });
     const metadata = parsed.data as Prisma.InputJsonObject;
