@@ -138,32 +138,15 @@ app.get("/api/v1/mapa", async (req, res, next) => {
     const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(req.query.pageSize || "100"), 10) || 100));
     const search = String(req.query.search || "").trim().slice(0, 120);
     const status = String(req.query.status || "").trim().slice(0, 120);
-    const where: Prisma.MapaRowWhereInput = { archivedAt: null };
-    if (status && status !== "Todos os status") where.status = { equals: status, mode: "insensitive" };
-    if (search) {
-      where.OR = [
-        { status: { contains: search, mode: "insensitive" } },
-        { clientName: { contains: search, mode: "insensitive" } },
-        { container: { contains: search, mode: "insensitive" } },
-        { cte: { contains: search, mode: "insensitive" } },
-        { operationalKey: { contains: search, mode: "insensitive" } }
-      ];
-    }
-    const [total, items] = await prisma.$transaction([
-      prisma.mapaRow.count({ where }),
-      prisma.mapaRow.findMany({
-        where,
-        orderBy: { sequence: "desc" },
-        skip: (page - 1) * pageSize,
-        take: pageSize
-      })
+    const searchLike = `%${search}%`;
+    const statusFilter = status && status !== "Todos os status" ? status : "";
+    const [countRows, items] = await prisma.$transaction([
+      prisma.$queryRaw<Array<{ total: bigint }>>`SELECT COUNT(*)::bigint AS total FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike})`,
+      prisma.$queryRaw<any[]> `SELECT id, sequence, operational_key AS "operationalKey", data, status, client_name AS "clientName", container, cte, collection_date AS "collectionDate", delivery_date AS "deliveryDate", archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt", updated_by_id AS "updatedById" FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike}) ORDER BY sequence DESC OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize}`
     ]);
-    res.json({ items, page, pageSize, total });
-  } catch (error) {
-    next(error);
-  }
+    return res.json({ items, page, pageSize, total: Number(countRows[0]?.total || 0) });
+  } catch (error) { return next(error); }
 });
-
 
 app.post("/api/v1/mapa", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.OPERACAO), async (req, res, next) => {
   try {
