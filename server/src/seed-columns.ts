@@ -441,42 +441,6 @@ const columns = [
     "formulaCount": 12051
   },
   {
-    "key": "BP",
-    "label": "Coluna BP",
-    "dataType": "text",
-    "formulaCount": 0
-  },
-  {
-    "key": "BQ",
-    "label": "Coluna BQ",
-    "dataType": "boolean",
-    "formulaCount": 0
-  },
-  {
-    "key": "BR",
-    "label": "Coluna BR",
-    "dataType": "status",
-    "formulaCount": 0
-  },
-  {
-    "key": "BS",
-    "label": "Coluna BS",
-    "dataType": "status",
-    "formulaCount": 0
-  },
-  {
-    "key": "BT",
-    "label": "Coluna BT",
-    "dataType": "status",
-    "formulaCount": 0
-  },
-  {
-    "key": "BU",
-    "label": "Coluna BU",
-    "dataType": "status",
-    "formulaCount": 12051
-  },
-  {
     "key": "BV",
     "label": "Coluna BV",
     "dataType": "text",
@@ -749,6 +713,60 @@ const columns = [
   {
     "key": "DO",
     "label": "Coluna DO",
+    "dataType": "text",
+    "formulaCount": 0
+  },
+  {
+    "key": "DP",
+    "label": "Coluna DP",
+    "dataType": "text",
+    "formulaCount": 0
+  },
+  {
+    "key": "DQ",
+    "label": "Coluna DQ",
+    "dataType": "text",
+    "formulaCount": 0
+  },
+  {
+    "key": "DR",
+    "label": "Coluna DR",
+    "dataType": "text",
+    "formulaCount": 0
+  },
+  {
+    "key": "DS",
+    "label": "Coluna DS",
+    "dataType": "text",
+    "formulaCount": 0
+  },
+  {
+    "key": "DT",
+    "label": "Coluna DT",
+    "dataType": "text",
+    "formulaCount": 0
+  },
+  {
+    "key": "DU",
+    "label": "Coluna DU",
+    "dataType": "text",
+    "formulaCount": 0
+  },
+  {
+    "key": "DV",
+    "label": "Coluna DV",
+    "dataType": "text",
+    "formulaCount": 0
+  },
+  {
+    "key": "DW",
+    "label": "Coluna DW",
+    "dataType": "text",
+    "formulaCount": 0
+  },
+  {
+    "key": "DX",
+    "label": "Coluna DX",
     "dataType": "text",
     "formulaCount": 0
   }
