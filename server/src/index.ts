@@ -302,19 +302,29 @@ async function parseMapaWorkbook(buffer: Buffer) {
       if (value instanceof Date) {
         value = cell.text || value.toISOString();
       } else if (typeof value === "object") {
-        const structured = value as { result?: unknown; text?: string; richText?: Array<{ text: string }> };
+        const structured = value as { formula?: string; sharedFormula?: string; result?: unknown; text?: string; richText?: Array<{ text: string }>; error?: string };
+        // Do not silently import formula expressions or Excel error objects as operational values.
+        if (("formula" in structured || "sharedFormula" in structured) && structured.result === undefined) {
+          errors.push({ row: rowNumber, message: `A célula ${headers[columnNumber - 1].key} contém fórmula sem resultado calculado; gere uma cópia com valores calculados antes de importar.` });
+          continue;
+        }
         if ("result" in structured && structured.result !== undefined) value = structured.result;
-        else if (structured.text !== undefined) value = structured.text;
+        else if (structured.error !== undefined) {
+          errors.push({ row: rowNumber, message: `A célula ${headers[columnNumber - 1].key} contém erro do Excel (${structured.error}).` });
+          continue;
+        } else if (structured.text !== undefined) value = structured.text;
         else if (structured.richText) value = structured.richText.map((part) => part.text).join("");
         else value = cell.text || "";
       }
       if (value === null || value === undefined || value === "") continue;
       if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") data[headers[columnNumber - 1].key] = value;
-      else data[headers[columnNumber - 1].key] = String(value);
+      else if (typeof value === "object") {
+        errors.push({ row: rowNumber, message: `A célula ${headers[columnNumber - 1].key} possui um valor complexo não suportado.` });
+      } else data[headers[columnNumber - 1].key] = String(value);
     }
     if (!Object.keys(data).length) continue;
     const containerValue = containerKey ? data[containerKey] : undefined;
-    if (typeof containerValue === "string" && containerValue.length > 32) {
+    if (containerValue !== undefined && String(containerValue).length > 32) {
       errors.push({ row: rowNumber, message: "Container excede 32 caracteres." });
     }
     parsedRows.push({ data, excelRow: rowNumber });
