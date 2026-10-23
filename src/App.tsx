@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Bell, ChevronDown, ClipboardList, Columns3, Filter, LayoutDashboard, LogOut, Search, Settings2, Table2, Truck, Users, Waypoints } from 'lucide-react';
+import { Activity, Bell, ChevronDown, ClipboardList, Columns3, Filter, LayoutDashboard, LogOut, Plus, Search, Settings2, Table2, Truck, Users, Waypoints } from 'lucide-react';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean };
 type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
@@ -91,6 +91,25 @@ export default function App() {
       return next;
     });
   }
+  async function createRow() {
+    if (!apiBase || !token) return;
+    setLoading(true); setApiError('');
+    try {
+      const response = await fetch(apiBase + '/api/v1/mapa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ data: {} })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível criar o registro.');
+      setQuery(''); setStatus(''); setPage(1);
+      setRows(previous => [body.item as RecordRow, ...previous]);
+      setTotal(previous => previous + 1);
+      setNotice('Novo registro criado. Preencha as colunas diretamente na grade.');
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : 'Falha ao criar registro.');
+    } finally { setLoading(false); }
+  }
   async function saveCell(row: RecordRow, column: Column, value: string) {
     if (!apiBase || !token || !column.editable) return;
     const previousValue = valueText(row.data?.[column.key]);
@@ -143,7 +162,7 @@ export default function App() {
           <div className="metric-card"><div className="metric-top"><span>Estado</span><Activity size={17}/></div><strong>{loading ? '…' : token ? 'Online' : '—'}</strong><small>Conexão com dados operacionais</small></div>
         </div>
         <section className="panel">
-          <div className="panel-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>As colunas originais são preservadas pelo identificador Excel (A até DX).</p></div><div className="panel-actions"><button className="secondary" onClick={()=>setColumnMenu(value=>!value)}><Columns3 size={16}/> Escolher colunas ({visibleColumns.length})</button></div></div>
+          <div className="panel-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>As colunas originais são preservadas pelo identificador Excel (A até DX).</p></div><div className="panel-actions">{token && <button className="primary" disabled={loading} onClick={()=>void createRow()}><Plus size={16}/> Novo registro</button>}<button className="secondary" onClick={()=>setColumnMenu(value=>!value)}><Columns3 size={16}/> Escolher colunas ({visibleColumns.length})</button></div></div>
           {columnMenu && <div className="column-picker"><div className="column-picker-actions"><b>Colunas exibidas nesta tela</b><button className="secondary" onClick={()=>{const all=columns.map(c=>c.key);setVisibleKeys(all);localStorage.setItem(preferenceKey,JSON.stringify(all));}}>Mostrar todas</button><button className="secondary" onClick={()=>{const defaults=columns.filter(c=>c.visible).map(c=>c.key);setVisibleKeys(defaults);localStorage.setItem(preferenceKey,JSON.stringify(defaults));}}>Restaurar padrão</button></div><div className="column-options">{columns.map(column=><label key={column.key}><input type="checkbox" checked={visibleKeys.includes(column.key)} onChange={()=>toggleColumn(column.key)}/><span>{column.key} — {column.label || '(coluna sem título no Excel)'}</span></label>)}</div></div>}
           <div className="toolbar"><div className="searchbox"><Search size={16}/><input value={query} onChange={e=>{setPage(1);setQuery(e.target.value)}} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="">Todos os status</option>{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><option key={value} value={value}>{value}</option>)}</select></div><span className="rows-count">{total} registros</span></div>
           <div className="table-wrap" tabIndex={0}><table><thead><tr>{visibleColumns.map(column=><th key={column.key} title={column.key}>{column.label || column.key}</th>)}</tr></thead><tbody>{displayedRows.map(row=><tr key={row.id}>{visibleColumns.map(column=><td key={column.key} contentEditable={Boolean(token && column.editable)} suppressContentEditableWarning onBlur={event=>void saveCell(row,column,event.currentTarget.textContent||'')} title={column.key}>{valueText(row.data?.[column.key])}</td>)}</tr>)}</tbody></table>{!loading && displayedRows.length===0 && <div className="empty-state">{token ? 'Nenhum registro encontrado no banco para esta consulta.' : 'Conecte-se à API para visualizar os registros reais.'}</div>}</div>
