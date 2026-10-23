@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Bell, ChevronDown, ClipboardList, Columns3, Filter, LayoutDashboard, LogOut, Plus, Search, Settings2, Table2, Truck, Users, Waypoints } from 'lucide-react';
+import { Activity, ArrowDown, ArrowUp, Bell, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound } from 'lucide-react';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean };
-type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
+type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };\ntype SavedView = { name: string; visibleKeys: string[]; query: string; status: string };\ntype AuditEntry = { id: string; action: string; fieldKey?: string | null; beforeValue?: unknown; afterValue?: unknown; createdAt: string; user?: { name?: string; email?: string } | null };\ntype UserProfile = { id: string; name: string; email: string; role: string; active: boolean };\ntype UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string };
 const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const nav = [
   { name: 'Visão geral', icon: LayoutDashboard }, { name: 'MAPA 1.0', icon: Table2 },
@@ -30,7 +30,7 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [columnMenu, setColumnMenu] = useState(false);
-  const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
+  const [visibleKeys, setVisibleKeys] = useState<string[]>([]);\n  const [savedViews, setSavedViews] = useState<SavedView[]>([]);\n  const [viewName, setViewName] = useState('');\n  const [showViewTools, setShowViewTools] = useState(false);\n  const [historyTarget, setHistoryTarget] = useState<{row: RecordRow; column: Column} | null>(null);\n  const [historyItems, setHistoryItems] = useState<AuditEntry[]>([]);\n  const [historyLoading, setHistoryLoading] = useState(false);\n  const [profile, setProfile] = useState<UserProfile | null>(null);\n  const [profileName, setProfileName] = useState('');\n  const [profileEmail, setProfileEmail] = useState('');\n  const [currentPassword, setCurrentPassword] = useState('');\n  const [newPassword, setNewPassword] = useState('');\n  const [users, setUsers] = useState<UserAdminItem[]>([]);\n  const [newUserName, setNewUserName] = useState('');\n  const [newUserEmail, setNewUserEmail] = useState('');\n  const [newUserPassword, setNewUserPassword] = useState('');\n  const [newUserRole, setNewUserRole] = useState('CONSULTA');
   const pageSize = 100;
   const preferenceKey = 'mapa-costalog-columns:' + userKey;
 
@@ -65,6 +65,88 @@ export default function App() {
     return () => { cancelled = true; };
   }, [token, page, query, status, preferenceKey]);
 
+  async function persistPreferences(next: {visibleKeys?: string[]; savedViews?: SavedView[]}) {
+    if (!apiBase || !token) return;
+    try {
+      const response = await fetch(apiBase + '/api/v1/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ visibleKeys: next.visibleKeys ?? visibleKeys, columnOrder: next.visibleKeys ?? visibleKeys, savedViews: next.savedViews ?? savedViews }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar as preferências.');
+      setNotice('Preferências salvas na sua conta.');
+    } catch (error) { setApiError(error instanceof Error ? error.message : 'Falha ao salvar preferências.'); }
+  }
+  useEffect(() => {
+    if (!apiBase || !token) return;
+    let cancelled = false;
+    Promise.all([
+      fetch(apiBase + '/api/v1/preferences', { headers: { Authorization: 'Bearer ' + token } }),
+      fetch(apiBase + '/api/v1/auth/profile', { headers: { Authorization: 'Bearer ' + token } })
+    ]).then(async ([preferencesResponse, profileResponse]) => {
+      const preferencesBody = await preferencesResponse.json().catch(() => ({}));
+      const profileBody = await profileResponse.json().catch(() => ({}));
+      if (!preferencesResponse.ok || !profileResponse.ok) return;
+      if (cancelled) return;
+      const preferences = preferencesBody.preferences || {};
+      if (Array.isArray(preferences.visibleKeys)) { setVisibleKeys(preferences.visibleKeys); localStorage.setItem(preferenceKey, JSON.stringify(preferences.visibleKeys)); }
+      if (Array.isArray(preferences.savedViews)) setSavedViews(preferences.savedViews);
+      if (profileBody.user) { setProfile(profileBody.user); setProfileName(profileBody.user.name); setProfileEmail(profileBody.user.email); }
+    }).catch(() => {});
+    if (userRole === 'ADMIN') fetch(apiBase + '/api/v1/users', { headers: { Authorization: 'Bearer ' + token } }).then(async response => {
+      const body = await response.json().catch(() => ({})); if (!cancelled && response.ok) setUsers(Array.isArray(body.items) ? body.items : []);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [token, userKey, userRole, preferenceKey]);
+  function moveColumn(key: string, direction: -1 | 1) {
+    setVisibleKeys(previous => {
+      const ordered = [...previous]; const index = ordered.indexOf(key); const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= ordered.length) return previous;
+      [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]];
+      localStorage.setItem(preferenceKey, JSON.stringify(ordered)); void persistPreferences({visibleKeys: ordered}); return ordered;
+    });
+  }
+  async function saveCurrentView() {
+    const name = viewName.trim();
+    if (!name) { setApiError('Digite um nome para o filtro personalizado.'); return; }
+    const next = [...savedViews.filter(view => view.name.toLocaleLowerCase('pt-BR') !== name.toLocaleLowerCase('pt-BR')), { name, visibleKeys, query, status }];
+    setSavedViews(next); setViewName(''); setApiError(''); await persistPreferences({savedViews: next, visibleKeys});
+  }
+  function applyView(view: SavedView) {
+    setVisibleKeys(view.visibleKeys.filter(key => columns.some(column => column.key === key)));
+    setQuery(view.query); setStatus(view.status); setPage(1);
+    localStorage.setItem(preferenceKey, JSON.stringify(view.visibleKeys)); void persistPreferences({visibleKeys:view.visibleKeys});
+  }
+  async function openHistory(row: RecordRow, column: Column) {
+    setHistoryTarget({row, column}); setHistoryItems([]); setHistoryLoading(true);
+    try {
+      const response = await fetch(apiBase + '/api/v1/mapa/' + encodeURIComponent(row.id) + '/history?field=' + encodeURIComponent(column.key), {headers:{Authorization:'Bearer '+token}});
+      const body = await response.json().catch(()=>({}));
+      if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível consultar o histórico.');
+      setHistoryItems(Array.isArray(body.items) ? body.items as AuditEntry[] : []);
+    } catch(error) { setApiError(error instanceof Error ? error.message : 'Falha ao consultar histórico.'); }
+    finally { setHistoryLoading(false); }
+  }
+  async function saveProfile(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    try {
+      const response = await fetch(apiBase + '/api/v1/auth/profile', {method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({name:profileName,email:profileEmail,...(newPassword?{currentPassword,newPassword}:{})})});
+      const body=await response.json().catch(()=>({})); if(!response.ok) throw new Error(body?.error?.message || 'Não foi possível atualizar o perfil.');
+      setProfile(body.user); setProfileName(body.user.name); setProfileEmail(body.user.email); setCurrentPassword(''); setNewPassword(''); setNotice('Seu cadastro foi atualizado.');
+    } catch(error) {setApiError(error instanceof Error ? error.message : 'Falha ao atualizar perfil.');}
+  }
+  async function createUser(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    try {
+      const response=await fetch(apiBase+'/api/v1/users',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({name:newUserName,email:newUserEmail,password:newUserPassword,role:newUserRole,active:true})});
+      const body=await response.json().catch(()=>({})); if(!response.ok) throw new Error(body?.error?.message || 'Não foi possível criar usuário.');
+      setUsers(previous=>[...previous,body.user].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setNewUserName('');setNewUserEmail('');setNewUserPassword('');setNewUserRole('CONSULTA');setNotice('Usuário criado com sucesso.');
+    } catch(error) {setApiError(error instanceof Error ? error.message : 'Falha ao criar usuário.');}
+  }
+  async function updateUser(user: UserAdminItem, changes: Record<string, unknown>) {
+    try {
+      const response=await fetch(apiBase+'/api/v1/users/'+encodeURIComponent(user.id),{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(changes)});
+      const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body?.error?.message || 'Não foi possível atualizar usuário.');
+      setUsers(previous=>previous.map(item=>item.id===user.id?{...item,...body.user}:item));setNotice('Cadastro de usuário atualizado.');
+    } catch(error) {setApiError(error instanceof Error ? error.message : 'Falha ao atualizar usuário.');}
+  }
   async function login(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!apiBase) return;
@@ -90,8 +172,7 @@ export default function App() {
   function toggleColumn(key: string) {
     setVisibleKeys(previous => {
       const next = previous.includes(key) ? previous.filter(item => item !== key) : [...previous, key];
-      localStorage.setItem(preferenceKey, JSON.stringify(next));
-      return next;
+      localStorage.setItem(preferenceKey, JSON.stringify(next)); void persistPreferences({visibleKeys:next}); return next;
     });
   }
   async function createRow() {
