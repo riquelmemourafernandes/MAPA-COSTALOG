@@ -5,6 +5,8 @@ type Column = { key: string; label: string; position: number; dataType: string; 
 type ValidationItem = { key: string; label: string; dataType: string; total: number; missing: number };
 type ValidationSummary = { checkedAt: string; totalRows: number; requiredFields: number; items: ValidationItem[] };
 type DashboardSummary = { generatedAt: string; activeRecords: number; recentlyUpdated: number; statuses: { status: string; count: number }[] };
+type AppointmentAlert = { id: string; sequence: number; kind: 'Coleta' | 'Entrega'; scheduledAt: string; minutesLate: number; attendant: string; clientName: string | null; container: string | null; cte: string | null; status: string | null };
+type AppointmentAlertSummary = { generatedAt: string; total: number; items: AppointmentAlert[] };
 type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
 type SavedView = { name: string; visibleKeys: string[]; query: string; status: string };
 type CellStyle = { bold?: boolean; color?: string; background?: string };
@@ -47,6 +49,8 @@ export default function App() {
   const [validationLoading, setValidationLoading] = useState(false);
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [appointmentAlerts, setAppointmentAlerts] = useState<AppointmentAlertSummary | null>(null);
+  const [appointmentAlertsLoading, setAppointmentAlertsLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [columnMenu, setColumnMenu] = useState(false);
@@ -120,6 +124,21 @@ export default function App() {
       })
       .catch(error => { if (!cancelled) setApiError(error instanceof Error ? error.message : 'Falha ao carregar o painel.'); })
       .finally(() => { if (!cancelled) setDashboardLoading(false); });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  useEffect(() => {
+    if (!apiBase || !token) { setAppointmentAlerts(null); return; }
+    let cancelled = false;
+    setAppointmentAlertsLoading(true);
+    fetch(apiBase + '/api/v1/dashboard/appointment-alerts', { headers: { Authorization: 'Bearer ' + token } })
+      .then(async response => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível carregar os alertas de agendamento.');
+        if (!cancelled) setAppointmentAlerts(body as AppointmentAlertSummary);
+      })
+      .catch(error => { if (!cancelled) setApiError(error instanceof Error ? error.message : 'Falha ao carregar alertas de agendamento.'); })
+      .finally(() => { if (!cancelled) setAppointmentAlertsLoading(false); });
     return () => { cancelled = true; };
   }, [token]);
 
@@ -399,6 +418,10 @@ export default function App() {
           </>}
           <div className="panel validation-panel"><div className="panel-heading"><div><h2>Pendências que precisam de atenção</h2><p>Alertas baseados nos campos obrigatórios configurados, sem criar prazos presumidos.</p></div><button className="secondary" onClick={()=>setActive('Status operacional')}>Ver todas</button></div>
             {!token ? <div className="empty-state">Entre para consultar as pendências reais.</div> : validationLoading && !validationSummary ? <div className="empty-state">Verificando pendências…</div> : validationSummary?.items.length ? <div className="validation-list">{validationSummary.items.slice(0,4).map(item=><div className="validation-row" key={item.key}><div className="validation-icon"><Bell size={17}/></div><div className="validation-field"><b>{item.label}</b><small>Campo obrigatório incompleto</small></div><strong>{item.missing}</strong><span>registro(s)</span></div>)}</div> : <div className="empty-state">{validationSummary ? 'Nenhuma pendência de campo obrigatório encontrada.' : 'Aguardando a validação dos dados.'}</div>}
+          </div>
+          <div className="panel validation-panel"><div className="panel-heading"><div><h2>Agendamentos vencidos</h2><p>Coletas e entregas com data/hora do agendamento já passada e sem registro do marco operacional correspondente. Responsável conforme o campo ATENDENTE.</p></div><button className="secondary" disabled={appointmentAlertsLoading} onClick={()=>{setAppointmentAlertsLoading(true);fetch(apiBase + '/api/v1/dashboard/appointment-alerts',{headers:{Authorization:'Bearer '+token}}).then(async response=>{const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body?.error?.message||'Falha ao atualizar alertas.');setAppointmentAlerts(body as AppointmentAlertSummary);setApiError('');}).catch(error=>setApiError(error instanceof Error?error.message:'Falha ao atualizar alertas.')).finally(()=>setAppointmentAlertsLoading(false));}}>Atualizar alertas</button></div>
+            {!token ? <div className="empty-state">Entre para consultar os agendamentos reais.</div> : appointmentAlertsLoading && !appointmentAlerts ? <div className="empty-state">Verificando agendamentos…</div> : appointmentAlerts?.items.length ? <div className="validation-list">{appointmentAlerts.items.slice(0,8).map(item=><div className="validation-row" key={item.id + item.kind}><div className="validation-icon"><Bell size={17}/></div><div className="validation-field"><b>#{item.sequence} · {item.kind}</b><small>{item.clientName || 'Cliente não informado'}{item.container ? ' · '+item.container : ''}{item.cte ? ' · CT-e '+item.cte : ''}</small><small>Agendado: {new Date(item.scheduledAt).toLocaleString('pt-BR')} · Atendente: {item.attendant}</small></div><strong>{item.minutesLate >= 60 ? Math.floor(item.minutesLate/60)+' h' : item.minutesLate+' min'}</strong><button className="secondary" onClick={()=>{setQuery(item.container || item.cte || String(item.sequence));setStatus('');setFilterColumn('');setFilterValue('');setPage(1);setActive('MAPA 1.0')}}>Abrir</button></div>)}</div> : <div className="empty-state">{appointmentAlerts ? 'Nenhum agendamento vencido encontrado com os campos disponíveis.' : 'Aguardando consulta dos agendamentos.'}</div>}
+            {appointmentAlerts && <p className="validation-footnote">Análise em {new Date(appointmentAlerts.generatedAt).toLocaleString('pt-BR')}. Total de alertas: {appointmentAlerts.total}. Lista limitada aos 8 primeiros itens nesta tela; nenhuma data foi alterada.</p>}
           </div>
           <div className="panel quick-panel"><div><h3>Acesso rápido</h3><p>Consulte e edite os registros operacionais na grade.</p></div><button className="primary" onClick={()=>setActive('MAPA 1.0')}><Table2 size={16}/> Abrir MAPA 1.0</button></div>
         </section>}
