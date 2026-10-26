@@ -183,13 +183,20 @@ app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
     const rows = await prisma.mapaRow.findMany({
       where: { archivedAt: null },
       select: { id: true, sequence: true, data: true, status: true, clientName: true, container: true, cte: true },
-      orderBy: { sequence: "desc" },
-      take: 5000
+      orderBy: { sequence: "desc" }
     });
     const value = (data: Prisma.JsonValue, key: string): string => {
       if (!data || typeof data !== "object" || Array.isArray(data)) return "";
       const item = (data as Prisma.JsonObject)[key];
       return typeof item === "string" || typeof item === "number" ? String(item).trim() : "";
+    };
+    const parseAppointment = (input: string): number => {
+      const native = Date.parse(input);
+      if (Number.isFinite(native)) return native;
+      const match = input.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ ,T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+      if (!match) return Number.NaN;
+      const [, day, month, year, hour = "0", minute = "0", second = "0"] = match;
+      return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)).getTime();
     };
     const alerts: Array<{
       id: string; sequence: number; kind: "Coleta" | "Entrega";
@@ -208,7 +215,7 @@ app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
         { kind: "Entrega" as const, scheduled: deliveryAppointment, completed: Boolean(deliveryArrived) }
       ]) {
         if (!candidate.scheduled || candidate.completed) continue;
-        const timestamp = Date.parse(candidate.scheduled);
+        const timestamp = parseAppointment(candidate.scheduled);
         if (!Number.isFinite(timestamp) || timestamp >= now.getTime()) continue;
         alerts.push({
           id: row.id,
