@@ -4,7 +4,6 @@ import { Activity, Bell, Bold, GripVertical, Palette, PaintBucket, ChevronDown, 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean; required?: boolean };
 type ValidationItem = { key: string; label: string; dataType: string; total: number; missing: number };
 type ValidationSummary = { checkedAt: string; totalRows: number; requiredFields: number; items: ValidationItem[] };
-type DashboardSummary = { generatedAt: string; activeRecords: number; recentlyUpdated: number; statuses: { status: string; count: number }[] };
 type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
 type SavedView = { name: string; visibleKeys: string[]; query: string; status: string };
 type CellStyle = { bold?: boolean; color?: string; background?: string };
