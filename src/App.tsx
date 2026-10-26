@@ -373,10 +373,10 @@ export default function App() {
       const mod = event.ctrlKey || event.metaKey;
       if (mod && event.key.toLowerCase() === 'f') {
         event.preventDefault();
-        const key = selectedCell?.column.key || visibleColumns[0]?.key;
+        const key = selectedCell?.column.key || columns[0]?.key;
         if (key) setColumnFilterMenu(key);
       } else if (mod && event.key.toLowerCase() === 'a' && active === 'MAPA 1.0' && !typing) {
-        event.preventDefault(); setSelectedRowIds(displayedRows.map(row => row.id));
+        event.preventDefault(); setSelectedRowIds(rows.map(row => row.id));
       } else if (mod && event.key.toLowerCase() === 'd' && active === 'MAPA 1.0' && userRole !== 'CONSULTA' && selectedCell && selectedRowIds.length > 1) {
         event.preventDefault();
         const sourceValue = valueText(selectedCell.row.data?.[selectedCell.column.key]);
@@ -391,7 +391,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [active, userRole, apiBase, token, selectedCell, selectedRowIds, selectedRows, displayedRows, visibleColumns]);
+  }, [active, userRole, apiBase, token, selectedCell, selectedRowIds, selectedRows, rows, columns]);
   const visibleColumns = useMemo(() => columns.filter(c => visibleKeys.includes(c.key)).sort((a,b) => visibleKeys.indexOf(a.key)-visibleKeys.indexOf(b.key)), [columns, visibleKeys]);
   const displayedRows = useMemo(() => {
     const filtered = rows.filter(row => {
