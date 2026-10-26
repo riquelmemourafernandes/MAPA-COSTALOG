@@ -599,7 +599,19 @@ app.get("/api/v1/mapa/:id/history", async (req, res, next) => {
       where: { mapaRowId: row.id, ...(field ? { OR: [{ fieldKey: field }, { fieldKey: { contains: field } }, { action: "CREATE" }] } : {}) },
       include: { user: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 100
     });
-    return res.json({ items });
+    // Audit snapshots may contain unrelated operational data. Return only the
+    // requested cell's values, never the full before/after row to the browser.
+    const cellValue = (snapshot: Prisma.JsonValue | null, key: string): Prisma.JsonValue | null => {
+      if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return null;
+      const object = snapshot as Prisma.JsonObject;
+      return Object.prototype.hasOwnProperty.call(object, key) ? { [key]: object[key] } : null;
+    };
+    const safeItems = items.map(item => ({
+      ...item,
+      beforeValue: field ? cellValue(item.beforeValue, field) : null,
+      afterValue: field ? cellValue(item.afterValue, field) : null
+    }));
+    return res.json({ items: safeItems });
   } catch (error) { return next(error); }
 });
 
