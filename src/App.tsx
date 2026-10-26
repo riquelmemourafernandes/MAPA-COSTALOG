@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Bell, Bold, GripVertical, Palette, PaintBucket, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound } from 'lucide-react';
+import { Activity, Bell, Bold, GripVertical, Palette, PaintBucket, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Plus, Save, Settings2, Table2, Truck, Users, Waypoints, X, UserRound } from 'lucide-react';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean; required?: boolean };
 type ValidationItem = { key: string; label: string; dataType: string; total: number; missing: number };
@@ -36,7 +36,6 @@ export default function App() {
   const [bulkColumn, setBulkColumn] = useState('');
   const [bulkValue, setBulkValue] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const [token, setToken] = useState(() => apiBase ? sessionStorage.getItem('mapa-costalog-token') || '' : '');
   const [userKey, setUserKey] = useState(() => sessionStorage.getItem('mapa-costalog-user') || 'usuario');
   const [userRole, setUserRole] = useState(() => sessionStorage.getItem('mapa-costalog-role') || '');
