@@ -4,6 +4,7 @@ import { Activity, Bell, Bold, GripVertical, Palette, PaintBucket, ChevronDown, 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean; required?: boolean };
 type ValidationItem = { key: string; label: string; dataType: string; total: number; missing: number };
 type ValidationSummary = { checkedAt: string; totalRows: number; requiredFields: number; items: ValidationItem[] };
+type DashboardSummary = { generatedAt: string; activeRecords: number; recentlyUpdated: number; statuses: { status: string; count: number }[] };
 type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
 type SavedView = { name: string; visibleKeys: string[]; query: string; status: string };
 type CellStyle = { bold?: boolean; color?: string; background?: string };
@@ -44,6 +45,8 @@ export default function App() {
   const [rows, setRows] = useState<RecordRow[]>([]);
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(null);
   const [validationLoading, setValidationLoading] = useState(false);
+  const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [columnMenu, setColumnMenu] = useState(false);
@@ -104,6 +107,21 @@ export default function App() {
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [token, page, query, status, filterColumn, filterValue, preferenceKey]);
+
+  useEffect(() => {
+    if (!apiBase || !token) { setDashboardSummary(null); return; }
+    let cancelled = false;
+    setDashboardLoading(true);
+    fetch(apiBase + '/api/v1/dashboard/summary', { headers: { Authorization: 'Bearer ' + token } })
+      .then(async response => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível carregar os indicadores.');
+        if (!cancelled) setDashboardSummary(body as DashboardSummary);
+      })
+      .catch(error => { if (!cancelled) setApiError(error instanceof Error ? error.message : 'Falha ao carregar o painel.'); })
+      .finally(() => { if (!cancelled) setDashboardLoading(false); });
+    return () => { cancelled = true; };
+  }, [token]);
 
   useEffect(() => {
     if (!apiBase || !token) { setValidationSummary(null); return; }
@@ -371,10 +389,15 @@ export default function App() {
         {apiBase && !token && <form className="panel login-panel" onSubmit={login}><div><h2>Acessar MAPA COSTALOG</h2><p>Entre com seu usuário autorizado.</p></div><div className="login-fields"><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail corporativo" autoComplete="username"/><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha" autoComplete="current-password"/><button className="primary" disabled={loading}>{loading ? 'Conectando...' : 'Entrar'}</button></div>{apiError && <p className="api-error">{apiError}</p>}</form>}
         {apiBase && apiError && token && <div className="notice api-error"><span>{apiError}</span><button onClick={logout}>Fazer login novamente</button></div>}
         {active === 'Visão geral' && <section className="workspace-page">
-          <div className="section-intro"><span className="eyebrow">RESUMO DO DIA</span><h2>Visão geral da operação</h2><p>Indicadores dos registros atualmente carregados.</p></div>
-          <div className="overview-grid"><div className="overview-card"><span>Registros encontrados</span><strong>{total}</strong><small>Na consulta atual</small></div><div className="overview-card"><span>Registros nesta página</span><strong>{displayedRows.length}</strong><small>Até {pageSize} por página</small></div><div className="overview-card"><span>Colunas configuradas</span><strong>{columns.length}</strong><small>Estrutura MAPA 1.0</small></div></div>
+          <div className="section-intro"><span className="eyebrow">INDICADORES DA OPERAÇÃO</span><h2>Visão geral da operação</h2><p>Indicadores consolidados diretamente do banco de dados, sem estimativas.</p></div>
+          {!token ? <div className="empty-state">Entre com sua conta autorizada para consultar os indicadores reais.</div> : <>
+            <div className="overview-grid"><div className="overview-card"><span>Registros ativos</span><strong>{dashboardLoading ? '…' : (dashboardSummary?.activeRecords ?? '—')}</strong><small>Exclui registros arquivados</small></div><div className="overview-card"><span>Atualizados nos últimos 7 dias</span><strong>{dashboardLoading ? '…' : (dashboardSummary?.recentlyUpdated ?? '—')}</strong><small>Atividade recente</small></div><div className="overview-card"><span>Colunas configuradas</span><strong>{columns.length}</strong><small>Estrutura MAPA 1.0</small></div></div>
+            <div className="panel validation-panel"><div className="panel-heading"><div><h2>Distribuição por status</h2><p>Até 12 status com mais registros ativos.</p></div><button className="secondary" disabled={dashboardLoading} onClick={()=>{setDashboardLoading(true);fetch(apiBase + '/api/v1/dashboard/summary',{headers:{Authorization:'Bearer '+token}}).then(async response=>{const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body?.error?.message||'Falha ao atualizar indicadores.');setDashboardSummary(body as DashboardSummary);setApiError('');}).catch(error=>setApiError(error instanceof Error?error.message:'Falha ao atualizar painel.')).finally(()=>setDashboardLoading(false));}}>Atualizar indicadores</button></div>
+              {dashboardSummary?.statuses?.length ? <div className="status-grid">{dashboardSummary.statuses.map(item=><button className="status-card" key={item.status} onClick={()=>{setStatus(item.status === 'Sem status' ? '' : item.status);setPage(1);setActive('MAPA 1.0')}}><span className="status-indicator"/><b>{item.status}</b><strong>{item.count}</strong><small>Ver registros</small></button>)}</div> : <div className="empty-state">{dashboardLoading ? 'Carregando indicadores…' : 'Não há registros ativos com status para exibir.'}</div>}
+              {dashboardSummary && <p className="validation-footnote">Atualizado em {new Date(dashboardSummary.generatedAt).toLocaleString('pt-BR')}. Os indicadores refletem os dados disponíveis no banco no momento da consulta.</p>}
+            </div>
+          </>}
           <div className="panel quick-panel"><div><h3>Acesso rápido</h3><p>Consulte e edite os registros operacionais na grade.</p></div><button className="primary" onClick={()=>setActive('MAPA 1.0')}><Table2 size={16}/> Abrir MAPA 1.0</button></div>
-          {total === 0 && <div className="empty-state">Ainda não há registros operacionais no banco. Nenhum dado fictício é exibido.</div>}
         </section>}
         {active === 'Status operacional' && <section className="workspace-page">
           <div className="section-intro"><span className="eyebrow">ACOMPANHAMENTO</span><h2>Status e validações operacionais</h2><p>Consulte os status existentes e identifique campos obrigatórios ainda não preenchidos nos registros ativos.</p></div>
