@@ -138,11 +138,17 @@ app.get("/api/v1/mapa", async (req, res, next) => {
     const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(req.query.pageSize || "100"), 10) || 100));
     const search = String(req.query.search || "").trim().slice(0, 120);
     const status = String(req.query.status || "").trim().slice(0, 120);
+    const filterColumn = String(req.query.filterColumn || "").trim().slice(0, 80);
+    const filterValue = String(req.query.filterValue || "").trim().slice(0, 120);
     const searchLike = `%${search}%`;
+    const filterLike = `%${filterValue}%`;
     const statusFilter = status && status !== "Todos os status" ? status : "";
+    if (filterColumn && !(await prisma.mapaColumn.findUnique({ where: { key: filterColumn }, select: { key: true } }))) {
+      return res.status(400).json({ error: { code: "INVALID_FILTER_COLUMN", message: "A coluna escolhida para o filtro não existe." } });
+    }
     const [countRows, items] = await prisma.$transaction([
-      prisma.$queryRaw<Array<{ total: bigint }>>`SELECT COUNT(*)::bigint AS total FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike})`,
-      prisma.$queryRaw<any[]> `SELECT id, sequence, operational_key AS "operationalKey", data, status, client_name AS "clientName", container, cte, collection_date AS "collectionDate", delivery_date AS "deliveryDate", archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt", updated_by_id AS "updatedById" FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike}) ORDER BY sequence DESC OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize}`
+      prisma.$queryRaw<Array<{ total: bigint }>>`SELECT COUNT(*)::bigint AS total FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike}) AND (${filterColumn} = '' OR COALESCE(data ->> ${filterColumn}, '') ILIKE ${filterLike})`,
+      prisma.$queryRaw<any[]> `SELECT id, sequence, operational_key AS "operationalKey", data, status, client_name AS "clientName", container, cte, collection_date AS "collectionDate", delivery_date AS "deliveryDate", archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt", updated_by_id AS "updatedById" FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike}) AND (${filterColumn} = '' OR COALESCE(data ->> ${filterColumn}, '') ILIKE ${filterLike}) ORDER BY sequence DESC OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize}`
     ]);
     return res.json({ items, page, pageSize, total: Number(countRows[0]?.total || 0) });
   } catch (error) { return next(error); }
