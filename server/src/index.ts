@@ -270,6 +270,24 @@ app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
   }
 });
 
+app.get("/api/v1/mapa/column-values", async (req, res, next) => {
+  try {
+    const key = String(req.query.key || "").trim().slice(0, 80);
+    if (!key || !(await prisma.mapaColumn.findUnique({ where: { key }, select: { key: true } }))) {
+      return res.status(400).json({ error: { code: "INVALID_COLUMN", message: "A coluna informada não existe." } });
+    }
+    const values = await prisma.$queryRaw<Array<{ value: string }>>`
+      SELECT DISTINCT BTRIM(data ->> ${key}) AS value
+      FROM mapa_rows
+      WHERE archived_at IS NULL
+        AND NULLIF(BTRIM(COALESCE(data ->> ${key}, '')), '') IS NOT NULL
+      ORDER BY value ASC
+      LIMIT 5000
+    `;
+    return res.json({ key, items: values.map(item => item.value) });
+  } catch (error) { return next(error); }
+});
+
 app.get("/api/v1/mapa/validations", async (_req, res, next) => {
   try {
     const requiredColumns = await prisma.mapaColumn.findMany({
