@@ -22,7 +22,7 @@ app.use(cors({
     if (allowedOrigin && origin === allowedOrigin) return callback(null, true);
     return callback(new Error("Origem não autorizada."));
   },
-  methods: ["GET", "POST", "PATCH", "OPTIONS"],
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 app.use(express.json({ limit: "1mb" }));
