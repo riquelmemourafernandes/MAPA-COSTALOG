@@ -334,7 +334,7 @@ export default function App() {
       const compared = bothNumeric ? an-bn : av.localeCompare(bv,'pt-BR',{numeric:true,sensitivity:'base'});
       return sortConfig.direction === 'asc' ? compared : -compared;
     });
-  }, [rows, query, sortConfig]);
+  }, [rows, query, filterColumn, filterValue, sortConfig]);
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Truck size={22}/></div><div><strong>COSTALOG</strong><span>OPERAÇÕES</span></div></div>
