@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Bell, Bold, GripVertical, Palette, PaintBucket, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound } from 'lucide-react';
 
-type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean };
+type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean; required?: boolean };
+type ValidationItem = { key: string; label: string; dataType: string; total: number; missing: number };
+type ValidationSummary = { checkedAt: string; totalRows: number; requiredFields: number; items: ValidationItem[] };
 type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
 type SavedView = { name: string; visibleKeys: string[]; query: string; status: string };
 type CellStyle = { bold?: boolean; color?: string; background?: string };
@@ -40,6 +42,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [columns, setColumns] = useState<Column[]>([]);
   const [rows, setRows] = useState<RecordRow[]>([]);
+  const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(null);
+  const [validationLoading, setValidationLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [columnMenu, setColumnMenu] = useState(false);
@@ -100,6 +104,21 @@ export default function App() {
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [token, page, query, status, filterColumn, filterValue, preferenceKey]);
+
+  useEffect(() => {
+    if (!apiBase || !token) { setValidationSummary(null); return; }
+    let cancelled = false;
+    setValidationLoading(true);
+    fetch(apiBase + '/api/v1/mapa/validations', { headers: { Authorization: 'Bearer ' + token } })
+      .then(async response => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível validar os campos obrigatórios.');
+        if (!cancelled) setValidationSummary(body as ValidationSummary);
+      })
+      .catch(error => { if (!cancelled) setApiError(error instanceof Error ? error.message : 'Falha na validação operacional.'); })
+      .finally(() => { if (!cancelled) setValidationLoading(false); });
+    return () => { cancelled = true; };
+  }, [token]);
 
   async function persistPreferences(next: {visibleKeys?: string[]; savedViews?: SavedView[]}) {
     if (!apiBase || !token) return;
@@ -358,7 +377,17 @@ export default function App() {
           {total === 0 && <div className="empty-state">Ainda não há registros operacionais no banco. Nenhum dado fictício é exibido.</div>}
         </section>}
         {active === 'Status operacional' && <section className="workspace-page">
-          <div className="section-intro"><span className="eyebrow">ACOMPANHAMENTO</span><h2>Status dos registros</h2><p>Selecione um status para abrir os registros correspondentes.</p></div>
+          <div className="section-intro"><span className="eyebrow">ACOMPANHAMENTO</span><h2>Status e validações operacionais</h2><p>Consulte os status existentes e identifique campos obrigatórios ainda não preenchidos nos registros ativos.</p></div>
+          <div className="validation-summary-grid">
+            <div className="overview-card"><span>Registros ativos analisados</span><strong>{validationLoading ? '…' : (validationSummary?.totalRows ?? '—')}</strong><small>Sem registros arquivados</small></div>
+            <div className="overview-card"><span>Campos obrigatórios</span><strong>{validationSummary?.requiredFields ?? '—'}</strong><small>Conforme configuração das colunas</small></div>
+            <div className={'overview-card ' + ((validationSummary?.items.length || 0) > 0 ? 'validation-warning' : 'validation-ok')}><span>Campos com pendências</span><strong>{validationLoading ? '…' : (validationSummary?.items.length ?? '—')}</strong><small>{validationSummary ? (validationSummary.items.length ? 'Precisam de conferência' : 'Nenhuma pendência encontrada') : 'Aguardando validação'}</small></div>
+          </div>
+          <div className="panel validation-panel"><div className="panel-heading"><div><h2>Campos obrigatórios incompletos</h2><p>A contagem é calculada no servidor sobre todos os registros ativos.</p></div><button className="secondary" disabled={validationLoading || !token} onClick={()=>{setValidationLoading(true);fetch(apiBase + '/api/v1/mapa/validations',{headers:{Authorization:'Bearer '+token}}).then(async response=>{const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body?.error?.message||'Falha ao atualizar validação.');setValidationSummary(body as ValidationSummary);setApiError('');}).catch(error=>setApiError(error instanceof Error?error.message:'Falha na validação.')).finally(()=>setValidationLoading(false));}}>Atualizar validação</button></div>
+            {!token ? <div className="empty-state">Entre com sua conta para validar os dados reais.</div> : validationLoading && !validationSummary ? <div className="empty-state">Analisando os campos obrigatórios…</div> : validationSummary?.items.length ? <div className="validation-list">{validationSummary.items.map(item=><div className="validation-row" key={item.key}><div className="validation-icon"><Activity size={17}/></div><div className="validation-field"><b>{item.label}</b><small>Coluna {item.key} · {item.dataType}</small></div><strong>{item.missing}</strong><span>registro(s) sem preenchimento</span></div>)}</div> : <div className="empty-state">{validationSummary ? 'Nenhum campo obrigatório incompleto foi encontrado.' : 'A validação ainda não foi executada.'}</div>}
+            {validationSummary && <p className="validation-footnote">Última análise: {new Date(validationSummary.checkedAt).toLocaleString('pt-BR')}. Esta verificação usa apenas colunas marcadas como obrigatórias; regras de prazo ainda precisam ser configuradas conforme o processo da operação.</p>}
+          </div>
+          <div className="section-intro status-section-intro"><h2>Status dos registros</h2><p>Selecione um status para abrir os registros correspondentes.</p></div>
           <div className="status-grid">{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><button className="status-card" key={value} onClick={()=>{setStatus(value);setPage(1);setActive('MAPA 1.0')}}><span className="status-indicator"/><b>{value}</b><small>Ver registros com este status</small></button>)}</div>
           {rows.every(row=>!row.status) && <div className="empty-state">Não há status preenchidos nos registros carregados.</div>}
           <button className="secondary" onClick={()=>{setStatus('');setActive('MAPA 1.0')}}>Limpar filtro e abrir grade</button>
