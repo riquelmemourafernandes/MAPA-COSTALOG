@@ -208,11 +208,15 @@ app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
       const attendant = value(data, "B") || "Não informado";
       const collectionAppointment = value(data, "AL");
       const deliveryAppointment = value(data, "AP");
-      const collectionArrived = value(data, "AU") || value(data, "AV");
-      const deliveryArrived = value(data, "AW");
+      // Coleta é considerada concluída quando AU (chegada ao terminal/EADI)
+      // ou AV (saída do terminal/EADI) estiver preenchida.
+      const collectionCompleted = Boolean(value(data, "AU") || value(data, "AV"));
+      // Por decisão operacional, monitorar somente a primeira entrega (AP).
+      // A segunda entrega (AS) fica fora dos alertas por enquanto.
+      const deliveryCompleted = Boolean(value(data, "AW"));
       for (const candidate of [
-        { kind: "Coleta" as const, scheduled: collectionAppointment, completed: Boolean(collectionArrived) },
-        { kind: "Entrega" as const, scheduled: deliveryAppointment, completed: Boolean(deliveryArrived) }
+        { kind: "Coleta" as const, scheduled: collectionAppointment, completed: collectionCompleted },
+        { kind: "Entrega" as const, scheduled: deliveryAppointment, completed: deliveryCompleted }
       ]) {
         if (!candidate.scheduled || candidate.completed) continue;
         const timestamp = parseAppointment(candidate.scheduled);
