@@ -129,3 +129,20 @@ td:hover .cell-history,.cell-history:focus{opacity:1}
   .validation-row { align-items:flex-start; flex-wrap:wrap; }
   .validation-row>span { width:100%; padding-left:50px; }
 }
+
+
+/* Filtros discretos estilo planilha */
+.mapa-compact-toolbar{gap:6px;padding:7px 10px!important;background:#fff;border-bottom:1px solid #edf0ee}
+.mapa-compact-toolbar .secondary{padding:6px 9px;font-size:11px;min-height:30px}
+.sheet-column-heading{display:flex;align-items:center;gap:5px;position:relative;min-height:24px}
+.sheet-column-heading .sort-header{font-size:11px;font-weight:650;max-width:230px;overflow:hidden;text-overflow:ellipsis}
+.column-filter-trigger{display:inline-grid;place-items:center;width:23px;height:23px;padding:0;border:1px solid transparent;border-radius:4px;background:transparent;color:#849087;cursor:pointer;flex-shrink:0}
+.column-filter-trigger:hover,.column-filter-trigger.is-filtered{background:#edf4e8;border-color:#d9e7cf;color:#315b36}
+.sheet-filter-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:50;width:240px;padding:12px;background:#fff;border:1px solid #dfe5e0;border-radius:8px;box-shadow:0 8px 24px #1e35221c;white-space:normal;font-weight:400}
+.sheet-filter-menu>strong{display:block;margin-bottom:8px;font-size:11px;color:#314638}
+.sheet-filter-menu>input{width:100%;box-sizing:border-box;height:30px;border:1px solid #dfe5e0;border-radius:5px;padding:0 8px;font-size:11px;outline-color:#8bac78}
+.sheet-filter-values{display:flex;flex-direction:column;gap:1px;max-height:220px;overflow:auto;margin:7px 0}
+.sheet-filter-values button{display:block;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:6px 7px;border:0;border-radius:4px;background:transparent;color:#405347;font-size:11px;cursor:pointer}
+.sheet-filter-values button:hover{background:#f0f5eb}
+.sheet-filter-actions{display:flex;justify-content:space-between;border-top:1px solid #edf0ee;padding-top:7px}
+.sheet-filter-actions button{border:0;background:transparent;color:#416b43;font-size:11px;padding:5px 7px;cursor:pointer}
