@@ -370,6 +370,27 @@ export default function App() {
       setNotice('A alteração não foi confirmada. Atualize a tela antes de continuar.');
     }
   }
+  const visibleColumns = useMemo(() => columns.filter(c => visibleKeys.includes(c.key)).sort((a,b) => visibleKeys.indexOf(a.key)-visibleKeys.indexOf(b.key)), [columns, visibleKeys]);
+  const displayedRows = useMemo(() => {
+    const filtered = rows.filter(row => {
+      const values = Object.values(row.data || {}).map(valueText).join(' ') + ' ' + [row.status,row.clientName,row.container,row.cte].map(valueText).join(' ');
+      const matchesGlobal = values.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR'));
+      const matchesSelectedColumn = !filterColumn || valueText(row.data?.[filterColumn]).toLocaleLowerCase('pt-BR').includes(filterValue.toLocaleLowerCase('pt-BR'));
+      const matchesEachColumn = visibleColumns.every(column => {
+        const term = (columnFilters[column.key] || '').trim().toLocaleLowerCase('pt-BR');
+        return !term || valueText(row.data?.[column.key]).toLocaleLowerCase('pt-BR').includes(term);
+      });
+      return matchesGlobal && matchesSelectedColumn && matchesEachColumn;
+    });
+    if (!sortConfig) return filtered;
+    return [...filtered].sort((a,b) => {
+      const av = valueText(a.data?.[sortConfig.key]).trim(); const bv = valueText(b.data?.[sortConfig.key]).trim();
+      const an = Number(av.replace(/\\./g,'').replace(',','.')); const bn = Number(bv.replace(/\\./g,'').replace(',','.'));
+      const bothNumeric = av !== '' && bv !== '' && Number.isFinite(an) && Number.isFinite(bn);
+      const compared = bothNumeric ? an-bn : av.localeCompare(bv,'pt-BR',{numeric:true,sensitivity:'base'});
+      return sortConfig.direction === 'asc' ? compared : -compared;
+    });
+  }, [rows, query, filterColumn, filterValue, columnFilters, visibleColumns, sortConfig]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -418,27 +439,6 @@ export default function App() {
     window.addEventListener('mouseup', onMouseUp);
     return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('mouseup', onMouseUp); };
   }, [active, userRole, selectedCell, selectedCellKeys, rows, columns, displayedRows, visibleColumns]);
-  const visibleColumns = useMemo(() => columns.filter(c => visibleKeys.includes(c.key)).sort((a,b) => visibleKeys.indexOf(a.key)-visibleKeys.indexOf(b.key)), [columns, visibleKeys]);
-  const displayedRows = useMemo(() => {
-    const filtered = rows.filter(row => {
-      const values = Object.values(row.data || {}).map(valueText).join(' ') + ' ' + [row.status,row.clientName,row.container,row.cte].map(valueText).join(' ');
-      const matchesGlobal = values.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR'));
-      const matchesSelectedColumn = !filterColumn || valueText(row.data?.[filterColumn]).toLocaleLowerCase('pt-BR').includes(filterValue.toLocaleLowerCase('pt-BR'));
-      const matchesEachColumn = visibleColumns.every(column => {
-        const term = (columnFilters[column.key] || '').trim().toLocaleLowerCase('pt-BR');
-        return !term || valueText(row.data?.[column.key]).toLocaleLowerCase('pt-BR').includes(term);
-      });
-      return matchesGlobal && matchesSelectedColumn && matchesEachColumn;
-    });
-    if (!sortConfig) return filtered;
-    return [...filtered].sort((a,b) => {
-      const av = valueText(a.data?.[sortConfig.key]).trim(); const bv = valueText(b.data?.[sortConfig.key]).trim();
-      const an = Number(av.replace(/\\./g,'').replace(',','.')); const bn = Number(bv.replace(/\\./g,'').replace(',','.'));
-      const bothNumeric = av !== '' && bv !== '' && Number.isFinite(an) && Number.isFinite(bn);
-      const compared = bothNumeric ? an-bn : av.localeCompare(bv,'pt-BR',{numeric:true,sensitivity:'base'});
-      return sortConfig.direction === 'asc' ? compared : -compared;
-    });
-  }, [rows, query, filterColumn, filterValue, columnFilters, visibleColumns, sortConfig]);
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Truck size={22}/></div><div><strong>COSTALOG</strong><span>OPERAÇÕES</span></div></div>
