@@ -132,6 +132,29 @@ app.get("/api/v1/config/columns", async (_req, res, next) => {
   }
 });
 
+app.get("/api/v1/dashboard/summary", async (_req, res, next) => {
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [activeRecords, recentlyUpdated, statusRows] = await Promise.all([
+      prisma.mapaRow.count({ where: { archivedAt: null } }),
+      prisma.mapaRow.count({ where: { archivedAt: null, updatedAt: { gte: since } } }),
+      prisma.mapaRow.groupBy({
+        by: ["status"],
+        where: { archivedAt: null },
+        _count: { _all: true },
+        orderBy: { _count: { status: "desc" } },
+        take: 12
+      })
+    ]);
+    return res.json({
+      generatedAt: new Date().toISOString(),
+      activeRecords,
+      recentlyUpdated,
+      statuses: statusRows.map(item => ({ status: item.status || "Sem status", count: item._count._all }))
+    });
+  } catch (error) { return next(error); }
+});
+
 app.get("/api/v1/mapa", async (req, res, next) => {
   try {
     const page = Math.max(1, Number.parseInt(String(req.query.page || "1"), 10) || 1);
