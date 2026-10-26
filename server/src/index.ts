@@ -177,6 +177,64 @@ app.get("/api/v1/mapa", async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
+  try {
+    const now = new Date();
+    const rows = await prisma.mapaRow.findMany({
+      where: { archivedAt: null },
+      select: { id: true, sequence: true, data: true, status: true, clientName: true, container: true, cte: true },
+      orderBy: { sequence: "desc" },
+      take: 5000
+    });
+    const value = (data: Prisma.JsonValue, key: string): string => {
+      if (!data || typeof data !== "object" || Array.isArray(data)) return "";
+      const item = (data as Prisma.JsonObject)[key];
+      return typeof item === "string" || typeof item === "number" ? String(item).trim() : "";
+    };
+    const alerts: Array<{
+      id: string; sequence: number; kind: "Coleta" | "Entrega";
+      scheduledAt: string; minutesLate: number; attendant: string;
+      clientName: string | null; container: string | null; cte: string | null; status: string | null;
+    }> = [];
+    for (const row of rows) {
+      const data = row.data;
+      const attendant = value(data, "B") || "Não informado";
+      const collectionAppointment = value(data, "AL");
+      const deliveryAppointment = value(data, "AP");
+      const collectionArrived = value(data, "AU") || value(data, "AV");
+      const deliveryArrived = value(data, "AW");
+      for (const candidate of [
+        { kind: "Coleta" as const, scheduled: collectionAppointment, completed: Boolean(collectionArrived) },
+        { kind: "Entrega" as const, scheduled: deliveryAppointment, completed: Boolean(deliveryArrived) }
+      ]) {
+        if (!candidate.scheduled || candidate.completed) continue;
+        const timestamp = Date.parse(candidate.scheduled);
+        if (!Number.isFinite(timestamp) || timestamp >= now.getTime()) continue;
+        alerts.push({
+          id: row.id,
+          sequence: row.sequence,
+          kind: candidate.kind,
+          scheduledAt: new Date(timestamp).toISOString(),
+          minutesLate: Math.floor((now.getTime() - timestamp) / 60000),
+          attendant,
+          clientName: row.clientName,
+          container: row.container,
+          cte: row.cte,
+          status: row.status
+        });
+      }
+    }
+    alerts.sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt));
+    return res.json({
+      generatedAt: now.toISOString(),
+      total: alerts.length,
+      items: alerts.slice(0, 100)
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.get("/api/v1/mapa/validations", async (_req, res, next) => {
   try {
     const requiredColumns = await prisma.mapaColumn.findMany({
