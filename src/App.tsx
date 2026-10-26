@@ -209,23 +209,39 @@ export default function App() {
   }
   function styleKey(row: RecordRow, column: Column) { return row.id + ':' + column.key; }
   function updateSelectedStyle(change: CellStyle) {
+    const next = { ...cellStyles };
     if (selectedRowIds.length > 0 && change.background) {
-      const next = { ...cellStyles };
-      selectedRowIds.forEach(id => { const key = id + ':__row__'; next[key] = { ...(next[key] || {}), background: change.background }; });
-      setCellStyles(next);
-      void (async () => { try { const response = await fetch(apiBase + '/api/v1/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ visibleKeys, columnOrder: visibleKeys, savedViews, cellStyles: next }) }); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar a formatação.'); setNotice('Cor aplicada à linha inteira e salva na sua conta.'); } catch (error) { setApiError(error instanceof Error ? error.message : 'Falha ao salvar formatação.'); } })();
-      return;
+      selectedRowIds.forEach(id => {
+        const key = id + ':__row__';
+        next[key] = { ...(next[key] || {}), background: change.background };
+      });
+    } else {
+      const targetKeys = selectedCellKeys.length > 0
+        ? selectedCellKeys
+        : selectedCell ? [styleKey(selectedCell.row, selectedCell.column)] : [];
+      if (targetKeys.length === 0) return;
+      targetKeys.forEach(key => {
+        next[key] = { ...(next[key] || {}), ...change };
+      });
     }
-    if (!selectedCell) return;
-    const key = styleKey(selectedCell.row, selectedCell.column);
-    const next = { ...cellStyles, [key]: { ...(cellStyles[key] || {}), ...change } };
     setCellStyles(next);
     void (async () => {
       try {
-        const response = await fetch(apiBase + '/api/v1/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ visibleKeys, columnOrder: visibleKeys, savedViews, cellStyles: next }) });
-        const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar a formatação.');
-        setNotice('Formatação da célula salva na sua conta.');
-      } catch (error) { setApiError(error instanceof Error ? error.message : 'Falha ao salvar formatação.'); }
+        const response = await fetch(apiBase + '/api/v1/preferences', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ visibleKeys, columnOrder: visibleKeys, savedViews, cellStyles: next })
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar a formatação.');
+        setNotice(selectedRowIds.length > 0 && change.background
+          ? 'Cor aplicada à linha inteira e salva na sua conta.'
+          : (selectedCellKeys.length > 1
+            ? 'Formatação aplicada às ' + selectedCellKeys.length + ' células selecionadas.'
+            : 'Formatação da célula salva na sua conta.'));
+      } catch (error) {
+        setApiError(error instanceof Error ? error.message : 'Falha ao salvar formatação.');
+      }
     })();
   }
   async function saveCurrentView() {
