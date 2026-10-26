@@ -263,6 +263,8 @@ app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
         collection: alerts.filter(item => item.kind === "Coleta").length,
         delivery: alerts.filter(item => item.kind === "Entrega").length
       },
+      // Keep the attendant filter complete even when the displayed alert list is capped at 100.
+      attendants: Array.from(new Set(alerts.map(item => item.attendant))).sort((a, b) => a.localeCompare(b, "pt-BR")),
       items: alerts.slice(0, 100)
     });
   } catch (error) {
