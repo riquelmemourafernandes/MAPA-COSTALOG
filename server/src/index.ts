@@ -28,6 +28,14 @@ app.use(cors({
 app.use(express.json({ limit: "1mb" }));
 app.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: "draft-7", legacyHeaders: false }));
 
+// MAPA contains operational and account data; prevent browsers and shared proxies from caching API responses.
+app.use("/api/v1", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+
 const loginSchema = z.object({
   email: z.string().email().max(254),
   password: z.string().min(1).max(200)
