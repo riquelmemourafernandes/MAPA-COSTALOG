@@ -161,6 +161,7 @@ app.get("/api/v1/mapa/validations", async (_req, res, next) => {
       select: { key: true, label: true, dataType: true },
       orderBy: { position: "asc" }
     });
+    const activeCount = await prisma.mapaRow.count({ where: { archivedAt: null } });
     const checks = await Promise.all(requiredColumns.map(async (column) => {
       const result = await prisma.$queryRaw<Array<{ total: bigint; missing: bigint }>>`
         SELECT COUNT(*)::bigint AS total,
@@ -177,7 +178,7 @@ app.get("/api/v1/mapa/validations", async (_req, res, next) => {
     }));
     return res.json({
       checkedAt: new Date().toISOString(),
-      totalRows: checks[0]?.total ?? 0,
+      totalRows: activeCount,
       requiredFields: checks.length,
       items: checks.filter(item => item.missing > 0).sort((a, b) => b.missing - a.missing)
     });
