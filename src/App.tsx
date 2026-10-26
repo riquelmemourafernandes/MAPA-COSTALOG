@@ -397,6 +397,9 @@ export default function App() {
               {dashboardSummary && <p className="validation-footnote">Atualizado em {new Date(dashboardSummary.generatedAt).toLocaleString('pt-BR')}. Os indicadores refletem os dados disponíveis no banco no momento da consulta.</p>}
             </div>
           </>}
+          <div className="panel validation-panel"><div className="panel-heading"><div><h2>Pendências que precisam de atenção</h2><p>Alertas baseados nos campos obrigatórios configurados, sem criar prazos presumidos.</p></div><button className="secondary" onClick={()=>setActive('Status operacional')}>Ver todas</button></div>
+            {!token ? <div className="empty-state">Entre para consultar as pendências reais.</div> : validationLoading && !validationSummary ? <div className="empty-state">Verificando pendências…</div> : validationSummary?.items.length ? <div className="validation-list">{validationSummary.items.slice(0,4).map(item=><div className="validation-row" key={item.key}><div className="validation-icon"><Bell size={17}/></div><div className="validation-field"><b>{item.label}</b><small>Campo obrigatório incompleto</small></div><strong>{item.missing}</strong><span>registro(s)</span></div>)}</div> : <div className="empty-state">{validationSummary ? 'Nenhuma pendência de campo obrigatório encontrada.' : 'Aguardando a validação dos dados.'}</div>}
+          </div>
           <div className="panel quick-panel"><div><h3>Acesso rápido</h3><p>Consulte e edite os registros operacionais na grade.</p></div><button className="primary" onClick={()=>setActive('MAPA 1.0')}><Table2 size={16}/> Abrir MAPA 1.0</button></div>
         </section>}
         {active === 'Status operacional' && <section className="workspace-page">
