@@ -28,6 +28,14 @@ app.use(cors({
 app.use(express.json({ limit: "1mb" }));
 app.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: "draft-7", legacyHeaders: false }));
 
+// MAPA contains operational and account data; prevent browsers and shared proxies from caching API responses.
+app.use("/api/v1", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+
 const loginSchema = z.object({
   email: z.string().email().max(254),
   password: z.string().min(1).max(200)
@@ -132,19 +140,164 @@ app.get("/api/v1/config/columns", async (_req, res, next) => {
   }
 });
 
+app.get("/api/v1/dashboard/summary", async (_req, res, next) => {
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [activeRecords, recentlyUpdated, statusRows] = await Promise.all([
+      prisma.mapaRow.count({ where: { archivedAt: null } }),
+      prisma.mapaRow.count({ where: { archivedAt: null, updatedAt: { gte: since } } }),
+      prisma.mapaRow.groupBy({
+        by: ["status"],
+        where: { archivedAt: null },
+        _count: { _all: true },
+        orderBy: { _count: { status: "desc" } },
+        take: 12
+      })
+    ]);
+    return res.json({
+      generatedAt: new Date().toISOString(),
+      activeRecords,
+      recentlyUpdated,
+      statuses: statusRows.map(item => ({ status: item.status || "Sem status", count: item._count._all }))
+    });
+  } catch (error) { return next(error); }
+});
+
 app.get("/api/v1/mapa", async (req, res, next) => {
   try {
     const page = Math.max(1, Number.parseInt(String(req.query.page || "1"), 10) || 1);
     const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(req.query.pageSize || "100"), 10) || 100));
     const search = String(req.query.search || "").trim().slice(0, 120);
     const status = String(req.query.status || "").trim().slice(0, 120);
+    const filterColumn = String(req.query.filterColumn || "").trim().slice(0, 80);
+    const filterValue = String(req.query.filterValue || "").trim().slice(0, 120);
     const searchLike = `%${search}%`;
+    const filterLike = `%${filterValue}%`;
     const statusFilter = status && status !== "Todos os status" ? status : "";
+    if (filterColumn && !(await prisma.mapaColumn.findUnique({ where: { key: filterColumn }, select: { key: true } }))) {
+      return res.status(400).json({ error: { code: "INVALID_FILTER_COLUMN", message: "A coluna escolhida para o filtro não existe." } });
+    }
     const [countRows, items] = await prisma.$transaction([
-      prisma.$queryRaw<Array<{ total: bigint }>>`SELECT COUNT(*)::bigint AS total FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike})`,
-      prisma.$queryRaw<any[]> `SELECT id, sequence, operational_key AS "operationalKey", data, status, client_name AS "clientName", container, cte, collection_date AS "collectionDate", delivery_date AS "deliveryDate", archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt", updated_by_id AS "updatedById" FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike}) ORDER BY sequence DESC OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize}`
+      prisma.$queryRaw<Array<{ total: bigint }>>`SELECT COUNT(*)::bigint AS total FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike}) AND (${filterColumn} = '' OR COALESCE(data ->> ${filterColumn}, '') ILIKE ${filterLike})`,
+      prisma.$queryRaw<any[]> `SELECT id, sequence, operational_key AS "operationalKey", data, status, client_name AS "clientName", container, cte, collection_date AS "collectionDate", delivery_date AS "deliveryDate", archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt", updated_by_id AS "updatedById" FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike}) AND (${filterColumn} = '' OR COALESCE(data ->> ${filterColumn}, '') ILIKE ${filterLike}) ORDER BY sequence DESC OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize}`
     ]);
     return res.json({ items, page, pageSize, total: Number(countRows[0]?.total || 0) });
+  } catch (error) { return next(error); }
+});
+
+app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
+  try {
+    const now = new Date();
+    const rows = await prisma.mapaRow.findMany({
+      where: { archivedAt: null },
+      select: { id: true, sequence: true, data: true, status: true, clientName: true, container: true, cte: true },
+      orderBy: { sequence: "desc" }
+    });
+    const value = (data: Prisma.JsonValue, key: string): string => {
+      if (!data || typeof data !== "object" || Array.isArray(data)) return "";
+      const item = (data as Prisma.JsonObject)[key];
+      return typeof item === "string" || typeof item === "number" ? String(item).trim() : "";
+    };
+    const parseAppointment = (input: string): number => {
+      // Interpret Brazilian dates (DD/MM/YYYY or DD-MM-YYYY) before Date.parse,
+      // which can otherwise read ambiguous values in US month/day order.
+      const match = input.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ ,T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+      if (match) {
+        const [, dayText, monthText, yearText, hourText = "0", minuteText = "0", secondText = "0"] = match;
+        const day = Number(dayText);
+        const month = Number(monthText);
+        const year = Number(yearText);
+        const hour = Number(hourText);
+        const minute = Number(minuteText);
+        const second = Number(secondText);
+        if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59 || hour < 0 || minute < 0 || second < 0) return Number.NaN;
+        const date = new Date(year, month - 1, day, hour, minute, second);
+        if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return Number.NaN;
+        return date.getTime();
+      }
+      const native = Date.parse(input);
+      return Number.isFinite(native) ? native : Number.NaN;
+    };
+    const alerts: Array<{
+      id: string; sequence: number; kind: "Coleta" | "Entrega";
+      scheduledAt: string; minutesLate: number; attendant: string;
+      clientName: string | null; container: string | null; cte: string | null; status: string | null;
+    }> = [];
+    for (const row of rows) {
+      const data = row.data;
+      const attendant = value(data, "B") || "Não informado";
+      const collectionAppointment = value(data, "AL");
+      const deliveryAppointment = value(data, "AP");
+      // Coleta é considerada concluída quando AU (chegada ao terminal/EADI)
+      // ou AV (saída do terminal/EADI) estiver preenchida.
+      const collectionCompleted = Boolean(value(data, "AU") || value(data, "AV"));
+      // Por decisão operacional, monitorar somente a primeira entrega (AP).
+      // A segunda entrega (AS) fica fora dos alertas por enquanto.
+      const deliveryCompleted = Boolean(value(data, "AW"));
+      for (const candidate of [
+        { kind: "Coleta" as const, scheduled: collectionAppointment, completed: collectionCompleted },
+        { kind: "Entrega" as const, scheduled: deliveryAppointment, completed: deliveryCompleted }
+      ]) {
+        if (!candidate.scheduled || candidate.completed) continue;
+        const timestamp = parseAppointment(candidate.scheduled);
+        if (!Number.isFinite(timestamp) || timestamp >= now.getTime()) continue;
+        alerts.push({
+          id: row.id,
+          sequence: row.sequence,
+          kind: candidate.kind,
+          scheduledAt: new Date(timestamp).toISOString(),
+          minutesLate: Math.floor((now.getTime() - timestamp) / 60000),
+          attendant,
+          clientName: row.clientName,
+          container: row.container,
+          cte: row.cte,
+          status: row.status
+        });
+      }
+    }
+    alerts.sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt));
+    return res.json({
+      generatedAt: now.toISOString(),
+      total: alerts.length,
+      byKind: {
+        collection: alerts.filter(item => item.kind === "Coleta").length,
+        delivery: alerts.filter(item => item.kind === "Entrega").length
+      },
+      items: alerts.slice(0, 100)
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/api/v1/mapa/validations", async (_req, res, next) => {
+  try {
+    const requiredColumns = await prisma.mapaColumn.findMany({
+      where: { required: true },
+      select: { key: true, label: true, dataType: true },
+      orderBy: { position: "asc" }
+    });
+    const activeCount = await prisma.mapaRow.count({ where: { archivedAt: null } });
+    const checks = await Promise.all(requiredColumns.map(async (column) => {
+      const result = await prisma.$queryRaw<Array<{ total: bigint; missing: bigint }>>`
+        SELECT COUNT(*)::bigint AS total,
+          COUNT(*) FILTER (WHERE NULLIF(BTRIM(COALESCE(data ->> ${column.key}, '')), '') IS NULL)::bigint AS missing
+        FROM mapa_rows WHERE archived_at IS NULL
+      `;
+      return {
+        key: column.key,
+        label: column.label || column.key,
+        dataType: column.dataType,
+        total: Number(result[0]?.total || 0),
+        missing: Number(result[0]?.missing || 0)
+      };
+    }));
+    return res.json({
+      checkedAt: new Date().toISOString(),
+      totalRows: activeCount,
+      requiredFields: checks.length,
+      items: checks.filter(item => item.missing > 0).sort((a, b) => b.missing - a.missing)
+    });
   } catch (error) { return next(error); }
 });
 
@@ -300,8 +453,23 @@ app.patch("/api/v1/auth/profile", async (req, res, next) => {
       }
       data.passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
     }
-    const user = await prisma.user.update({ where: { id: current.id }, data, select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true } });
-    await prisma.auditLog.create({ data: { entityType: "USER", entityId: user.id, action: "PROFILE_UPDATE", userId: current.id, afterValue: { name: user.name, email: user.email } } });
+    const user = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: current.id },
+        data,
+        select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true }
+      });
+      await tx.auditLog.create({
+        data: {
+          entityType: "USER",
+          entityId: updatedUser.id,
+          action: "PROFILE_UPDATE",
+          userId: current.id,
+          afterValue: { name: updatedUser.name, email: updatedUser.email }
+        }
+      });
+      return updatedUser;
+    });
     return res.json({ user });
   } catch (error) { return next(error); }
 });
@@ -320,8 +488,28 @@ app.post("/api/v1/users", requireRole(UserRole.ADMIN), async (req, res, next) =>
     const email = parsed.data.email.trim().toLocaleLowerCase("pt-BR");
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return res.status(409).json({ error: { code: "EMAIL_IN_USE", message: "Já existe um usuário com este e-mail." } });
-    const user = await prisma.user.create({ data: { name: parsed.data.name, email, passwordHash: await bcrypt.hash(parsed.data.password, 12), role: parsed.data.role, active: parsed.data.active }, select: { id: true, name: true, email: true, role: true, active: true, createdAt: true } });
-    await prisma.auditLog.create({ data: { entityType: "USER", entityId: user.id, action: "USER_CREATE", userId: req.authUser!.id, afterValue: { name: user.name, email: user.email, role: user.role, active: user.active } } });
+    const user = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          name: parsed.data.name,
+          email,
+          passwordHash: await bcrypt.hash(parsed.data.password, 12),
+          role: parsed.data.role,
+          active: parsed.data.active
+        },
+        select: { id: true, name: true, email: true, role: true, active: true, createdAt: true }
+      });
+      await tx.auditLog.create({
+        data: {
+          entityType: "USER",
+          entityId: createdUser.id,
+          action: "USER_CREATE",
+          userId: req.authUser!.id,
+          afterValue: { name: createdUser.name, email: createdUser.email, role: createdUser.role, active: createdUser.active }
+        }
+      });
+      return createdUser;
+    });
     return res.status(201).json({ user });
   } catch (error) { return next(error); }
 });
@@ -334,14 +522,48 @@ app.patch("/api/v1/users/:id", requireRole(UserRole.ADMIN), async (req, res, nex
     if (req.params.id === req.authUser!.id && parsed.data.active === false) return res.status(400).json({ error: { code: "SELF_DEACTIVATION", message: "Não é possível bloquear sua própria conta." } });
     const before = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!before) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Usuário não encontrado." } });
+
+    // Prevent accidental lockout by ensuring at least one active administrator remains.
+    const removesAdminAccess = before.active && before.role === UserRole.ADMIN &&
+      (parsed.data.active === false || (parsed.data.role !== undefined && parsed.data.role !== UserRole.ADMIN));
+    if (removesAdminAccess) {
+      const activeAdmins = await prisma.user.count({ where: { active: true, role: UserRole.ADMIN } });
+      if (activeAdmins <= 1) {
+        return res.status(400).json({
+          error: { code: "LAST_ACTIVE_ADMIN", message: "Não é possível desativar ou rebaixar o último administrador ativo." }
+        });
+      }
+    }
+    if (req.params.id === req.authUser!.id && parsed.data.role !== undefined && parsed.data.role !== UserRole.ADMIN) {
+      return res.status(400).json({
+        error: { code: "SELF_DEMOTION", message: "Não é possível rebaixar o próprio perfil administrativo." }
+      });
+    }
+
     const data: Prisma.UserUpdateInput = {};
     if (parsed.data.name) data.name = parsed.data.name;
     if (parsed.data.email) data.email = parsed.data.email.trim().toLocaleLowerCase("pt-BR");
     if (parsed.data.role) data.role = parsed.data.role;
     if (typeof parsed.data.active === "boolean") data.active = parsed.data.active;
     if (parsed.data.newPassword) data.passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
-    const user = await prisma.user.update({ where: { id: before.id }, data, select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true } });
-    await prisma.auditLog.create({ data: { entityType: "USER", entityId: user.id, action: "USER_ADMIN_UPDATE", userId: req.authUser!.id, beforeValue: { name: before.name, email: before.email, role: before.role, active: before.active }, afterValue: { name: user.name, email: user.email, role: user.role, active: user.active } } });
+    const user = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: before.id },
+        data,
+        select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true }
+      });
+      await tx.auditLog.create({
+        data: {
+          entityType: "USER",
+          entityId: updatedUser.id,
+          action: "USER_ADMIN_UPDATE",
+          userId: req.authUser!.id,
+          beforeValue: { name: before.name, email: before.email, role: before.role, active: before.active },
+          afterValue: { name: updatedUser.name, email: updatedUser.email, role: updatedUser.role, active: updatedUser.active }
+        }
+      });
+      return updatedUser;
+    });
     return res.json({ user });
   } catch (error) { return next(error); }
 });
@@ -375,9 +597,21 @@ app.get("/api/v1/mapa/:id/history", async (req, res, next) => {
     if (!row) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Registro não encontrado." } });
     const items = await prisma.auditLog.findMany({
       where: { mapaRowId: row.id, ...(field ? { OR: [{ fieldKey: field }, { fieldKey: { contains: field } }, { action: "CREATE" }] } : {}) },
-      include: { user: { select: { name: true, email: true } } }, orderBy: { createdAt: "desc" }, take: 100
+      include: { user: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 100
     });
-    return res.json({ items });
+    // Audit snapshots may contain unrelated operational data. Return only the
+    // requested cell's values, never the full before/after row to the browser.
+    const cellValue = (snapshot: Prisma.JsonValue | null, key: string): Prisma.JsonValue | null => {
+      if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return null;
+      const object = snapshot as Prisma.JsonObject;
+      return Object.prototype.hasOwnProperty.call(object, key) ? { [key]: object[key] } : null;
+    };
+    const safeItems = items.map(item => ({
+      ...item,
+      beforeValue: field ? cellValue(item.beforeValue, field) : null,
+      afterValue: field ? cellValue(item.afterValue, field) : null
+    }));
+    return res.json({ items: safeItems });
   } catch (error) { return next(error); }
 });
 
