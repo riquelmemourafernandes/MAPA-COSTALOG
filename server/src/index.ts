@@ -154,6 +154,36 @@ app.get("/api/v1/mapa", async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+app.get("/api/v1/mapa/validations", async (_req, res, next) => {
+  try {
+    const requiredColumns = await prisma.mapaColumn.findMany({
+      where: { required: true },
+      select: { key: true, label: true, dataType: true },
+      orderBy: { position: "asc" }
+    });
+    const checks = await Promise.all(requiredColumns.map(async (column) => {
+      const result = await prisma.$queryRaw<Array<{ total: bigint; missing: bigint }>>`
+        SELECT COUNT(*)::bigint AS total,
+          COUNT(*) FILTER (WHERE NULLIF(BTRIM(COALESCE(data ->> ${column.key}, '')), '') IS NULL)::bigint AS missing
+        FROM mapa_rows WHERE archived_at IS NULL
+      `;
+      return {
+        key: column.key,
+        label: column.label || column.key,
+        dataType: column.dataType,
+        total: Number(result[0]?.total || 0),
+        missing: Number(result[0]?.missing || 0)
+      };
+    }));
+    return res.json({
+      checkedAt: new Date().toISOString(),
+      totalRows: checks[0]?.total ?? 0,
+      requiredFields: checks.length,
+      items: checks.filter(item => item.missing > 0).sort((a, b) => b.missing - a.missing)
+    });
+  } catch (error) { return next(error); }
+});
+
 app.post("/api/v1/mapa", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.OPERACAO), async (req, res, next) => {
   try {
     const parsed = createRowSchema.safeParse(req.body);
