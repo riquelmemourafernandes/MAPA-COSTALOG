@@ -65,6 +65,7 @@ export default function App() {
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState('CONSULTA');
   const pageSize = 100;
+  useEffect(() => { setSelectedRowIds([]); }, [page, query, status, filterColumn, filterValue]);
   const selectedRows = rows.filter(row => selectedRowIds.includes(row.id));
   const editableColumns = columns.filter(column => column.editable);
   const preferenceKey = 'mapa-costalog-columns:' + userKey;
