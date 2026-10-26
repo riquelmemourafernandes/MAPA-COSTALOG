@@ -487,6 +487,24 @@ app.patch("/api/v1/users/:id", requireRole(UserRole.ADMIN), async (req, res, nex
     if (req.params.id === req.authUser!.id && parsed.data.active === false) return res.status(400).json({ error: { code: "SELF_DEACTIVATION", message: "Não é possível bloquear sua própria conta." } });
     const before = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!before) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Usuário não encontrado." } });
+
+    // Prevent accidental lockout by ensuring at least one active administrator remains.
+    const removesAdminAccess = before.active && before.role === UserRole.ADMIN &&
+      (parsed.data.active === false || (parsed.data.role !== undefined && parsed.data.role !== UserRole.ADMIN));
+    if (removesAdminAccess) {
+      const activeAdmins = await prisma.user.count({ where: { active: true, role: UserRole.ADMIN } });
+      if (activeAdmins <= 1) {
+        return res.status(400).json({
+          error: { code: "LAST_ACTIVE_ADMIN", message: "Não é possível desativar ou rebaixar o último administrador ativo." }
+        });
+      }
+    }
+    if (req.params.id === req.authUser!.id && parsed.data.role !== undefined && parsed.data.role !== UserRole.ADMIN) {
+      return res.status(400).json({
+        error: { code: "SELF_DEMOTION", message: "Não é possível rebaixar o próprio perfil administrativo." }
+      });
+    }
+
     const data: Prisma.UserUpdateInput = {};
     if (parsed.data.name) data.name = parsed.data.name;
     if (parsed.data.email) data.email = parsed.data.email.trim().toLocaleLowerCase("pt-BR");
