@@ -528,7 +528,7 @@ app.get("/api/v1/mapa/:id/history", async (req, res, next) => {
     if (!row) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Registro não encontrado." } });
     const items = await prisma.auditLog.findMany({
       where: { mapaRowId: row.id, ...(field ? { OR: [{ fieldKey: field }, { fieldKey: { contains: field } }, { action: "CREATE" }] } : {}) },
-      include: { user: { select: { name: true, email: true } } }, orderBy: { createdAt: "desc" }, take: 100
+      include: { user: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 100
     });
     return res.json({ items });
   } catch (error) { return next(error); }
