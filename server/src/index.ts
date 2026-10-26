@@ -239,6 +239,10 @@ app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
     return res.json({
       generatedAt: now.toISOString(),
       total: alerts.length,
+      byKind: {
+        collection: alerts.filter(item => item.kind === "Coleta").length,
+        delivery: alerts.filter(item => item.kind === "Entrega").length
+      },
       items: alerts.slice(0, 100)
     });
   } catch (error) {
