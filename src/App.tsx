@@ -376,10 +376,10 @@ export default function App() {
       const typing = Boolean(target && (target.isContentEditable || ['INPUT','TEXTAREA','SELECT'].includes(target.tagName)));
       const mod = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
-      if (mod && key === 'd' && active === 'MAPA 1.0' && !typing) {
+      if (mod && key === 'd' && active === 'MAPA 1.0') {
         // Ctrl+D is reserved for spreadsheet fill-down, never the browser bookmark shortcut.
         event.preventDefault();
-        if (userRole === 'CONSULTA' || !selectedCell) return;
+        if (typing || userRole === 'CONSULTA' || !selectedCell) return;
         const selected = selectedCellKeys.length ? selectedCellKeys : [selectedCell.row.id + ':' + selectedCell.column.key];
         const positions = selected.map(cellKey => {
           const splitAt = cellKey.indexOf(':');
