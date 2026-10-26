@@ -348,6 +348,35 @@ app.post("/api/v1/mapa", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRo
   } catch (error) { return next(error); }
 });
 
+app.delete("/api/v1/mapa/:id", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.OPERACAO), async (req, res, next) => {
+  try {
+    const existing = await prisma.mapaRow.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.archivedAt) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Registro não encontrado." } });
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.mapaRow.update({
+        where: { id: existing.id },
+        data: { archivedAt: new Date(), updatedById: req.authUser!.id }
+      });
+      await tx.auditLog.create({
+        data: {
+          entityType: "MAPA_ROW",
+          entityId: existing.id,
+          mapaRowId: existing.id,
+          action: "DELETE",
+          beforeValue: (existing.data && typeof existing.data === "object" ? existing.data : {}) as Prisma.InputJsonValue,
+          afterValue: Prisma.JsonNull,
+          userId: req.authUser!.id
+        }
+      });
+    });
+    return res.json({ success: true, id: existing.id });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.patch("/api/v1/mapa/:id", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.OPERACAO), async (req, res, next) => {
   try {
     const parsed = patchSchema.safeParse(req.body);
