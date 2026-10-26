@@ -453,8 +453,23 @@ app.patch("/api/v1/auth/profile", async (req, res, next) => {
       }
       data.passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
     }
-    const user = await prisma.user.update({ where: { id: current.id }, data, select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true } });
-    await prisma.auditLog.create({ data: { entityType: "USER", entityId: user.id, action: "PROFILE_UPDATE", userId: current.id, afterValue: { name: user.name, email: user.email } } });
+    const user = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: current.id },
+        data,
+        select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true }
+      });
+      await tx.auditLog.create({
+        data: {
+          entityType: "USER",
+          entityId: updatedUser.id,
+          action: "PROFILE_UPDATE",
+          userId: current.id,
+          afterValue: { name: updatedUser.name, email: updatedUser.email }
+        }
+      });
+      return updatedUser;
+    });
     return res.json({ user });
   } catch (error) { return next(error); }
 });
@@ -473,8 +488,28 @@ app.post("/api/v1/users", requireRole(UserRole.ADMIN), async (req, res, next) =>
     const email = parsed.data.email.trim().toLocaleLowerCase("pt-BR");
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return res.status(409).json({ error: { code: "EMAIL_IN_USE", message: "Já existe um usuário com este e-mail." } });
-    const user = await prisma.user.create({ data: { name: parsed.data.name, email, passwordHash: await bcrypt.hash(parsed.data.password, 12), role: parsed.data.role, active: parsed.data.active }, select: { id: true, name: true, email: true, role: true, active: true, createdAt: true } });
-    await prisma.auditLog.create({ data: { entityType: "USER", entityId: user.id, action: "USER_CREATE", userId: req.authUser!.id, afterValue: { name: user.name, email: user.email, role: user.role, active: user.active } } });
+    const user = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          name: parsed.data.name,
+          email,
+          passwordHash: await bcrypt.hash(parsed.data.password, 12),
+          role: parsed.data.role,
+          active: parsed.data.active
+        },
+        select: { id: true, name: true, email: true, role: true, active: true, createdAt: true }
+      });
+      await tx.auditLog.create({
+        data: {
+          entityType: "USER",
+          entityId: createdUser.id,
+          action: "USER_CREATE",
+          userId: req.authUser!.id,
+          afterValue: { name: createdUser.name, email: createdUser.email, role: createdUser.role, active: createdUser.active }
+        }
+      });
+      return createdUser;
+    });
     return res.status(201).json({ user });
   } catch (error) { return next(error); }
 });
@@ -511,8 +546,24 @@ app.patch("/api/v1/users/:id", requireRole(UserRole.ADMIN), async (req, res, nex
     if (parsed.data.role) data.role = parsed.data.role;
     if (typeof parsed.data.active === "boolean") data.active = parsed.data.active;
     if (parsed.data.newPassword) data.passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
-    const user = await prisma.user.update({ where: { id: before.id }, data, select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true } });
-    await prisma.auditLog.create({ data: { entityType: "USER", entityId: user.id, action: "USER_ADMIN_UPDATE", userId: req.authUser!.id, beforeValue: { name: before.name, email: before.email, role: before.role, active: before.active }, afterValue: { name: user.name, email: user.email, role: user.role, active: user.active } } });
+    const user = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: before.id },
+        data,
+        select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true }
+      });
+      await tx.auditLog.create({
+        data: {
+          entityType: "USER",
+          entityId: updatedUser.id,
+          action: "USER_ADMIN_UPDATE",
+          userId: req.authUser!.id,
+          beforeValue: { name: before.name, email: before.email, role: before.role, active: before.active },
+          afterValue: { name: updatedUser.name, email: updatedUser.email, role: updatedUser.role, active: updatedUser.active }
+        }
+      });
+      return updatedUser;
+    });
     return res.json({ user });
   } catch (error) { return next(error); }
 });
