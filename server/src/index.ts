@@ -5,7 +5,7 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { Prisma, PrismaClient, UserRole } from "@prisma/client";
 import jwt, { type JwtPayload } from "jsonwebtoken";
-import { parseAppointment, shouldAlertAppointment } from "./appointment-date.js";
+import { isCollectionCompleted, isDeliveryCompleted, parseAppointment, shouldAlertAppointment } from "./appointment-date.js";
 import { z } from "zod";
 
 const app = express();
@@ -209,12 +209,10 @@ app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
       const attendant = value(data, "B") || "Não informado";
       const collectionAppointment = value(data, "AL");
       const deliveryAppointment = value(data, "AP");
-      // Coleta é considerada concluída quando AU (chegada ao terminal/EADI)
-      // ou AV (saída do terminal/EADI) estiver preenchida.
-      const collectionCompleted = Boolean(value(data, "AU") || value(data, "AV"));
-      // Por decisão operacional, monitorar somente a primeira entrega (AP).
-      // A segunda entrega (AS) fica fora dos alertas por enquanto.
-      const deliveryCompleted = Boolean(value(data, "AW"));
+      // Regras operacionais centralizadas e cobertas por testes.
+      const collectionCompleted = isCollectionCompleted(data);
+      // Monitorar somente a primeira entrega (AP); AS fica fora dos alertas.
+      const deliveryCompleted = isDeliveryCompleted(data);
       for (const candidate of [
         { kind: "Coleta" as const, scheduled: collectionAppointment, completed: collectionCompleted },
         { kind: "Entrega" as const, scheduled: deliveryAppointment, completed: deliveryCompleted }
