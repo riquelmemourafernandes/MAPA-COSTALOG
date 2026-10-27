@@ -186,7 +186,7 @@ app.get("/api/v1/mapa", async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
+app.get("/api/v1/dashboard/appointment-alerts", async (req, res, next) => {
   try {
     const now = new Date();
     const rows = await prisma.mapaRow.findMany({
@@ -235,16 +235,22 @@ app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
       }
     }
     alerts.sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt));
+    const attendants = Array.from(new Set(alerts.map(item => item.attendant))).sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const requestedAttendant = String(req.query.attendant || "").trim();
+    const filteredAlerts = requestedAttendant && requestedAttendant !== "Todos"
+      ? alerts.filter(item => item.attendant === requestedAttendant)
+      : alerts;
     return res.json({
       generatedAt: now.toISOString(),
       total: alerts.length,
+      filteredTotal: filteredAlerts.length,
       byKind: {
         collection: alerts.filter(item => item.kind === "Coleta").length,
         delivery: alerts.filter(item => item.kind === "Entrega").length
       },
-      // Keep the attendant filter complete even when the displayed alert list is capped at 100.
-      attendants: Array.from(new Set(alerts.map(item => item.attendant))).sort((a, b) => a.localeCompare(b, "pt-BR")),
-      items: alerts.slice(0, 100)
+      // Keep the full attendant list while applying the selected attendant before the 100-item cap.
+      attendants,
+      items: filteredAlerts.slice(0, 100)
     });
   } catch (error) {
     return next(error);
