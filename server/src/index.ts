@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { Prisma, PrismaClient, UserRole } from "@prisma/client";
 import jwt, { type JwtPayload } from "jsonwebtoken";
+import { parseAppointment, shouldAlertAppointment } from "./appointment-date.js";
 import { z } from "zod";
 
 const app = express();
@@ -198,26 +199,6 @@ app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
       const item = (data as Prisma.JsonObject)[key];
       return typeof item === "string" || typeof item === "number" ? String(item).trim() : "";
     };
-    const parseAppointment = (input: string): number => {
-      // Interpret Brazilian dates (DD/MM/YYYY or DD-MM-YYYY) before Date.parse,
-      // which can otherwise read ambiguous values in US month/day order.
-      const match = input.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ ,T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
-      if (match) {
-        const [, dayText, monthText, yearText, hourText = "0", minuteText = "0", secondText = "0"] = match;
-        const day = Number(dayText);
-        const month = Number(monthText);
-        const year = Number(yearText);
-        const hour = Number(hourText);
-        const minute = Number(minuteText);
-        const second = Number(secondText);
-        if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59 || hour < 0 || minute < 0 || second < 0) return Number.NaN;
-        const date = new Date(year, month - 1, day, hour, minute, second);
-        if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return Number.NaN;
-        return date.getTime();
-      }
-      const native = Date.parse(input);
-      return Number.isFinite(native) ? native : Number.NaN;
-    };
     const alerts: Array<{
       id: string; sequence: number; kind: "Coleta" | "Entrega";
       scheduledAt: string; minutesLate: number; attendant: string;
@@ -240,7 +221,7 @@ app.get("/api/v1/dashboard/appointment-alerts", async (_req, res, next) => {
       ]) {
         if (!candidate.scheduled || candidate.completed) continue;
         const timestamp = parseAppointment(candidate.scheduled);
-        if (!Number.isFinite(timestamp) || timestamp >= now.getTime()) continue;
+        if (!shouldAlertAppointment(timestamp, candidate.completed, now.getTime())) continue;
         alerts.push({
           id: row.id,
           sequence: row.sequence,
