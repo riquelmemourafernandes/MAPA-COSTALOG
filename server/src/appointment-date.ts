@@ -67,3 +67,19 @@ export function parseAppointment(input: string): number {
 export function shouldAlertAppointment(timestamp: number, completed: boolean, nowTimestamp: number): boolean {
   return !completed && Number.isFinite(timestamp) && timestamp < nowTimestamp;
 }
+
+function cellValue(data: unknown, key: string): string {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return "";
+  const value = (data as Record<string, unknown>)[key];
+  return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+}
+
+/** Operational rule: collection is complete when AU or AV has a value. */
+export function isCollectionCompleted(data: unknown): boolean {
+  return Boolean(cellValue(data, "AU") || cellValue(data, "AV"));
+}
+
+/** Operational rule: only AW completes the first delivery; AS is not monitored. */
+export function isDeliveryCompleted(data: unknown): boolean {
+  return Boolean(cellValue(data, "AW"));
+}
