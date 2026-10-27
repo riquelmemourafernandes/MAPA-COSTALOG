@@ -31,6 +31,7 @@ jobs:
       - run: npm run prisma:generate
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mapa_test
+      - run: npm run test
       - run: npm run build
       - run: npx prisma validate --schema ../prisma/schema.prisma
         env:
