@@ -35,3 +35,17 @@ test("não gera alerta para agendamento futuro, concluído ou inválido", () => 
   assert.equal(shouldAlertAppointment(Date.parse("2026-10-27T12:00:00Z"), true, now), false);
   assert.equal(shouldAlertAppointment(Number.NaN, false, now), false);
 });
+
+test("considera coleta concluída quando AU ou AV está preenchida", async () => {
+  const { isCollectionCompleted } = await import("./appointment-date.js");
+  assert.equal(isCollectionCompleted({ AU: "Chegou" }), true);
+  assert.equal(isCollectionCompleted({ AV: "Saiu" }), true);
+  assert.equal(isCollectionCompleted({ AU: "", AV: "" }), false);
+});
+
+test("considera entrega concluída somente quando AW está preenchida", async () => {
+  const { isDeliveryCompleted } = await import("./appointment-date.js");
+  assert.equal(isDeliveryCompleted({ AW: "Entregue" }), true);
+  assert.equal(isDeliveryCompleted({ AS: "Outro marco" }), false);
+  assert.equal(isDeliveryCompleted({ AW: "" }), false);
+});
