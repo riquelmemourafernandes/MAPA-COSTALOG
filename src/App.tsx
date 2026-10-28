@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Bell, Bold, GripVertical, Palette, PaintBucket, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound } from 'lucide-react';
+import { Activity, Bell, Bold, GripVertical, Palette, PaintBucket, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound, ShieldCheck } from 'lucide-react';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean; required?: boolean };
 type ValidationItem = { key: string; label: string; dataType: string; total: number; missing: number };
@@ -12,7 +12,7 @@ type SavedView = { name: string; visibleKeys: string[]; query: string; status: s
 type CellStyle = { bold?: boolean; color?: string; background?: string };
 type AuditEntry = { id: string; action: string; fieldKey?: string | null; beforeValue?: unknown; afterValue?: unknown; createdAt: string; user?: { name?: string; email?: string } | null };
 type UserProfile = { id: string; name: string; email: string; role: string; active: boolean };
-type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string };
+type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string; pendingApproval?: boolean };
 const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const nav = [
   { name: 'Visão geral', icon: LayoutDashboard }, { name: 'MAPA 1.0', icon: Table2 },
@@ -41,6 +41,12 @@ export default function App() {
   const [userRole, setUserRole] = useState(() => sessionStorage.getItem('mapa-costalog-role') || '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [authScreen, setAuthScreen] = useState<'login' | 'request'>('login');
+  const [requestName, setRequestName] = useState('');
+  const [requestEmail, setRequestEmail] = useState('');
+  const [requestPassword, setRequestPassword] = useState('');
+  const [requestSent, setRequestSent] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('');
   const [apiError, setApiError] = useState('');
   const [notice, setNotice] = useState('Conecte a API e o banco de dados para acessar os registros operacionais.');
   const [loading, setLoading] = useState(false);
@@ -259,6 +265,41 @@ export default function App() {
       setUsers(previous=>previous.map(item=>item.id===user.id?{...item,...body.user}:item));setNotice('Cadastro de usuário atualizado.');
     } catch(error) {setApiError(error instanceof Error ? error.message : 'Falha ao atualizar usuário.');}
   }
+  async function requestAccess(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setApiError('');
+    if (!apiBase) { setApiError('A URL da API não está configurada nesta prévia.'); return; }
+    setLoading(true);
+    try {
+      const response = await fetch(apiBase + '/api/v1/auth/request-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: requestName.trim(), email: requestEmail.trim(), password: requestPassword })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível registrar a solicitação (HTTP ' + response.status + ').');
+      setRequestPassword('');
+      setRequestSent(true);
+    } catch (error) {
+      setApiError(error instanceof TypeError
+        ? 'Não foi possível conectar à API. Confira a conexão no diagnóstico abaixo. A versão do Render pode não estar atualizada.'
+        : error instanceof Error ? error.message : 'Falha ao solicitar acesso.');
+    } finally { setLoading(false); }
+  }
+  async function checkApiConnection() {
+    if (!apiBase) { setConnectionStatus('VITE_API_URL não foi configurada nesta versão.'); return; }
+    setConnectionStatus('Verificando a conexão...');
+    try {
+      const response = await fetch(apiBase + '/api/v1/health', { cache: 'no-store', signal: AbortSignal.timeout(30000) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || body.status !== 'ok') throw new Error('Resposta inesperada do servidor (HTTP ' + response.status + ').');
+      setConnectionStatus('API respondeu com sucesso. Se o login falhar, confira o usuário, a senha e a versão da API.');
+    } catch (error) {
+      setConnectionStatus(error instanceof Error && error.name === 'TimeoutError'
+        ? 'A API não respondeu em 30 segundos. Confira o serviço no Render.'
+        : 'Não foi possível acessar a API pelo navegador. Verifique rede, bloqueio CORS, URL configurada e status do Render.');
+    }
+  }
   async function login(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setApiError('');
@@ -409,6 +450,51 @@ export default function App() {
       return sortConfig.direction === 'asc' ? compared : -compared;
     });
   }, [rows, query, filterColumn, filterValue, columnFilters, visibleColumns, sortConfig]);
+  if (!token) {
+    return <main className="auth-layout">
+      <div className="auth-intro">
+        <div className="auth-brand"><span className="auth-logo"><Truck size={28}/></span><div><strong>MAPA COSTALOG</strong><small>GESTÃO OPERACIONAL</small></div></div>
+        <div className="auth-intro-copy"><span className="auth-eyebrow">AMBIENTE CORPORATIVO</span><h1>Controle logístico com acesso seguro.</h1><p>Operações, agendamentos e registros em um só lugar, com permissões individuais e histórico de alterações.</p></div>
+        <small className="auth-intro-foot">Acesso exclusivo a usuários autorizados pela Costalog.</small>
+      </div>
+      <section className="auth-content">
+        <div className="auth-card">
+          <div className="auth-card-heading">
+            <span className="auth-eyebrow">BEM-VINDO</span>
+            <h2>{authScreen === 'login' ? 'Entrar no sistema' : 'Solicitar acesso'}</h2>
+            <p>{authScreen === 'login' ? 'Utilize seu e-mail e senha cadastrados.' : 'Seu cadastro será avaliado por um administrador antes de qualquer acesso.'}</p>
+          </div>
+          <div className="auth-tabs" role="tablist" aria-label="Tipo de acesso">
+            <button type="button" role="tab" aria-selected={authScreen === 'login'} className={authScreen === 'login' ? 'selected' : ''} onClick={() => { setAuthScreen('login'); setApiError(''); setConnectionStatus(''); }}>Entrar</button>
+            <button type="button" role="tab" aria-selected={authScreen === 'request'} className={authScreen === 'request' ? 'selected' : ''} onClick={() => { setAuthScreen('request'); setApiError(''); setConnectionStatus(''); }}>Solicitar acesso</button>
+          </div>
+          {authScreen === 'login' ? <form className="auth-form" onSubmit={login}>
+            <label>E-mail<input type="email" required autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="nome@empresa.com.br" /></label>
+            <label>Senha<input type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Sua senha" /></label>
+            <button className="primary auth-submit" disabled={loading || !apiBase} type="submit">{loading ? 'Conectando...' : 'Entrar no MAPA COSTALOG'}</button>
+          </form> : requestSent ? <div className="auth-success" role="status">
+            <strong>Solicitação enviada</strong>
+            <p>Se seu cadastro for elegível, ele ficará aguardando análise do administrador. Confirme seu acesso com a equipe responsável; nenhuma conta é liberada automaticamente.</p>
+            <button className="secondary" onClick={() => { setAuthScreen('login'); setRequestSent(false); setApiError(''); }} type="button">Voltar ao login</button>
+          </div> : <form className="auth-form" onSubmit={requestAccess}>
+            <label>Nome completo<input required minLength={2} maxLength={120} autoComplete="name" value={requestName} onChange={e => setRequestName(e.target.value)} placeholder="Nome e sobrenome" /></label>
+            <label>E-mail corporativo<input type="email" required maxLength={254} autoComplete="email" value={requestEmail} onChange={e => setRequestEmail(e.target.value)} placeholder="nome@empresa.com.br" /></label>
+            <label>Senha para seu futuro acesso<input type="password" minLength={12} maxLength={200} required autoComplete="new-password" value={requestPassword} onChange={e => setRequestPassword(e.target.value)} placeholder="Pelo menos 12 caracteres" /></label>
+            <p className="auth-note"><ShieldCheck size={16}/> Sua conta ficará inativa até que o administrador confirme sua identidade e aprove o cadastro.</p>
+            <button className="primary auth-submit" type="submit" disabled={loading || !apiBase}>{loading ? 'Enviando...' : 'Enviar solicitação'}</button>
+          </form>}
+          {apiError && <div className="auth-error" role="alert">{apiError}</div>}
+          {!apiBase && <div className="auth-error" role="alert">Esta prévia não tem VITE_API_URL configurada. A equipe técnica precisa corrigir o ambiente.</div>}
+          <div className="auth-diagnostics">
+            <button type="button" className="auth-diagnostic-button" onClick={() => void checkApiConnection()}>Testar conexão com a API</button>
+            {connectionStatus && <p role="status">{connectionStatus}</p>}
+            {apiBase && <a href={apiBase + '/api/v1/health'} target="_blank" rel="noreferrer">Abrir verificação da API</a>}
+          </div>
+        </div>
+        <small className="auth-copyright">MAPA COSTALOG · Plataforma de uso interno</small>
+      </section>
+    </main>;
+  }
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Truck size={22}/></div><div><strong>COSTALOG</strong><span>OPERAÇÕES</span></div></div>
@@ -467,7 +553,7 @@ export default function App() {
         </section>}
 
         {active === 'Minha conta' && <section className="workspace-page"><div className="section-intro"><span className="eyebrow">CONTA PESSOAL</span><h2>Meu cadastro</h2><p>Atualize seu nome, e-mail e senha.</p></div><form className="panel profile-form" onSubmit={saveProfile}><label>Nome completo<input required minLength={2} value={profileName} onChange={event=>setProfileName(event.target.value)}/></label><label>E-mail<input required type="email" value={profileEmail} onChange={event=>setProfileEmail(event.target.value)}/></label><div className="profile-role">Perfil de acesso <strong>{profile?.role||userRole||'—'}</strong><small>Permissões são alteradas por um administrador.</small></div><div className="password-section"><h3>Alterar senha (opcional)</h3><label>Senha atual<input type="password" autoComplete="current-password" value={currentPassword} onChange={event=>setCurrentPassword(event.target.value)} required={Boolean(newPassword)}/></label><label>Nova senha<input type="password" minLength={10} autoComplete="new-password" value={newPassword} onChange={event=>setNewPassword(event.target.value)} placeholder="Mínimo de 10 caracteres"/></label></div><button className="primary" type="submit"><Save size={15}/> Salvar meu cadastro</button></form></section>}
-        {active === 'Usuários' && <section className="workspace-page"><div className="section-intro"><span className="eyebrow">ADMINISTRAÇÃO</span><h2>Usuários e permissões</h2><p>Crie contas, altere perfis e bloqueie acessos.</p></div>{userRole!=='ADMIN'?<div className="empty-state">Esta área é exclusiva para administradores.</div>:<><form className="panel create-user-form" onSubmit={createUser}><h3>Novo usuário</h3><div className="user-form-grid"><label>Nome<input required minLength={2} value={newUserName} onChange={event=>setNewUserName(event.target.value)}/></label><label>E-mail<input required type="email" value={newUserEmail} onChange={event=>setNewUserEmail(event.target.value)}/></label><label>Senha inicial<input required type="password" minLength={10} value={newUserPassword} onChange={event=>setNewUserPassword(event.target.value)}/></label><label>Perfil<select value={newUserRole} onChange={event=>setNewUserRole(event.target.value)}><option value="CONSULTA">Consulta</option><option value="OPERACAO">Operação</option><option value="SUPERVISOR">Supervisor</option><option value="ADMIN">Administrador</option></select></label></div><button className="primary" type="submit"><Plus size={15}/> Criar usuário</button></form><div className="panel users-table-panel"><div className="panel-heading"><div><h2>Usuários cadastrados</h2><p>{users.length} conta(s)</p></div></div><div className="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th><th>Ações</th></tr></thead><tbody>{users.map(item=><tr key={item.id}><td>{item.name}</td><td>{item.email}</td><td><select value={item.role} disabled={item.id===profile?.id} onChange={event=>void updateUser(item,{role:event.target.value})}><option value="CONSULTA">Consulta</option><option value="OPERACAO">Operação</option><option value="SUPERVISOR">Supervisor</option><option value="ADMIN">Administrador</option></select></td><td><span className={item.active?'feature-state connected':'feature-state'}>{item.active?'Ativo':'Bloqueado'}</span></td><td><button className="secondary" disabled={item.id===profile?.id} onClick={()=>void updateUser(item,{active:!item.active})}>{item.active?'Bloquear':'Reativar'}</button></td></tr>)}</tbody></table></div></div></>}</section>}
+        {active === 'Usuários' && <section className="workspace-page"><div className="section-intro"><span className="eyebrow">ADMINISTRAÇÃO</span><h2>Usuários e permissões</h2><p>Crie contas, altere perfis e bloqueie acessos.</p></div>{userRole!=='ADMIN'?<div className="empty-state">Esta área é exclusiva para administradores.</div>:<><form className="panel create-user-form" onSubmit={createUser}><h3>Novo usuário</h3><div className="user-form-grid"><label>Nome<input required minLength={2} value={newUserName} onChange={event=>setNewUserName(event.target.value)}/></label><label>E-mail<input required type="email" value={newUserEmail} onChange={event=>setNewUserEmail(event.target.value)}/></label><label>Senha inicial<input required type="password" minLength={10} value={newUserPassword} onChange={event=>setNewUserPassword(event.target.value)}/></label><label>Perfil<select value={newUserRole} onChange={event=>setNewUserRole(event.target.value)}><option value="CONSULTA">Consulta</option><option value="OPERACAO">Operação</option><option value="SUPERVISOR">Supervisor</option><option value="ADMIN">Administrador</option></select></label></div><button className="primary" type="submit"><Plus size={15}/> Criar usuário</button></form><div className="panel users-table-panel"><div className="panel-heading"><div><h2>Usuários cadastrados</h2><p>{users.length} conta(s) · {users.filter(item=>item.pendingApproval).length} solicitação(ões) pendente(s)</p></div></div><div className="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th><th>Ações</th></tr></thead><tbody>{users.map(item=><tr key={item.id}><td>{item.name}</td><td>{item.email}</td><td><select value={item.role} disabled={item.id===profile?.id} onChange={event=>void updateUser(item,{role:event.target.value})}><option value="CONSULTA">Consulta</option><option value="OPERACAO">Operação</option><option value="SUPERVISOR">Supervisor</option><option value="ADMIN">Administrador</option></select></td><td><span className={item.active?'feature-state connected':'feature-state'}>{item.active?'Ativo':item.pendingApproval?'Pendente':'Bloqueado'}</span></td><td><button className="secondary" disabled={item.id===profile?.id} onClick={()=>{if(item.pendingApproval && !window.confirm('Você confirmou a identidade e o e-mail desta pessoa antes de liberar o acesso?')) return; void updateUser(item,{active:!item.active});}}>{item.active?'Bloquear':item.pendingApproval?'Aprovar acesso':'Reativar'}</button></td></tr>)}</tbody></table></div></div></>}</section>}
         {active === 'Integrações' && <section className="workspace-page">
           <div className="section-intro"><span className="eyebrow">CONEXÕES DO SISTEMA</span><h2>Integrações</h2><p>Estado de acesso aos recursos centrais do MAPA COSTALOG.</p></div>
           <div className="feature-list"><div className="feature-row"><div className="feature-icon"><Waypoints size={19}/></div><div><b>API MAPA COSTALOG</b><p>{apiBase || 'Endereço da API não configurado no frontend.'}</p></div><span className={apiBase && token ? 'feature-state connected' : 'feature-state'}>{apiBase && token ? 'Sessão ativa' : 'Sem sessão'}</span></div><div className="feature-row"><div className="feature-icon"><Activity size={19}/></div><div><b>Banco de dados</b><p>Registros consultados pela API e armazenados no PostgreSQL/Supabase.</p></div><span className="feature-state">{token ? 'Acesso autenticado' : 'Aguardando login'}</span></div><div className="notice"><ClipboardList size={17}/><span>Sincronizações externas adicionais ainda precisam ser implementadas e testadas.</span></div></div>
