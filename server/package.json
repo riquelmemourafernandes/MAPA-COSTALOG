@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate --schema ../prisma/schema.prisma",
     "seed:columns": "tsx src/seed-columns.ts",
     "bootstrap:admin": "tsx src/create-admin.ts",
-    "test": "tsx --test src/appointment-date.test.ts"
+    "test": "tsx --test src/*.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",
