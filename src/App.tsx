@@ -14,9 +14,9 @@ type AuditEntry = { id: string; action: string; fieldKey?: string | null; before
 type UserProfile = { id: string; name: string; email: string; role: string; active: boolean };
 type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string; pendingApproval?: boolean };
 // Vercel's same-origin /api rewrite avoids browser CORS failures on preview URLs.
-const apiBase = typeof window !== 'undefined' && /(?:^|\\.)vercel\\.app$/.test(window.location.hostname)
+const apiBase = typeof window !== 'undefined' && /(?:^|\.)vercel\.app$/.test(window.location.hostname)
   ? window.location.origin
-  : (import.meta.env.VITE_API_URL || '').replace(/\\/$/, '');
+  : (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const nav = [
   { name: 'Visão geral', icon: LayoutDashboard }, { name: 'MAPA 1.0', icon: Table2 },
   { name: 'Status operacional', icon: Activity }, { name: 'Cadastros', icon: Users }, { name: 'Minha conta', icon: UserRound }, { name: 'Usuários', icon: Users }, { name: 'Integrações', icon: Waypoints }
