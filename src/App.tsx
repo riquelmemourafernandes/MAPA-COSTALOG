@@ -13,7 +13,10 @@ type CellStyle = { bold?: boolean; color?: string; background?: string };
 type AuditEntry = { id: string; action: string; fieldKey?: string | null; beforeValue?: unknown; afterValue?: unknown; createdAt: string; user?: { name?: string; email?: string } | null };
 type UserProfile = { id: string; name: string; email: string; role: string; active: boolean };
 type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string; pendingApproval?: boolean };
-const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+// Vercel's same-origin /api rewrite avoids browser CORS failures on preview URLs.
+const apiBase = typeof window !== 'undefined' && /(?:^|\\.)vercel\\.app$/.test(window.location.hostname)
+  ? window.location.origin
+  : (import.meta.env.VITE_API_URL || '').replace(/\\/$/, '');
 const nav = [
   { name: 'Visão geral', icon: LayoutDashboard }, { name: 'MAPA 1.0', icon: Table2 },
   { name: 'Status operacional', icon: Activity }, { name: 'Cadastros', icon: Users }, { name: 'Minha conta', icon: UserRound }, { name: 'Usuários', icon: Users }, { name: 'Integrações', icon: Waypoints }
@@ -262,7 +265,7 @@ export default function App() {
     try {
       const response=await fetch(apiBase+'/api/v1/users/'+encodeURIComponent(user.id),{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(changes)});
       const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body?.error?.message || 'Não foi possível atualizar usuário.');
-      setUsers(previous=>previous.map(item=>item.id===user.id?{...item,...body.user}:item));setNotice('Cadastro de usuário atualizado.');
+      setUsers(previous=>previous.map(item=>item.id===user.id?{...item,...body.user,pendingApproval:false}:item));setNotice('Cadastro de usuário atualizado.');
     } catch(error) {setApiError(error instanceof Error ? error.message : 'Falha ao atualizar usuário.');}
   }
   async function requestAccess(e: React.FormEvent<HTMLFormElement>) {
