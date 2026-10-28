@@ -7,6 +7,7 @@ import { Prisma, PrismaClient, UserRole } from "@prisma/client";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import { isCollectionCompleted, isDeliveryCompleted, parseAppointment, shouldAlertAppointment } from "./appointment-date.js";
 import { z } from "zod";
+import { submitAccessRequest } from "./access-requests.js";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -129,6 +130,40 @@ app.post("/api/v1/auth/login", loginLimiter, async (req, res, next) => {
   } catch (error) {
     return next(error);
   }
+});
+
+// Public registration only collects a request. It never issues a token or enables a user.
+const accessRequestLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  limit: 5,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: { code: "TOO_MANY_REQUESTS", message: "Muitas solicitações. Tente novamente mais tarde." } }
+});
+
+app.post("/api/v1/auth/request-access", accessRequestLimiter, async (req, res, next) => {
+  try {
+    const result = await submitAccessRequest(req.body, {
+      emailExists: async email => Boolean(await prisma.user.findUnique({ where: { email }, select: { id: true } })),
+      createPendingUser: async account => {
+        await prisma.$transaction(async tx => {
+          const user = await tx.user.create({ data: account, select: { id: true, name: true, email: true, role: true, active: true } });
+          await tx.auditLog.create({
+            data: {
+              entityType: "USER",
+              entityId: user.id,
+              action: "ACCESS_REQUEST",
+              afterValue: { name: user.name, email: user.email, role: user.role, active: user.active }
+            }
+          });
+        });
+      }
+    });
+    if (result === "invalid") {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Informe nome, e-mail válido e senha de pelo menos 12 caracteres." } });
+    }
+    return res.status(202).json({ message: "Solicitação recebida. Se o cadastro for elegível, um administrador poderá analisá-lo. O acesso permanece bloqueado até aprovação." });
+  } catch (error) { return next(error); }
 });
 
 app.use("/api/v1", requireAuth);
@@ -473,7 +508,20 @@ app.patch("/api/v1/auth/profile", async (req, res, next) => {
 app.get("/api/v1/users", requireRole(UserRole.ADMIN), async (_req, res, next) => {
   try {
     const items = await prisma.user.findMany({ select: { id: true, name: true, email: true, role: true, active: true, createdAt: true, updatedAt: true }, orderBy: { name: "asc" } });
-    return res.json({ items });
+    // Reuse the audit trail to distinguish new pending requests from previously
+    // approved users that an administrator later blocked. No schema migration.
+    const inactiveIds = items.filter(item => !item.active).map(item => item.id);
+    const events = inactiveIds.length ? await prisma.auditLog.findMany({
+      where: { entityType: "USER", entityId: { in: inactiveIds }, action: { in: ["ACCESS_REQUEST", "USER_ADMIN_UPDATE"] } },
+      select: { entityId: true, action: true },
+      orderBy: { createdAt: "desc" }
+    }) : [];
+    const latestActions = new Map<string, string>();
+    for (const event of events) if (!latestActions.has(event.entityId)) latestActions.set(event.entityId, event.action);
+    return res.json({ items: items.map(item => ({
+      ...item,
+      pendingApproval: !item.active && latestActions.get(item.id) === "ACCESS_REQUEST"
+    })) });
   } catch (error) { return next(error); }
 });
 
