@@ -261,12 +261,16 @@ export default function App() {
   }
   async function login(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!apiBase) return;
-    setLoading(true); setApiError('');
+    setApiError('');
+    if (!apiBase) {
+      setApiError('A API não está configurada nesta versão. Atualize VITE_API_URL no Vercel e gere uma nova prévia.');
+      return;
+    }
+    setLoading(true);
     try {
-      const response = await fetch(apiBase + '/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+      const response = await fetch(apiBase + '/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim(), password }) });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível entrar.');
+      if (!response.ok) throw new Error(body?.error?.message || ('Falha no login (HTTP ' + response.status + ').'));
       sessionStorage.setItem('mapa-costalog-token', body.token);
       sessionStorage.setItem('mapa-costalog-user', body.user?.id || body.user?.email || 'usuario');
       sessionStorage.setItem('mapa-costalog-role', body.user?.role || 'CONSULTA');
@@ -274,8 +278,11 @@ export default function App() {
       setUserRole(body.user?.role || 'CONSULTA');
       setToken(body.token); setPassword('');
       setNotice('Conectado como ' + (body.user?.name || body.user?.email || 'usuário autorizado') + '.');
-    } catch (error) { setApiError(error instanceof Error ? error.message : 'Falha no login.'); }
-    finally { setLoading(false); }
+    } catch (error) {
+      setApiError(error instanceof TypeError
+        ? 'Não foi possível conectar à API. Pode ser uma falha de rede ou a origem desta prévia ainda não estar liberada pela API. Tente novamente em instantes.'
+        : error instanceof Error ? error.message : 'Falha no login.');
+    } finally { setLoading(false); }
   }
   function logout() {
     sessionStorage.removeItem('mapa-costalog-token'); sessionStorage.removeItem('mapa-costalog-user'); sessionStorage.removeItem('mapa-costalog-role');
