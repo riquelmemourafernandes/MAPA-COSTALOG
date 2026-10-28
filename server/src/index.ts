@@ -237,9 +237,11 @@ app.get("/api/v1/dashboard/appointment-alerts", async (req, res, next) => {
     alerts.sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt));
     const attendants = Array.from(new Set(alerts.map(item => item.attendant))).sort((a, b) => a.localeCompare(b, "pt-BR"));
     const requestedAttendant = String(req.query.attendant || "").trim();
-    const filteredAlerts = requestedAttendant && requestedAttendant !== "Todos"
-      ? alerts.filter(item => item.attendant === requestedAttendant)
-      : alerts;
+    const requestedKind = String(req.query.kind || "").trim();
+    const filteredAlerts = alerts.filter(item =>
+      (!requestedAttendant || requestedAttendant === "Todos" || item.attendant === requestedAttendant) &&
+      (!requestedKind || requestedKind === "Todos" || item.kind === requestedKind)
+    );
     return res.json({
       generatedAt: now.toISOString(),
       total: alerts.length,
