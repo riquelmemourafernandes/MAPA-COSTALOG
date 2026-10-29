@@ -1,18 +1,21 @@
 // Spreadsheet layout helpers shared by rendering, scrolling and batch creation.
+import {
+  sourceColumnWidth, MAPA_1_ROW_HEIGHT_PX, MAPA_1_DEFAULT_COLUMN_WIDTH_PX
+} from './mapa-source-dimensions.js';
 export const SCROLL_BATCH_SIZE = 100;
 export const MAX_CREATE_ROWS = 100;
 export const EMPTY_GRID_ROWS = 35;
 // Sizes may deliberately hide text, exactly as in Excel/Google Sheets.
 export const MIN_ROW_HEIGHT = 12;
 export const MAX_ROW_HEIGHT = 2000;
-export const MIN_COLUMN_WIDTH = 24;
+export const MIN_COLUMN_WIDTH = 20;
 export const MAX_COLUMN_WIDTH = 2400;
-export const DEFAULT_COLUMN_WIDTH = 180;
+export const DEFAULT_COLUMN_WIDTH = MAPA_1_DEFAULT_COLUMN_WIDTH_PX;
 export const ROW_NUMBER_COLUMN_WIDTH = 65;
 
 export function normalizeRowHeight(value: number): number {
   return Math.max(MIN_ROW_HEIGHT, Math.min(MAX_ROW_HEIGHT,
-    Math.round(Number.isFinite(value) ? value : 35)));
+    Math.round(Number.isFinite(value) ? value : SHEET_DEFAULT_HEIGHT)));
 }
 export function normalizeColumnWidth(value:number):number{
   return Math.max(MIN_COLUMN_WIDTH,Math.min(MAX_COLUMN_WIDTH,
@@ -20,7 +23,7 @@ export function normalizeColumnWidth(value:number):number{
 }
 export function totalSheetWidth(keys:readonly string[],sizes:Record<string,number>):number{
   return ROW_NUMBER_COLUMN_WIDTH + keys.reduce((total,key)=>
-    total+normalizeColumnWidth(sizes[key]??DEFAULT_COLUMN_WIDTH),0);
+    total+normalizeColumnWidth(sizes[key]??sourceColumnWidth(key)),0);
 }
 export function normalizeCreateCount(value: number): number | null {
   return Number.isInteger(value) && value >= 1 && value <= MAX_CREATE_ROWS ? value : null;
@@ -65,7 +68,7 @@ export function virtualRowWindow(
 // Test mode: 100 editable virtual rows (2–101); row 1 remains the header.
 // Only filled rows are ever persisted to the API.
 export const SHEET_MAX_ROW = 101;
-export const SHEET_DEFAULT_HEIGHT = 35;
+export const SHEET_DEFAULT_HEIGHT = MAPA_1_ROW_HEIGHT_PX;
 export function sparseSheetWindow(
   scrollTop:number,viewportHeight:number,heights:Record<number,number>,
   rowCount=SHEET_MAX_ROW-1,overscan=8
