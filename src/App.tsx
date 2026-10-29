@@ -20,7 +20,8 @@ import {
   parseEditableValue, selectionBounds, serializeSelection, gridKeyboardAction, planClearSelection,
   type GridPosition
 } from './sheet-grid.js';
-import { Activity, Bell, Bold, GripVertical, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Menu, Moon, Sun, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound, ShieldCheck } from 'lucide-react';
+import { Activity, Bell, Bold, GripVertical, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Menu, Moon, Sun, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound, ShieldCheck, Undo2, Redo2 } from 'lucide-react';
+import { buildUndoRecord, matchesUndoState, undoShortcut, type UndoRecord } from './sheet-undo.js';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean; required?: boolean };
 type ValidationItem = { key: string; label: string; dataType: string; total: number; missing: number };
@@ -31,6 +32,12 @@ type AppointmentAlertSummary = { generatedAt: string; total: number; filteredTot
 type RecordRow = { id: string; sequence: number; sheetRowNumber?: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
 type SavedView = { name: string; visibleKeys: string[]; query: string; status: string };
 type CellStyle = { bold?: boolean; color?: string; background?: string; format?: SheetNumberFormat; align?: 'left'|'center'|'right' };
+type UndoStep =
+  | {kind:'cells'; label:string; edits:UndoRecord[]}
+  | {kind:'style'; label:string; target:'cell'|'row'|'column'; key:string;
+      before:CellStyle|null; after:CellStyle|null}
+  | {kind:'size'; label:string; target:'row'|'column'; key:string;
+      before:number|null; after:number|null};
 type AuditEntry = { id: string; action: string; fieldKey?: string | null; beforeValue?: unknown; afterValue?: unknown; createdAt: string; user?: { name?: string; email?: string } | null };
 type UserProfile = { id: string; name: string; email: string; role: string; active: boolean };
 type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string; pendingApproval?: boolean };
@@ -164,6 +171,25 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [columns, setColumns] = useState<Column[]>([]);
   const [rows, setRows] = useState<RecordRow[]>([]);
+  const rowsRef=useRef<RecordRow[]>([]);
+  useEffect(()=>{rowsRef.current=rows;},[rows]);
+  const undoStacksRef=useRef<{undo:UndoStep[];redo:UndoStep[]}>({undo:[],redo:[]});
+  const undoBusyRef=useRef(false);
+  const [undoCounts,setUndoCounts]=useState({undo:0,redo:0});
+  function syncUndoCounts(){
+    setUndoCounts({undo:undoStacksRef.current.undo.length,redo:undoStacksRef.current.redo.length});
+  }
+  function rememberUndo(step:UndoStep){
+    const stacks=undoStacksRef.current;
+    stacks.undo.push(step);
+    if(stacks.undo.length>60)stacks.undo.shift();
+    stacks.redo=[];
+    syncUndoCounts();
+  }
+  useEffect(()=>{
+    undoStacksRef.current={undo:[],redo:[]};
+    syncUndoCounts();
+  },[userKey,token]);
   const [pendingRowStatus, setPendingRowStatus] = useState<Record<string, string>>({});
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(null);
   const [validationLoading, setValidationLoading] = useState(false);
@@ -470,8 +496,17 @@ export default function App() {
     (selectedCell || (selectionMode === 'column' && selectedColumnKey)));
   function updateSelectedStyle(change: CellStyle) {
     if (!canFormatSelection) return;
+    if(undoBusyRef.current)return;
     let nextCellStyles = cellStyles, nextRowStyles = rowStyles, nextColumnStyles = columnStyles;
     let scope = 'célula';
+    const undoTarget: 'cell'|'row'|'column' =
+      selectionMode==='column'&&selectedColumnKey?'column':
+      selectionMode==='row'&&selectedRowId?'row':'cell';
+    const undoKey=undoTarget==='column'?selectedColumnKey!:
+      undoTarget==='row'?selectedRowId!:
+      selectedCell?styleKey(selectedCell.row,selectedCell.column):'';
+    const beforeStyle=undoTarget==='column'?columnStyles[undoKey]??null:
+      undoTarget==='row'?rowStyles[undoKey]??null:cellStyles[undoKey]??null;
     if (selectionMode === 'column' && selectedColumnKey) {
       nextColumnStyles = { ...columnStyles,
         [selectedColumnKey]: { ...(columnStyles[selectedColumnKey] || {}), ...change } };
@@ -486,6 +521,13 @@ export default function App() {
       const key = styleKey(selectedCell.row, selectedCell.column);
       nextCellStyles = { ...cellStyles, [key]: { ...(cellStyles[key] || {}), ...change } };
       setCellStyles(nextCellStyles);
+    }
+    const afterStyle=undoTarget==='column'?nextColumnStyles[undoKey]??null:
+      undoTarget==='row'?nextRowStyles[undoKey]??null:nextCellStyles[undoKey]??null;
+    if(JSON.stringify(beforeStyle)!==JSON.stringify(afterStyle)){
+      rememberUndo({kind:'style',label:'Formatação da '+scope,target:undoTarget,
+        key:undoKey,before:beforeStyle?{...beforeStyle}:null,
+        after:afterStyle?{...afterStyle}:null});
     }
     localStorage.setItem(styleStorageKey, JSON.stringify({
       rowStyles: nextRowStyles, cellStyles: nextCellStyles, columnStyles: nextColumnStyles
@@ -672,6 +714,7 @@ export default function App() {
     }
     setBulkBusy(true); setApiError('');
     const succeeded: RecordRow[] = []; const failures: string[] = [];
+    const undoEdits:UndoRecord[]=[];
     try {
       for (const row of selectedRows) {
         if (valueText(row.data?.[column.key]) === valueText(parsedValue)) continue;
@@ -682,9 +725,13 @@ export default function App() {
           });
           const body = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(body?.error?.message || 'Falha ao salvar');
-          succeeded.push(body.item as RecordRow);
+          const updated=body.item as RecordRow;
+          succeeded.push(updated);
+          const edit=buildUndoRecord(row,updated,[column.key]);
+          if(edit)undoEdits.push(edit);
         } catch (error) { failures.push('Registro #' + row.sequence + ': ' + (error instanceof Error ? error.message : 'falha')); }
       }
+      if(undoEdits.length)rememberUndo({kind:'cells',label:'Edição em massa',edits:undoEdits});
       if (succeeded.length) setRows(previous => previous.map(row => succeeded.find(updated => updated.id === row.id) || row));
       setSelectedRowIds(failures.length ? selectedRows.filter(row => failures.some(message => message.startsWith('Registro #' + row.sequence + ':'))).map(row => row.id) : []);
       setNotice('Edição em massa: ' + succeeded.length + ' registro(s) atualizado(s)' + (failures.length ? '; ' + failures.length + ' falha(s).' : '. Cada alteração foi registrada no histórico.'));
@@ -717,7 +764,10 @@ export default function App() {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar.');
-      setRows(previous => previous.map(item => item.id === row.id ? body.item as RecordRow : item));
+      const updated=body.item as RecordRow;
+      setRows(previous => previous.map(item => item.id === row.id ? updated : item));
+      const edit=buildUndoRecord(row,updated,[column.key]);
+      if(edit)rememberUndo({kind:'cells',label:'Edição da célula '+column.key+row.sequence,edits:[edit]});
       setNotice('Alteração salva no banco e registrada no histórico.');
       setApiError('');
       return true;
@@ -1072,6 +1122,8 @@ export default function App() {
         if(!response.ok)throw new Error(body?.error?.message||
           'Não foi possível gravar esta linha. Verifique a API de homologação.');
         const created=body.item as RecordRow;
+        const createdEdit=buildUndoRecord({id:created.id,data:{}},created,[column.key]);
+        if(createdEdit)rememberUndo({kind:'cells',label:'Preenchimento de nova linha',edits:[createdEdit]});
         const inherited=inheritNewRowFormat(created,index+2,displayedRows);
         setRows(previous=>mergeLoadedRows(previous,[created]));
         void syncNewRowFormat(inherited);
@@ -1467,6 +1519,7 @@ export default function App() {
     if(gridMutationBusyRef.current || !token || !apiBase || userRole==='CONSULTA')return;
     gridMutationBusyRef.current=true;setPasteBusy(true);setApiError('');
     let saved=0;
+    const undoEdits:UndoRecord[]=[];
     try{
       for(const {row,changes} of edits){
         if(!Object.keys(changes).length)continue;
@@ -1476,7 +1529,10 @@ export default function App() {
         });
         const body=await response.json().catch(()=>({}));
         if(!response.ok)throw new Error(body?.error?.message||'Não foi possível atualizar a linha '+row.sequence);
-        setRows(previous=>previous.map(item=>item.id===row.id?body.item as RecordRow:item));
+        const updated=body.item as RecordRow;
+        const edit=buildUndoRecord(row,updated,Object.keys(changes));
+        if(edit)undoEdits.push(edit);
+        setRows(previous=>previous.map(item=>item.id===row.id?updated:item));
         saved++;
       }
       setNotice(action+' aplicada diretamente: '+saved+' linha(s) atualizada(s).');
@@ -1485,6 +1541,7 @@ export default function App() {
         (error instanceof Error?error.message:'Falha de gravação')+
         '. As células restantes não foram alteradas. Recarregue antes de tentar novamente.');
     }finally{
+      if(undoEdits.length)rememberUndo({kind:'cells',label:action,edits:undoEdits});
       gridMutationBusyRef.current=false;setPasteBusy(false);
     }
   }
@@ -1527,6 +1584,7 @@ export default function App() {
     }
     gridMutationBusyRef.current=true;setPasteBusy(true);setApiError('');
     let saved=0,created=0;
+    const undoEdits:UndoRecord[]=[];
     try{
       const response=await fetch(apiBase+'/api/v1/mapa/grid?'+new URLSearchParams({
         start:String(start.row+2),count:String(matrix.length)
@@ -1554,8 +1612,11 @@ export default function App() {
         const savedBody=await res.json().catch(()=>({}));
         if(!res.ok)throw new Error(savedBody?.error?.message||
           'Erro ao salvar a linha '+item.position);
-        setRows(previous=>mergeLoadedRows(previous,[savedBody.item as RecordRow])
-          .map(row=>row.id===savedBody.item.id?savedBody.item as RecordRow:row));
+        const updated=savedBody.item as RecordRow;
+        const edit=buildUndoRecord(old??{id:updated.id,data:{}},updated,Object.keys(changes));
+        if(edit)undoEdits.push(edit);
+        setRows(previous=>mergeLoadedRows(previous,[updated])
+          .map(row=>row.id===updated.id?updated:row));
         if(!old){
           const createdRow=savedBody.item as RecordRow;
           lastInherited=inheritNewRowFormat(createdRow,item.position,knownRows)??lastInherited;
@@ -1574,7 +1635,10 @@ export default function App() {
         (error instanceof Error?error.message:'Falha de rede')+
         '. Linhas já confirmadas foram preservadas.');
       if(created)setTotal(previous=>previous+created);
-    }finally{gridMutationBusyRef.current=false;setPasteBusy(false);}
+    }finally{
+      if(undoEdits.length)rememberUndo({kind:'cells',label:'Colagem em linhas da grade',edits:undoEdits});
+      gridMutationBusyRef.current=false;setPasteBusy(false);
+    }
   }
 
   function onGridPaste(event: React.ClipboardEvent<HTMLDivElement>) {
