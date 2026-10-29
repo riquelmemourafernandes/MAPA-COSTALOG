@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canPasteMatrix, moveGridPosition, parseClipboardGrid,
-  parseEditableValue, selectionBounds, serializeSelection
+  parseEditableValue, selectionBounds, serializeSelection, gridKeyboardAction
 } from "./sheet-grid.js";
 
 test("seleção retangular em qualquer sentido", () => {
@@ -43,4 +43,16 @@ test("recusa colagem maior que a grade, truncada ou excessiva", () => {
   assert.equal(canPasteMatrix([["a"],["b"]],{row:1,column:0},2,3),false);
   assert.equal(canPasteMatrix([["a"],["b","c"]],{row:0,column:0},2,3),false);
   assert.equal(canPasteMatrix([Array(201).fill("x")],{row:0,column:0},2,202),false);
+});
+
+test("Enter move a seleção; F2 edita; Enter durante edição confirma", () => {
+  assert.equal(gridKeyboardAction("Enter", false), "move");
+  assert.equal(gridKeyboardAction("F2", false), "edit");
+  assert.equal(gridKeyboardAction("Enter", true), "confirm");
+  assert.equal(gridKeyboardAction("Tab", false), "move");
+  assert.equal(gridKeyboardAction("Tab", true), "confirm");
+  assert.equal(gridKeyboardAction("Escape", true), "cancel");
+  assert.equal(gridKeyboardAction("Escape", false), "ignore");
+  assert.deepEqual(moveGridPosition({row:1,column:1}, "Enter", 5, 4), {row:2,column:1});
+  assert.deepEqual(moveGridPosition({row:1,column:1}, "Enter", 5, 4, true), {row:0,column:1});
 });
