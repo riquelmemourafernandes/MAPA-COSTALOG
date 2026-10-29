@@ -357,9 +357,9 @@ export default function App() {
   const [columnDropTarget,setColumnDropTarget]=useState<{key:string;side:ColumnDropSide}|null>(null);
   const columnOptionsRef=useRef<HTMLDivElement>(null);
   const columnDragRef=useRef<{
-    source:string|null;x:number;y:number;frame:number|null;
+    source:string|null;y:number;frame:number|null;
     target:{key:string;side:ColumnDropSide}|null;
-  }>({source:null,x:0,y:0,frame:null,target:null});
+  }>({source:null,y:0,frame:null,target:null});
   const [sortConfig, setSortConfig] = useState<{key:string; direction:'asc'|'desc'} | null>(null);
   const [cellStyles, setCellStyles] = useState<Record<string, CellStyle>>({});
   const [rowStyles, setRowStyles] = useState<Record<string, CellStyle>>({});
@@ -560,7 +560,7 @@ export default function App() {
     localStorage.setItem(preferenceKey,JSON.stringify(ordered));
     void persistPreferences({visibleKeys:ordered});
   }
-  function updateColumnDropTarget(x:number,y:number){
+  function updateColumnDropTarget(y:number){
     const list=columnOptionsRef.current;
     const dragging=columnDragRef.current.source;
     if(!list||!dragging)return;
@@ -593,7 +593,7 @@ export default function App() {
     if(!step)return;
     const before=list.scrollTop;
     list.scrollTop=Math.max(0,Math.min(list.scrollHeight-list.clientHeight,before+step));
-    if(list.scrollTop!==before)updateColumnDropTarget(state.x,state.y);
+    if(list.scrollTop!==before)updateColumnDropTarget(state.y);
     if(state.source)state.frame=window.requestAnimationFrame(columnDragScrollFrame);
   }
   function onColumnDragStart(event:React.DragEvent<HTMLDivElement>,key:string){
@@ -608,9 +608,8 @@ export default function App() {
     if(!columnDragRef.current.source)return;
     event.preventDefault();
     event.dataTransfer.dropEffect='move';
-    columnDragRef.current.x=event.clientX;
     columnDragRef.current.y=event.clientY;
-    updateColumnDropTarget(event.clientX,event.clientY);
+    updateColumnDropTarget(event.clientY);
     const rect=event.currentTarget.getBoundingClientRect();
     if(columnEdgeScrollStep(event.clientY,rect.top,rect.bottom)!==0&&
        columnDragRef.current.frame===null)
@@ -626,7 +625,7 @@ export default function App() {
   function onColumnListDrop(event:React.DragEvent<HTMLDivElement>){
     if(!columnDragRef.current.source)return;
     event.preventDefault();
-    updateColumnDropTarget(event.clientX,event.clientY);
+    updateColumnDropTarget(event.clientY);
     const {source,target}=columnDragRef.current;
     if(source&&target)reorderColumn(source,target.key,target.side);
     finishColumnDrag();
