@@ -284,7 +284,7 @@ app.get("/api/v1/base/options", async (req, res, next) => {
     const q = String(req.query.q || "").trim().slice(0, 120);
     const found = await prisma.lookupValue.findMany({
       where: { listName, active: true, ...(q ? { label: { contains: q, mode: "insensitive" } } : {}) },
-      orderBy: { label: "asc" }, take: 150, select: { label: true }
+      orderBy: { label: "asc" }, take: 2000, select: { label: true }
     });
     const suggestions = new Set(found.map(item => item.label));
     // Values already used in the MAPA stay selectable for legacy rows;
@@ -296,7 +296,7 @@ app.get("/api/v1/base/options", async (req, res, next) => {
       WHERE archived_at IS NULL
         AND NULLIF(BTRIM(data ->> ${column}), '') IS NOT NULL
         AND (${q} = '' OR data ->> ${column} ILIKE ${like})
-      ORDER BY label ASC LIMIT 150
+      ORDER BY label ASC LIMIT 2000
     `;
     // The attendant column is governed exclusively by active BASE records.
     // For other lists, keep legacy values usable but exclude explicitly
@@ -310,8 +310,8 @@ app.get("/api/v1/base/options", async (req, res, next) => {
     });
     const items = [...suggestions]
       .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base", numeric: true }))
-      .slice(0, 150);
-    return res.json({ column, listName, items, truncated: found.length >= 150 || oldValues.length >= 150 });
+      .slice(0, 2000);
+    return res.json({ column, listName, items, truncated: found.length >= 2000 || oldValues.length >= 2000 });
   } catch (error) { return next(error); }
 });
 
