@@ -625,10 +625,35 @@ app.get("/api/v1/preferences", async (req, res, next) => {
 
 app.put("/api/v1/preferences", async (req, res, next) => {
   try {
-    const schema = z.object({ visibleKeys: z.array(z.string().max(80)).max(128).optional(), columnOrder: z.array(z.string().max(80)).max(128).optional(), savedViews: z.array(z.object({ name: z.string().trim().min(1).max(80), visibleKeys: z.array(z.string().max(80)).max(128), query: z.string().max(120).default(""), status: z.string().max(120).default("") })).max(50).optional(), cellStyles: z.record(z.string().max(200), z.object({ bold: z.boolean().optional(), color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(), background: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional() })).optional() }).strict();
+    const styleSchema = z.object({
+      bold: z.boolean().optional(),
+      color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+      background: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional()
+    }).strict();
+    const schema = z.object({
+      visibleKeys: z.array(z.string().max(80)).max(128).optional(),
+      columnOrder: z.array(z.string().max(80)).max(128).optional(),
+      savedViews: z.array(z.object({ name: z.string().trim().min(1).max(80),
+        visibleKeys: z.array(z.string().max(80)).max(128),
+        query: z.string().max(120).default(""), status: z.string().max(120).default("") })).max(50).optional(),
+      cellStyles: z.record(z.string().max(200), styleSchema).optional(),
+      rowStyles: z.record(z.string().max(200), styleSchema).refine(value =>
+        Object.keys(value).length <= 15000).optional(),
+      columnStyles: z.record(z.string().regex(/^[A-Z]{1,2}$/), styleSchema).refine(value =>
+        Object.keys(value).length <= 128).optional()
+    }).strict();
     const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Preferências inválidas." } });
-    const metadata = parsed.data as Prisma.InputJsonObject;
+    if (!parsed.success) return res.status(400).json({
+      error: { code: "VALIDATION_ERROR", message: "Preferências inválidas." }
+    });
+    // Preserve styling keys when a legacy client saves only view/column settings.
+    const previous = await prisma.lookupValue.findUnique({
+      where: { listName_normalized: { listName: "USER_PREFERENCES", normalized: req.authUser!.id } },
+      select: { metadata: true }
+    });
+    const priorData = previous?.metadata && typeof previous.metadata === "object" &&
+      !Array.isArray(previous.metadata) ? previous.metadata as Prisma.JsonObject : {};
+    const metadata = { ...priorData, ...parsed.data } as Prisma.InputJsonObject;
     const record = await prisma.lookupValue.upsert({
       where: { listName_normalized: { listName: "USER_PREFERENCES", normalized: req.authUser!.id } },
       create: { listName: "USER_PREFERENCES", normalized: req.authUser!.id, label: "Preferências do usuário", metadata },
