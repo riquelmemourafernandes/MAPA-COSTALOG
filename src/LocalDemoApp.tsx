@@ -393,7 +393,7 @@ export default function LocalDemoApp({ headers }: { headers: Record<string, stri
         targetColumns.forEach(column => { data[column.id] = ''; });
         line.forEach((value, index) => {
           const header = (sourceHeaders[index] || '').trim().toLocaleLowerCase('pt-BR');
-          const target = existingByLabel.get(header) || targetColumns[index];
+          const target = header ? (existingByLabel.get(header) || targetColumns[index]) : targetColumns[index];
           if (target) data[target.id] = value;
         });
         return { id: 'import-row-' + Date.now().toString(36) + '-' + rowIndex + '-' + Math.random().toString(36).slice(2, 5), data };
@@ -457,6 +457,7 @@ export default function LocalDemoApp({ headers }: { headers: Record<string, stri
 
   function openContextMenu(event: React.MouseEvent, kind: ContextMenu['kind'], rowId?: string, colId?: string) {
     event.preventDefault();
+    event.stopPropagation();
     if (rowId && colId) selectCell(rowId, colId);
     else if (rowId) selectRow(rowId);
     else if (colId) selectColumn(colId);
