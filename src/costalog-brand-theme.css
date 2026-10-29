@@ -571,3 +571,215 @@ html.costalog-dark .sheet-cell-option:hover,html.costalog-dark .sheet-cell-optio
 .app-shell.structural-dark .mapa-grid-panel .sheet-table tbody td{
   filter:none!important;
 }
+/* =========================================================
+   MAPA 2.0 — palette parity on EVERY non-spreadsheet page.
+   styles.css and the two BASE modules still contain legacy
+   green success/selection colors. Override by scope and
+   specificity; never recolor operational worksheet cells.
+   ========================================================= */
+.app-shell,
+.auth-layout{
+  --costalog-neutral-chip:var(--brand-raised);
+  --costalog-neutral-border:var(--brand-border);
+  --costalog-neutral-text:var(--brand-soft-ink);
+}
+
+/* Status operacional, overview, notices and operational alerts. */
+.app-shell .notice:not(.api-error),
+.app-shell.structural-dark .notice:not(.api-error),
+.app-shell .overview-card.validation-ok,
+.app-shell.structural-dark .overview-card.validation-ok,
+.app-shell .overview-card.validation-warning,
+.app-shell.structural-dark .overview-card.validation-warning{
+  background:var(--brand-panel)!important;
+  color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell .notice:not(.api-error),
+.app-shell.structural-dark .notice:not(.api-error){
+  background:var(--brand-raised)!important;
+}
+.app-shell .notice:not(.api-error) :is(span,p,small),
+.app-shell.structural-dark .notice:not(.api-error) :is(span,p,small){
+  color:var(--brand-soft-ink)!important;
+}
+.app-shell .notice:not(.api-error) :is(svg,button),
+.app-shell.structural-dark .notice:not(.api-error) :is(svg,button){
+  color:var(--costalog-red)!important;
+}
+.app-shell .overview-card.validation-ok,
+.app-shell.structural-dark .overview-card.validation-ok{
+  border-left:3px solid var(--brand-border)!important;
+}
+.app-shell .overview-card.validation-warning,
+.app-shell.structural-dark .overview-card.validation-warning{
+  border-left:3px solid #d79347!important;
+}
+.app-shell .validation-ok :is(span,strong,small),
+.app-shell.structural-dark .validation-ok :is(span,strong,small),
+.app-shell .validation-warning :is(span,strong,small),
+.app-shell.structural-dark .validation-warning :is(span,strong,small){
+  color:inherit!important;
+}
+.app-shell .overview-card :is(span,small),
+.app-shell.structural-dark .overview-card :is(span,small),
+.app-shell .status-card small,
+.app-shell.structural-dark .status-card small{
+  color:var(--brand-muted)!important;
+}
+.app-shell .overview-card strong,
+.app-shell.structural-dark .overview-card strong{
+  color:var(--brand-ink)!important;
+}
+.app-shell .feature-state,
+.app-shell.structural-dark .feature-state,
+.app-shell .feature-state.connected,
+.app-shell.structural-dark .feature-state.connected{
+  color:var(--brand-soft-ink)!important;
+  background:var(--brand-raised)!important;
+  border:1px solid var(--brand-border)!important;
+}
+.app-shell :is(.green-dot,.workspace-dot,.connection-dot,.status-indicator){
+  background:var(--costalog-red)!important;
+}
+.app-shell .status-card:hover,
+.app-shell.structural-dark .status-card:hover{
+  background:var(--brand-raised)!important;
+  border-color:var(--costalog-red)!important;
+}
+.app-shell .panel:not(.mapa-grid-panel) .panel-heading svg,
+.app-shell .metric-top svg,
+.app-shell .validation-summary-grid svg{
+  color:var(--costalog-red)!important;
+}
+.app-shell :is(.validation-footnote,.validation-field small,.validation-row>span){
+  color:var(--brand-muted)!important;
+}
+
+/* Shared secondary controls, forms, and list typography. */
+.app-shell :is(.profile-form label,.create-user-form label,.bulk-edit-content label,.profile-role,.column-option,.column-picker-actions b){
+  color:var(--brand-soft-ink)!important;
+}
+.app-shell :is(.profile-form,.create-user-form,.users-table-panel,.bulk-edit-modal,.history-modal) :is(input:not([type=color]),select,textarea){
+  background:var(--brand-input)!important;
+  color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell :is(.history-modal,.profile-role,.password-section,.saved-view-tools,.saved-view-item,.column-option,.bulk-summary,.bulk-preview-table){
+  border-color:var(--brand-border)!important;
+}
+.app-shell :is(.bulk-summary,.bulk-preview-table>div:first-child,.column-option,.sheet-filter-menu){
+  background:var(--brand-raised)!important;
+  color:var(--brand-ink)!important;
+}
+.app-shell :is(.column-picker,.column-options,.saved-view-item,.sheet-filter-menu,.sheet-filter-popover,.sheet-context-menu){
+  background:var(--brand-panel)!important;
+  color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell :is(.pagination,.table-footer,.rows-count,.status-card small,.feature-row p){
+  color:var(--brand-muted)!important;
+}
+.app-shell :is(.sort-header:hover,.column-filter-trigger:hover,.sheet-filter-actions button,.saved-view-item>button:first-child){
+  color:var(--costalog-red)!important;
+}
+.app-shell :is(.column-option input[type=checkbox],.row-select-cell input[type=checkbox]){
+  accent-color:var(--costalog-red)!important;
+}
+.app-shell .column-filter-trigger:hover,
+.app-shell .sheet-filter-option:hover{
+  background:var(--brand-raised)!important;
+  border-color:var(--brand-border)!important;
+}
+
+/* Cadastros / BASE connected: remove the remaining green text and chips. */
+.app-shell .bc-page,
+.app-shell .basep-page{color:var(--brand-ink)!important}
+.app-shell :is(.bc-head p,.basep-eyebrow,.basep-panel-heading){
+  color:var(--costalog-red)!important;
+}
+.app-shell :is(
+  .bc-head span,.bc-sheet-head p,.bc-hint,.bc-empty,.bc-lists strong,
+  .bc-lists small,.bc-sheet-head>span,.bc-search,.bc-add label,
+  .basep-head p,.basep-banner span,.basep-list-nav p,.basep-list-nav small,
+  .basep-section-head>span,.basep-panel label,.basep-panel p,
+  .basep-panel small,.basep-import-steps span,.basep-stats span,
+  .basep-pagination,.basep-search
+){
+  color:var(--brand-muted)!important;
+}
+.app-shell :is(
+  .bc-sheet-head>span,.bc-status,.bc-status.is-active,
+  .basep-counter,.basep-status,.basep-status.good,
+  .basep-list-nav small,.basep-section-head .basep-counter,
+  .basep-linked span,.basep-stats>div,.basep-import-steps>div
+){
+  background:var(--brand-raised)!important;
+  color:var(--brand-soft-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell :is(.bc-status.is-active,.basep-status.good){
+  color:var(--brand-ink)!important;
+}
+.app-shell :is(
+  .bc-sheet-head>span,.basep-panel-heading,.basep-import-steps strong,
+  .basep-stats strong,.basep-linked,
+  .basep-link,.basep-table-actions button
+){
+  color:var(--brand-soft-ink)!important;
+}
+.app-shell :is(.bc-lists button.active,.bc-tabs button.active,.basep-tabs button.active,.basep-list-nav button.active){
+  background:rgba(230,0,40,.10)!important;
+  color:var(--costalog-red)!important;
+  border-color:var(--costalog-red)!important;
+}
+.app-shell :is(.bc-info,.bc-notice,.basep-banner,.basep-safety,.basep-linked,.basep-flash){
+  background:var(--brand-raised)!important;
+  border-color:var(--brand-border)!important;
+  color:var(--brand-soft-ink)!important;
+}
+.app-shell :is(.bc-add,.bc-search,.bc-table-wrap,.basep-panel,.basep-list-nav,.basep-table-wrap,.basep-import-steps>div){
+  background:var(--brand-panel)!important;
+  border-color:var(--brand-border)!important;
+  color:var(--brand-ink)!important;
+}
+.app-shell :is(.bc-outline,.bc-commands button,.bc-inline-edit button,.basep-link,.basep-table-actions button){
+  background:var(--brand-raised)!important;
+  color:var(--brand-soft-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell :is(.bc-search input,.basep-search input,.basep-panel input,.basep-panel select,.basep-paste textarea){
+  color:var(--brand-ink)!important;
+}
+.app-shell .basep-tabs button.active{border-bottom-color:var(--costalog-red)!important}
+.app-shell .basep-flash.basep-error,
+.app-shell .bc-error{
+  background:#411f29!important;
+  color:#ffdbe2!important;
+  border-color:#8b4256!important;
+}
+.app-shell:not(.structural-dark) .basep-flash.basep-error,
+.app-shell:not(.structural-dark) .bc-error{
+  background:#fff1f3!important;
+  color:#9e2440!important;
+  border-color:#eac1cc!important;
+}
+
+/* The same brand palette on login, request access and success screens. */
+.auth-layout .auth-success,
+.auth-layout.structural-dark .auth-success{
+  background:var(--brand-raised)!important;
+  border:1px solid var(--brand-border)!important;
+  color:var(--brand-ink)!important;
+}
+.auth-layout .auth-success :is(h2,h3,p,span,strong,small),
+.auth-layout.structural-dark .auth-success :is(h2,h3,p,span,strong,small){
+  color:var(--brand-ink)!important;
+}
+.auth-layout .auth-diagnostics :is(button,a),
+.auth-layout.structural-dark .auth-diagnostics :is(button,a){
+  color:var(--costalog-red)!important;
+}
+
+/* Explicit safeguard: no theme paint on the editable worksheet area.
+   Status fills, checkbox colors, borders and selections keep their rules. */
