@@ -1635,6 +1635,15 @@ export default function App() {
       if(!response.ok)throw new Error(response.status===404
         ? 'A API conectada ainda não suporta a criação de várias linhas. Habilite a API de homologação.'
         : body?.error?.message||'Não foi possível criar as linhas.');
+      // Multiple new rows follow the same formatting inheritance rule.
+      const createdRows=Array.isArray(body.items)?body.items as RecordRow[]:[];
+      const prior=[...displayedRows];let inherited:PresentationSnapshot|null=null;
+      for(const item of createdRows){
+        const position=Number(item.sheetRowNumber??item.sequence+1);
+        inherited=inheritNewRowFormat(item,position,prior)??inherited;
+        prior.push(item);
+      }
+      void syncNewRowFormat(inherited);
       setNewRowsOpen(false);setPage(1);lastRequestedPageRef.current=0;
       setRows([]);setRetryRowsKey(previous=>previous+1);
       if(gridRef.current)gridRef.current.scrollTop=0;
