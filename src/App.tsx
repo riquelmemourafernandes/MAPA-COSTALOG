@@ -153,6 +153,7 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const editingBusyRef = useRef(false);
+  const cellSaveBusyRef = useRef(false);
   const gridMutationBusyRef = useRef(false);
   const editorRef = useRef<HTMLInputElement>(null);
   const [token, setToken] = useState(() => apiBase ? sessionStorage.getItem('mapa-costalog-token') || '' : '');
@@ -176,6 +177,7 @@ export default function App() {
   const undoStacksRef=useRef<{undo:UndoStep[];redo:UndoStep[]}>({undo:[],redo:[]});
   const undoBusyRef=useRef(false);
   const [undoCounts,setUndoCounts]=useState({undo:0,redo:0});
+  const [undoFeedback,setUndoFeedback]=useState('');
   function syncUndoCounts(){
     setUndoCounts({undo:undoStacksRef.current.undo.length,redo:undoStacksRef.current.redo.length});
   }
@@ -188,6 +190,7 @@ export default function App() {
   }
   useEffect(()=>{
     undoStacksRef.current={undo:[],redo:[]};
+    setUndoFeedback('');
     syncUndoCounts();
   },[userKey,token]);
   const [pendingRowStatus, setPendingRowStatus] = useState<Record<string, string>>({});
@@ -740,7 +743,7 @@ export default function App() {
     } finally { setBulkBusy(false); }
   }
   async function saveCell(row: RecordRow, column: Column, value: string): Promise<boolean> {
-    if (!apiBase || !token || !column.editable || userRole === 'CONSULTA' || gridMutationBusyRef.current) return false;
+    if (!apiBase || !token || !column.editable || userRole === 'CONSULTA' || gridMutationBusyRef.current || cellSaveBusyRef.current) return false;
     const previousValue = valueText(row.data?.[column.key]);
     if (value === previousValue) return true;
     const parsed = LOCKED_COLUMN_FORMAT[column.key]
@@ -750,6 +753,7 @@ export default function App() {
       setApiError(parsed.message + ' na coluna ' + column.label + '.');
       return false;
     }
+    cellSaveBusyRef.current=true;
     // Apply the conditional row color immediately while the audited PATCH
     // is in flight. On failure, remove this preview and show the old color.
     if (column.key === 'C') {
@@ -776,6 +780,7 @@ export default function App() {
       setNotice('A alteração não foi confirmada. Atualize a tela antes de continuar.');
       return false;
     } finally {
+      cellSaveBusyRef.current=false;
       if (column.key === 'C') {
         setPendingRowStatus(previous => {
           const next = { ...previous }; delete next[row.id]; return next;
@@ -789,14 +794,15 @@ export default function App() {
   // also prevents stale writes if a collaborator edits during the request.
   async function replayEdit(direction:'undo'|'redo'){
     if(active!=='MAPA 2.0'||undoBusyRef.current||gridMutationBusyRef.current||
-       editingBusyRef.current||blankSaving||pasteBusy||adminSheetBusy||
+       editingBusyRef.current||cellSaveBusyRef.current||blankSaving||pasteBusy||adminSheetBusy||
        bulkBusy||creatingRows)return;
     const stacks=undoStacksRef.current;
     const source=stacks[direction],target=stacks[direction==='undo'?'redo':'undo'];
     const entry=source[source.length-1];
-    if(!entry){setNotice(direction==='undo'?'Nada para desfazer.':'Nada para refazer.');return;}
+    if(!entry){setUndoFeedback(direction==='undo'?'Nada para desfazer.':'Nada para refazer.');return;}
     if(entry.kind!=='size'&&(!token||!apiBase||userRole==='CONSULTA'))return;
     undoBusyRef.current=true;
+    setUndoFeedback('');
     setApiError('');
     try{
       if(entry.kind==='cells'){
@@ -845,6 +851,7 @@ export default function App() {
           syncUndoCounts();
           setNotice((direction==='undo'?'Desfeito: ':'Refeito: ')+entry.label+
             ' ('+completed.length+' linha(s)). Alteração registrada na auditoria.');
+          setUndoFeedback((direction==='undo'?'Desfeito: ':'Refeito: ')+entry.label);
         }
         if(failed)throw new Error(failed.message+
           (completed.length?' '+completed.length+' linha(s) já confirmada(s) foram mantidas.':''));
@@ -879,6 +886,7 @@ export default function App() {
           });
           if(!response.ok)throw new Error('A sincronização com a API falhou.');
           setNotice((direction==='undo'?'Desfeita: ':'Refeita: ')+entry.label+'.');
+          setUndoFeedback((direction==='undo'?'Desfeita: ':'Refeita: ')+entry.label);
         }catch{
           setNotice('Formatação '+(direction==='undo'?'desfeita':'refeita')+
             ' neste navegador; sincronização com o servidor pendente.');
@@ -903,10 +911,13 @@ export default function App() {
         if(target.length>60)target.shift();
         syncUndoCounts();
         setNotice((direction==='undo'?'Desfeito: ':'Refeito: ')+entry.label+'.');
+        setUndoFeedback((direction==='undo'?'Desfeito: ':'Refeito: ')+entry.label);
       }
     }catch(error){
-      setApiError('Ctrl+'+(direction==='undo'?'Z':'Y')+': '+
-        (error instanceof Error?error.message:'Não foi possível concluir a operação.'));
+      const message='Ctrl+'+(direction==='undo'?'Z':'Y')+': '+
+        (error instanceof Error?error.message:'Não foi possível concluir a operação.');
+      setApiError(message);
+      setUndoFeedback(message);
     }finally{
       gridMutationBusyRef.current=false;
       setPasteBusy(false);
@@ -2076,6 +2087,7 @@ export default function App() {
             <button className="secondary" type="button" disabled={!undoCounts.redo||undoBusyRef.current||pasteBusy||editingCell!==null}
               title="Refazer alteração (Ctrl+Y / Ctrl+Shift+Z)" aria-label="Refazer"
               onClick={()=>void replayEdit('redo')}><Redo2 size={14}/> Refazer</button>
+            <span className="sheet-undo-feedback" role="status" aria-live="polite">{undoFeedback}</span>
             <button className="secondary" type="button" disabled={!selectedBounds} onClick={() => void copyGridSelection()}>Copiar seleção</button>
             <div className="sheet-status-guide">
               <button className="secondary" type="button" aria-expanded={showStatusColors}
