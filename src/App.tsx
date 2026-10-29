@@ -72,6 +72,81 @@ function valueText(value: unknown): string {
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
+
+const LOCAL_DEMO_STORAGE_KEY = 'mapa-costalog-local-sheet-v2';
+function excelColumnKey(index: number): string {
+  let n = index + 1, label = '';
+  while (n > 0) { n--; label = String.fromCharCode(65 + n % 26) + label; n = Math.floor(n / 26); }
+  return label;
+}
+function buildLocalDemoColumns(): Column[] {
+  return Array.from({ length: 72 }, (_, index) => {
+    const key = excelColumnKey(index);
+    return { key, label: referenceHeader[key] || '', position: index + 1,
+      dataType: key === 'A' ? 'date' : key === 'Q' ? 'currency' : key === 'AO' ? 'number' : 'text',
+      editable: true, visible: true };
+  });
+}
+function buildLocalDemoRows(columns: Column[]): RecordRow[] {
+  return Array.from({ length: 24 }, (_, index) => {
+    const data: Record<string, unknown> = Object.fromEntries(columns.map(column => [column.key, '']));
+    data.A = new Date(Date.UTC(2026, 9, index + 1)).toISOString().slice(0, 10);
+    data.B = 'Atendente de demonstração ' + (index % 3 + 1);
+    data.C = ['NOVO', 'AG. DOCS', 'EM ABERTO', 'FINALIZADO'][index % 4];
+    data.D = 'CTE-DEMO-' + String(1200 + index);
+    data.E = ['DI', 'DUIMP', 'CABOTAGEM'][index % 3];
+    data.L = ['Cliente exemplo A', 'Cliente exemplo B', 'Cliente exemplo C'][index % 3];
+    data.Q = 1200 + index * 25;
+    data.T = 'CONT-DEMO-' + String(index + 1).padStart(4, '0');
+    data.AJ = index % 2 ? 'Terminal exemplo Guarujá' : 'Terminal exemplo Santos';
+    data.AK = index % 2 ? 'GUARUJÁ - SP' : 'SANTOS - SP';
+    data.AN = index % 2 ? 'PIRACICABA - SP' : 'SANTOS - SP';
+    data.AO = index % 2 ? 190 : 0;
+    data.AZ = 'Armador de exemplo ' + (index % 2 ? 'B' : 'A');
+    data.BD = 'Depot de demonstração';
+    return { id: 'local-demo-row-' + (index + 1), sequence: index + 1, sheetRowNumber: index + 2, data,
+      status: String(data.C), clientName: String(data.L), container: String(data.T), cte: String(data.D),
+      updatedAt: '2026-10-29T12:00:00.000Z' };
+  });
+}
+function loadLocalDemoSheet(): { columns: Column[]; rows: RecordRow[]; total: number; maxSheetRowNumber: number } {
+  const fallbackColumns = buildLocalDemoColumns(), fallbackRows = buildLocalDemoRows(fallbackColumns);
+  try {
+    const raw = localStorage.getItem(LOCAL_DEMO_STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw) as { columns?: Column[]; rows?: RecordRow[]; maxSheetRowNumber?: number };
+      if (Array.isArray(saved.columns) && saved.columns.length > 0 && Array.isArray(saved.rows) &&
+          saved.columns.every(column => column && typeof column.key === 'string') &&
+          saved.rows.every(row => row && typeof row.id === 'string' && row.data && typeof row.data === 'object')) {
+        return { columns: saved.columns, rows: saved.rows, total: saved.rows.length,
+          maxSheetRowNumber: Math.max(1, Number(saved.maxSheetRowNumber || 1),
+            ...saved.rows.map(row => Number(row.sheetRowNumber ?? row.sequence + 1))) };
+      }
+    }
+    const legacyRaw = localStorage.getItem('mapa-costalog-public-demo-v1');
+    if (legacyRaw) {
+      const legacy = JSON.parse(legacyRaw) as { columns?: { id: string; key: string; label: string }[]; rows?: { id: string; data: Record<string, string> }[] };
+      if (Array.isArray(legacy.columns) && Array.isArray(legacy.rows)) {
+        const migratedColumns: Column[] = legacy.columns.map((column, index) => ({
+          key: column.key, label: column.label || '', position: index + 1,
+          dataType: column.key === 'A' ? 'date' : column.key === 'Q' ? 'currency' : column.key === 'AO' ? 'number' : 'text',
+          editable: true, visible: true
+        }));
+        const migratedRows: RecordRow[] = legacy.rows.map((row, index) => {
+          const data: Record<string, unknown> = Object.fromEntries(migratedColumns.map(column => [column.key, row.data['col-' + column.key] ?? '']));
+          return { id: row.id, sequence: index + 1, sheetRowNumber: index + 2, data,
+            status: String(data.C || ''), clientName: String(data.L || ''), container: String(data.T || ''), cte: String(data.D || ''),
+            updatedAt: '2026-10-29T12:00:00.000Z' };
+        });
+        return { columns: migratedColumns, rows: migratedRows, total: migratedRows.length,
+          maxSheetRowNumber: Math.max(1, ...migratedRows.map(row => Number(row.sheetRowNumber ?? 1))) };
+      }
+    }
+  } catch { /* Start from labelled sample data if browser storage is invalid. */ }
+  return { columns: fallbackColumns, rows: fallbackRows, total: fallbackRows.length, maxSheetRowNumber: 25 };
+}
+const initialLocalDemoSheet = isGitHubPagesPreview ? loadLocalDemoSheet() : null;
+
 export default function App() {
   const [active, setActive] = useState('MAPA 2.0');
   const [query, setQuery] = useState('');
@@ -98,9 +173,9 @@ export default function App() {
   const cellSaveBusyRef = useRef(false);
   const gridMutationBusyRef = useRef(false);
   const editorRef = useRef<HTMLInputElement>(null);
-  const [token, setToken] = useState(() => apiBase ? sessionStorage.getItem('mapa-costalog-token') || '' : '');
-  const [userKey, setUserKey] = useState(() => sessionStorage.getItem('mapa-costalog-user') || 'usuario');
-  const [userRole, setUserRole] = useState(() => sessionStorage.getItem('mapa-costalog-role') || '');
+  const [token, setToken] = useState(() => isGitHubPagesPreview ? 'local-demo' : apiBase ? sessionStorage.getItem('mapa-costalog-token') || '' : '');
+  const [userKey, setUserKey] = useState(() => isGitHubPagesPreview ? 'local-demo' : sessionStorage.getItem('mapa-costalog-user') || 'usuario');
+  const [userRole, setUserRole] = useState(() => isGitHubPagesPreview ? 'ADMIN' : sessionStorage.getItem('mapa-costalog-role') || '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authScreen, setAuthScreen] = useState<'login' | 'request'>('login');
@@ -112,8 +187,8 @@ export default function App() {
   const [apiError, setApiError] = useState('');
   const [notice, setNotice] = useState('Conecte a API e o banco de dados para acessar os registros operacionais.');
   const [loading, setLoading] = useState(false);
-  const [columns, setColumns] = useState<Column[]>([]);
-  const [rows, setRows] = useState<RecordRow[]>([]);
+  const [columns, setColumns] = useState<Column[]>(() => initialLocalDemoSheet?.columns ?? []);
+  const [rows, setRows] = useState<RecordRow[]>(() => initialLocalDemoSheet?.rows ?? []);
   const rowsRef=useRef<RecordRow[]>([]);
   useEffect(()=>{rowsRef.current=rows;},[rows]);
   const undoStacksRef=useRef<{undo:UndoStep[];redo:UndoStep[]}>({undo:[],redo:[]});
@@ -171,9 +246,14 @@ export default function App() {
   const dragInfoRef = useRef<{row:number;column:number;x:number;y:number;moved:boolean}|null>(null);
   const lastRequestedPageRef = useRef(0);
   const [retryRowsKey, setRetryRowsKey] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [maxSheetRowNumber,setMaxSheetRowNumber] = useState(1);
-  const [gridRangeSupported,setGridRangeSupported] = useState<boolean|null>(null);
+  const [total, setTotal] = useState(() => initialLocalDemoSheet?.total ?? 0);
+  const [maxSheetRowNumber,setMaxSheetRowNumber] = useState(() => initialLocalDemoSheet?.maxSheetRowNumber ?? 1);
+  useEffect(() => {
+    if (!isGitHubPagesPreview || !columns.length) return;
+    try { localStorage.setItem(LOCAL_DEMO_STORAGE_KEY, JSON.stringify({ columns, rows, total, maxSheetRowNumber })); }
+    catch { setNotice('O navegador não conseguiu salvar todas as alterações. Copie os dados antes de fechar a página.'); }
+  }, [columns, rows, total, maxSheetRowNumber]);
+  const [gridRangeSupported,setGridRangeSupported] = useState<boolean|null>(() => isGitHubPagesPreview ? true : null);
   const loadedGridChunksRef=useRef(new Set<number>());
   const inFlightGridChunksRef=useRef(new Set<number>());
   const [blankEditing,setBlankEditing] = useState<{index:number;columnKey:string}|null>(null);
@@ -181,8 +261,20 @@ export default function App() {
   const [blankSaving,setBlankSaving] = useState(false);
   const [selectedBlankRow,setSelectedBlankRow] = useState<number|null>(null);
   const [columnMenu, setColumnMenu] = useState(false);
-  const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
-  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [visibleKeys, setVisibleKeys] = useState<string[]>(() => {
+    if (!isGitHubPagesPreview || !initialLocalDemoSheet) return [];
+    try {
+      const saved = localStorage.getItem('mapa-costalog-columns:local-demo');
+      const keys = saved ? JSON.parse(saved) as string[] : null;
+      return Array.isArray(keys) ? keys.filter(key => initialLocalDemoSheet.columns.some(column => column.key === key))
+        : initialLocalDemoSheet.columns.map(column => column.key);
+    } catch { return initialLocalDemoSheet.columns.map(column => column.key); }
+  });
+  const [savedViews, setSavedViews] = useState<SavedView[]>(() => {
+    if (!isGitHubPagesPreview) return [];
+    try { const saved = localStorage.getItem('mapa-costalog-views:local-demo'); const parsed = saved ? JSON.parse(saved) as SavedView[] : []; return Array.isArray(parsed) ? parsed : []; }
+    catch { return []; }
+  });
   const [viewName, setViewName] = useState('');
   const [showViewTools, setShowViewTools] = useState(false);
   const [showStatusColors, setShowStatusColors] = useState(false);
@@ -263,6 +355,11 @@ export default function App() {
   const editableColumns = columns.filter(column => column.editable);
   const preferenceKey = 'mapa-costalog-columns:' + userKey;
   const widthKey = 'mapa-costalog-widths:' + userKey;
+  useEffect(() => {
+    if (!isGitHubPagesPreview) return;
+    try { localStorage.setItem(preferenceKey, JSON.stringify(visibleKeys)); localStorage.setItem('mapa-costalog-views:local-demo', JSON.stringify(savedViews)); }
+    catch { /* Keep the grid usable if storage is unavailable. */ }
+  }, [preferenceKey, visibleKeys, savedViews]);
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(widthKey) || '{}') as Record<string, unknown>;
@@ -478,6 +575,7 @@ export default function App() {
       rowStyles: nextRowStyles, cellStyles: nextCellStyles, columnStyles: nextColumnStyles
     }));
     // Preferences are UI formatting, never modifications of operational rows.
+    if (isGitHubPagesPreview) { setNotice('Formatação da ' + scope + ' salva neste navegador.'); return; }
     void (async () => {
       try {
         const response = await fetch(apiBase + '/api/v1/preferences', {
@@ -685,7 +783,7 @@ export default function App() {
     } finally { setBulkBusy(false); }
   }
   async function saveCell(row: RecordRow, column: Column, value: string): Promise<boolean> {
-    if (!apiBase || !token || !column.editable || userRole === 'CONSULTA' || gridMutationBusyRef.current || cellSaveBusyRef.current) return false;
+    if ((!apiBase && !isGitHubPagesPreview) || !token || !column.editable || userRole === 'CONSULTA' || gridMutationBusyRef.current || cellSaveBusyRef.current) return false;
     const previousValue = valueText(row.data?.[column.key]);
     if (value === previousValue) return true;
     const parsed = LOCKED_COLUMN_FORMAT[column.key]
@@ -694,6 +792,15 @@ export default function App() {
     if (!parsed.ok) {
       setApiError(parsed.message + ' na coluna ' + column.label + '.');
       return false;
+    }
+    if (isGitHubPagesPreview) {
+      const updated: RecordRow = { ...row, data: { ...row.data, [column.key]: parsed.value },
+        updatedAt: new Date().toISOString(), ...(column.key === 'C' ? { status: valueText(parsed.value) } : {}) };
+      setRows(previous => previous.map(item => item.id === row.id ? updated : item));
+      const edit = buildUndoRecord(row, updated, [column.key]);
+      if (edit) rememberUndo({ kind: 'cells', label: 'Edição da célula ' + column.key + row.sequence, edits: [edit] });
+      setNotice('Alteração salva automaticamente neste navegador.'); setApiError('');
+      return true;
     }
     cellSaveBusyRef.current=true;
     // Apply the conditional row color immediately while the audited PATCH
@@ -742,7 +849,7 @@ export default function App() {
     const source=stacks[direction],target=stacks[direction==='undo'?'redo':'undo'];
     const entry=source[source.length-1];
     if(!entry){setUndoFeedback(direction==='undo'?'Nada para desfazer.':'Nada para refazer.');return;}
-    if(entry.kind!=='size'&&(!token||!apiBase||userRole==='CONSULTA'))return;
+    if(entry.kind!=='size'&&(!token||(!apiBase&&!isGitHubPagesPreview)||userRole==='CONSULTA'))return;
     undoBusyRef.current=true;
     setUndoFeedback('');
     setApiError('');
@@ -765,6 +872,12 @@ export default function App() {
             failed=new Error('Os valores da linha mudaram durante a operação.');break;
           }
           try{
+            if (isGitHubPagesPreview) {
+              const updated: RecordRow = { ...current, data: { ...current.data, ...(direction === 'undo' ? edit.before : edit.after) }, updatedAt: new Date().toISOString() };
+              rowsRef.current = rowsRef.current.map(row => row.id === updated.id ? updated : row);
+              setRows(previous => previous.map(row => row.id === updated.id ? updated : row));
+              completed.push(edit); continue;
+            }
             const response=await fetch(apiBase+'/api/v1/mapa/'+encodeURIComponent(edit.rowId),{
               method:'PATCH',
               headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
@@ -958,10 +1071,10 @@ export default function App() {
   useEffect(()=>{
     loadedGridChunksRef.current.clear();
     inFlightGridChunksRef.current.clear();
-    setGridRangeSupported(null);
+    setGridRangeSupported(isGitHubPagesPreview ? true : null);
   },[token]);
   useEffect(()=>{
-    if(!sheetCanvas||!token||active!=='MAPA 2.0'||gridRangeSupported===false)return;
+    if(isGitHubPagesPreview||!sheetCanvas||!token||active!=='MAPA 2.0'||gridRangeSupported===false)return;
     const first=Math.floor(windowed.start/100),last=Math.floor(Math.max(windowed.start,windowed.end-1)/100);
     const controller=new AbortController();
     for(let chunk=first;chunk<=Math.min(last,first+3);chunk++){
@@ -1188,7 +1301,7 @@ export default function App() {
     setPlaceholderPosition({row:index,column:columnIndex});
     if(openEditor){
       if(userRole==='CONSULTA'||!column.editable || gridRangeSupported!==true ||
-         !loadedGridChunksRef.current.has(Math.floor(index/100)))return;
+         (!isGitHubPagesPreview && !loadedGridChunksRef.current.has(Math.floor(index/100))))return;
       setBlankEditing({index,columnKey:column.key});
       setBlankDraft(replacement??'');
     }else{
@@ -1210,6 +1323,24 @@ export default function App() {
     if(parsed.value===null||parsed.value===''){
       setBlankEditing(null);setBlankDraft('');
     }else{
+      if (isGitHubPagesPreview) {
+        const position = index + 2;
+        const existing = rowsRef.current.find(row => Number(row.sheetRowNumber ?? row.sequence + 1) === position);
+        const created: RecordRow = existing
+          ? { ...existing, data: { ...existing.data, [column.key]: parsed.value }, updatedAt: new Date().toISOString() }
+          : { id: 'local-sheet-row-' + position, sequence: position - 1, sheetRowNumber: position, data: { [column.key]: parsed.value },
+              status: column.key === 'C' ? valueText(parsed.value) : '', clientName: column.key === 'L' ? valueText(parsed.value) : '',
+              container: column.key === 'T' ? valueText(parsed.value) : '', cte: column.key === 'D' ? valueText(parsed.value) : '',
+              updatedAt: new Date().toISOString() };
+        const nextRows = existing ? rowsRef.current.map(row => row.id === existing.id ? created : row)
+          : [...rowsRef.current, created].sort((a,b) => Number(a.sheetRowNumber ?? a.sequence + 1) - Number(b.sheetRowNumber ?? b.sequence + 1));
+        rowsRef.current = nextRows; setRows(nextRows); setTotal(nextRows.length);
+        setMaxSheetRowNumber(previous => Math.max(previous, position));
+        const edit = buildUndoRecord(existing ?? { id: created.id, data: {} }, created, [column.key]);
+        if (edit) rememberUndo({ kind: 'cells', label: 'Preenchimento de nova linha', edits: [edit] });
+        setNotice('Linha ' + position + ' criada automaticamente ao preencher a célula.');
+        setApiError(''); setBlankEditing(null); setBlankDraft(''); return;
+      }
       setBlankSaving(true);
       try{
         const response=await fetch(apiBase+'/api/v1/mapa',{
@@ -1473,7 +1604,13 @@ export default function App() {
       const unique=[...new Map(candidates.map(item=>[item.id,item])).values()];
       if(!unique.length){setApiError('Selecione uma ou mais linhas.');return;}
       if(unique.length>100){setApiError('É possível excluir até 100 linhas por operação.');return;}
-      if(!window.confirm('Arquivar '+unique.length+' linha(s) selecionada(s)? Elas deixarão a grade, mas o histórico será preservado.'))return;
+      if(!window.confirm(isGitHubPagesPreview ? 'Excluir ' + unique.length + ' linha(s) desta cópia local?' : 'Arquivar '+unique.length+' linha(s) selecionada(s)? Elas deixarão a grade, mas o histórico será preservado.'))return;
+      if (isGitHubPagesPreview) {
+        const ids = new Set(unique.map(row => row.id)); const nextRows = rowsRef.current.filter(row => !ids.has(row.id));
+        rowsRef.current = nextRows; setRows(nextRows); setTotal(nextRows.length);
+        setSelectedRowIds([]); setSelectedCell(null); setSelectionAnchor(null);
+        setNotice(unique.length + ' linha(s) excluída(s) desta cópia local.'); return;
+      }
       setAdminSheetBusy(true);
       try{
         const response=await fetch(apiBase+'/api/v1/mapa/archive-selected',{
@@ -1496,8 +1633,14 @@ export default function App() {
     }
     if(action==='delete-column' && currentColumn){
       if(visibleColumns.length<=1){setApiError('Não é possível excluir a última coluna.');return;}
-      if(!window.confirm('Excluir a coluna '+currentColumn.key+' ('+currentColumn.label+
-        ') da grade compartilhada? Valores antigos e histórico serão preservados.'))return;
+      if(!window.confirm(isGitHubPagesPreview ? 'Excluir a coluna ' + currentColumn.key + ' desta cópia local?' : 'Excluir a coluna '+currentColumn.key+' ('+currentColumn.label+') da grade compartilhada? Valores antigos e histórico serão preservados.'))return;
+      if (isGitHubPagesPreview) {
+        setColumns(previous => previous.filter(item => item.key !== currentColumn.key));
+        setVisibleKeys(previous => previous.filter(key => key !== currentColumn.key));
+        const nextRows = rowsRef.current.map(row => { const data = { ...row.data }; delete data[currentColumn.key]; return { ...row, data }; });
+        rowsRef.current = nextRows; setRows(nextRows); setSelectedCell(null); setSelectionAnchor(null); setSelectedColumnKey(null);
+        setNotice('Coluna ' + currentColumn.key + ' excluída desta cópia local.'); return;
+      }
       setAdminSheetBusy(true);
       try{
         const response=await fetch(apiBase+'/api/v1/config/columns/'+encodeURIComponent(currentColumn.key)+'/archive',{
@@ -1614,11 +1757,26 @@ export default function App() {
     edits: {row:RecordRow;changes:Record<string,string|number|boolean|null>}[],
     action: 'Colagem' | 'Limpeza'
   ) {
-    if(gridMutationBusyRef.current || !token || !apiBase || userRole==='CONSULTA')return;
+    if(gridMutationBusyRef.current || !token || (!apiBase && !isGitHubPagesPreview) || userRole==='CONSULTA')return;
     gridMutationBusyRef.current=true;setPasteBusy(true);setApiError('');
     let saved=0;
     const undoEdits:UndoRecord[]=[];
     try{
+      if (isGitHubPagesPreview) {
+        const updates = new Map<string, RecordRow>();
+        for (const { row, changes } of edits) {
+          if (!Object.keys(changes).length) continue;
+          const current = rowsRef.current.find(item => item.id === row.id) || row;
+          const updated: RecordRow = { ...current, data: { ...current.data, ...changes }, updatedAt: new Date().toISOString(),
+            ...(Object.prototype.hasOwnProperty.call(changes, 'C') ? { status: valueText(changes.C) } : {}) };
+          updates.set(updated.id, updated);
+          const undo = buildUndoRecord(current, updated, Object.keys(changes)); if (undo) undoEdits.push(undo);
+          saved++;
+        }
+        const nextRows = rowsRef.current.map(row => updates.get(row.id) || row);
+        rowsRef.current = nextRows; setRows(nextRows);
+        setNotice(action + ' aplicada diretamente neste navegador: ' + saved + ' linha(s) atualizada(s).');
+      } else {
       for(const {row,changes} of edits){
         if(!Object.keys(changes).length)continue;
         const response=await fetch(apiBase+'/api/v1/mapa/'+encodeURIComponent(row.id),{
@@ -1634,6 +1792,7 @@ export default function App() {
         saved++;
       }
       setNotice(action+' aplicada diretamente: '+saved+' linha(s) atualizada(s).');
+      }
     }catch(error){
       setApiError(action+' interrompida após '+saved+' linha(s) salva(s): '+
         (error instanceof Error?error.message:'Falha de gravação')+
@@ -1654,7 +1813,7 @@ export default function App() {
     if(edits.length)await updateGridRows(edits,'Limpeza');
   }
   async function pasteVirtualRange(plainText:string,start:GridPosition){
-    if(gridRangeSupported!==true||!token||userRole==='CONSULTA'){
+    if((!isGitHubPagesPreview&&gridRangeSupported!==true)||!token||userRole==='CONSULTA'){
       setApiError('A colagem em linhas virtuais requer a API de homologação atualizada.');
       return;
     }
@@ -1679,6 +1838,30 @@ export default function App() {
         changes[column.key]=parsed.value;
       }
       requested.push({position:start.row+i+2,changes});
+    }
+    if (isGitHubPagesPreview) {
+      const byPosition = new Map<number, RecordRow>(rowsRef.current.map(row => [Number(row.sheetRowNumber ?? row.sequence + 1), row]));
+      const updates = new Map<string, RecordRow>(); const createdRows: RecordRow[] = []; const undoEdits: UndoRecord[] = [];
+      for (const item of requested) {
+        const old = byPosition.get(item.position);
+        if (!old && !Object.values(item.changes).some(value => value !== null && value !== '')) continue;
+        const updated: RecordRow = old
+          ? { ...old, data: { ...old.data, ...item.changes }, updatedAt: new Date().toISOString() }
+          : { id: 'local-sheet-row-' + item.position, sequence: item.position - 1, sheetRowNumber: item.position,
+              data: { ...item.changes }, status: valueText(item.changes.C || ''), clientName: valueText(item.changes.L || ''),
+              container: valueText(item.changes.T || ''), cte: valueText(item.changes.D || ''), updatedAt: new Date().toISOString() };
+        updates.set(updated.id, updated); if (!old) createdRows.push(updated);
+        const undo = buildUndoRecord(old ?? { id: updated.id, data: {} }, updated, Object.keys(item.changes));
+        if (undo) undoEdits.push(undo);
+      }
+      const nextRows = [...rowsRef.current.filter(row => !updates.has(row.id)), ...updates.values()]
+        .sort((a,b) => Number(a.sheetRowNumber ?? a.sequence + 1) - Number(b.sheetRowNumber ?? b.sequence + 1));
+      rowsRef.current = nextRows; setRows(nextRows); setTotal(nextRows.length);
+      setMaxSheetRowNumber(previous => Math.max(previous, ...requested.map(item => item.position)));
+      if (undoEdits.length) rememberUndo({ kind: 'cells', label: 'Colagem em linhas da grade', edits: undoEdits });
+      setBlankEditing(null); setBlankDraft(''); setPlaceholderPosition(null);
+      setNotice('Colagem direta: ' + updates.size + ' linha(s) atualizada(s); ' + createdRows.length + ' criada(s).');
+      setApiError(''); return;
     }
     gridMutationBusyRef.current=true;setPasteBusy(true);setApiError('');
     let saved=0,created=0;
@@ -1809,12 +1992,24 @@ export default function App() {
 
   async function createManyRows() {
     const count=normalizeCreateCount(newRowsCount);
-    if(!count||!apiBase||!token||creatingRows||userRole==='CONSULTA') {
+    if(!count||(!apiBase&&!isGitHubPagesPreview)||!token||creatingRows||userRole==='CONSULTA') {
       setApiError('Informe de 1 a 100 linhas e confira suas permissões.');return;
     }
-    if(!window.confirm('Criar '+count+' linhas vazias no MAPA? Elas serão registros reais na API conectada.'))return;
+    if(!window.confirm(isGitHubPagesPreview ? 'Criar ' + count + ' linhas vazias nesta cópia local do MAPA?' : 'Criar '+count+' linhas vazias no MAPA? Elas serão registros reais na API conectada.'))return;
     setCreatingRows(true);setApiError('');
     try{
+      if (isGitHubPagesPreview) {
+        const start = Math.max(maxSheetRowNumber, ...rows.map(row => Number(row.sheetRowNumber ?? row.sequence + 1))) + 1;
+        const createdRows: RecordRow[] = Array.from({ length: count }, (_, offset) => {
+          const position = start + offset;
+          return { id: 'local-sheet-row-' + position, sequence: position - 1, sheetRowNumber: position, data: {},
+            status: '', clientName: '', container: '', cte: '', updatedAt: new Date().toISOString() };
+        });
+        const nextRows = [...rowsRef.current, ...createdRows].sort((a,b) => Number(a.sheetRowNumber ?? a.sequence + 1) - Number(b.sheetRowNumber ?? b.sequence + 1));
+        rowsRef.current = nextRows; setRows(nextRows); setTotal(nextRows.length); setMaxSheetRowNumber(start + count - 1);
+        setNewRowsOpen(false); setNotice(count + ' linha(s) vazia(s) criada(s) nesta cópia local.'); setApiError('');
+        if (gridRef.current) gridRef.current.scrollTop = 0; return;
+      }
       const response=await fetch(apiBase+'/api/v1/mapa/batch-blank',{
         method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
         body:JSON.stringify({count})
@@ -1902,7 +2097,7 @@ export default function App() {
       <div className="workspace"><span className="workspace-dot"/> MAPA operacional <ChevronDown size={15}/></div>
       <div className="nav-label">MENU PRINCIPAL</div>
       <nav>{nav.map(item => <button key={item.name} className={`nav-item ${active === item.name ? 'active' : ''}`} onClick={() => setActive(item.name)}><item.icon size={18}/><span>{item.name}</span>{item.name === 'MAPA 2.0' && <span className="nav-count">{columns.length}</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="connection"><span className="connection-dot"/> {apiBase && token ? 'Conectado à API' : 'API não conectada'}</div><div className="user"><div className="avatar">C</div><div><b>Costalog</b><small>{token ? 'Usuário autenticado' : 'Acesso operacional'}</small></div><Settings2 size={17}/></div></div>
+      <div className="sidebar-bottom"><div className="connection"><span className="connection-dot"/> {isGitHubPagesPreview ? 'Demonstração local' : apiBase && token ? 'Conectado à API' : 'API não conectada'}</div><div className="user"><div className="avatar">C</div><div><b>Costalog</b><small>{isGitHubPagesPreview ? 'Modo local · sem login real' : token ? 'Usuário autenticado' : 'Acesso operacional'}</small></div><Settings2 size={17}/></div></div>
     </aside>
     <main className="main">
       <header className="topbar"><button type="button" className="sidebar-toggle" title={sidebarCollapsed?'Mostrar menu':'Ocultar menu'}
@@ -1915,10 +2110,13 @@ export default function App() {
             aria-pressed={structuralDarkMode} onClick={toggleStructuralDarkMode}>
             {structuralDarkMode?<Sun size={15}/>:<Moon size={15}/>}
             <span>{structuralDarkMode?'Modo claro':'Modo escuro'}</span>
-          </button>{token && <button className="secondary" onClick={logout}><LogOut size={15}/> Sair</button>}<button className="icon-button" title="Notificações"><Bell size={18}/></button><div className="avatar small">C</div></div></header>
+          </button>{token && !isGitHubPagesPreview && <button className="secondary" onClick={logout}><LogOut size={15}/> Sair</button>}<button className="icon-button" title="Notificações"><Bell size={18}/></button><div className="avatar small">C</div></div></header>
+      {isGitHubPagesPreview && <div className="notice local-demo-warning" role="status">
+        <ShieldCheck size={17}/><span><strong>Demonstração local — sem login real.</strong> Os registros são exemplos e as alterações ficam apenas neste navegador; não há banco compartilhado nem dados confidenciais. Exporte ou copie o que precisar antes de limpar os dados do navegador.</span>
+      </div>}
       <section className={'content ' + (active === 'MAPA 2.0' ? 'map-content' : '')}>
         {active !== 'MAPA 2.0' && <div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPERAÇÕES</div><h1>{active}</h1><p>Grade operacional completa, com colunas configuráveis para cada usuário.</p></div></div>}
-        {active !== 'MAPA 2.0' && <div className="notice"><ClipboardList size={17}/><span>{apiBase ? (token ? notice : 'Entre com sua conta para acessar os dados reais.') : 'Configure VITE_API_URL para conectar a aplicação à API. Nenhum dado fictício será exibido.'}</span></div>}
+        {active !== 'MAPA 2.0' && <div className="notice"><ClipboardList size={17}/><span>{isGitHubPagesPreview ? 'Demonstração local: dados de exemplo e alterações salvos neste navegador.' : apiBase ? (token ? notice : 'Entre com sua conta para acessar os dados reais.') : 'Configure VITE_API_URL para conectar a aplicação à API. Nenhum dado fictício será exibido.'}</span></div>}
         {apiBase && !token && <form className="panel login-panel" onSubmit={login}><div><h2>Acessar MAPA COSTALOG</h2><p>Entre com seu usuário autorizado.</p></div><div className="login-fields"><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail corporativo" autoComplete="username"/><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha" autoComplete="current-password"/><button className="primary" disabled={loading}>{loading ? 'Conectando...' : 'Entrar'}</button></div>{apiError && <p className="api-error">{apiError}</p>}</form>}
         {apiBase && apiError && token && <div className="notice api-error" role="alert"><span>{apiError}</span>{apiError.startsWith('Ctrl+')?
   <button onClick={()=>setApiError('')}>Fechar</button>:
@@ -2359,7 +2557,7 @@ export default function App() {
               <button type="button" className="primary" onClick={applyColumnFilter}>Aplicar</button>
             </div>
           </div>}
-          <footer className="table-footer"><span>{apiBase && token ? 'Dados do banco • edição individual com auditoria' : 'Sem dados de demonstração'}</span><span><span className="green-dot"/> {visibleColumns.length} coluna(s) selecionada(s)</span></footer>
+          <footer className="table-footer"><span>{isGitHubPagesPreview ? 'Dados locais • salvamento automático no navegador' : apiBase && token ? 'Dados do banco • edição individual com auditoria' : 'Sem dados de demonstração'}</span><span><span className="green-dot"/> {visibleColumns.length} coluna(s) selecionada(s)</span></footer>
           {sheetCanvas && gridRangeSupported===false && <div className="sheet-grid-compat-alert" role="status">
             A API conectada ainda não suporta as linhas virtuais editáveis.
             Conecte a API de homologação atualizada para cadastrar diretamente na grade.
