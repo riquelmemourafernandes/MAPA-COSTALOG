@@ -104,8 +104,35 @@ const patchSchema = z.object({
   expectedUpdatedAt: z.string().datetime().optional()
 });
 
-app.get("/api/v1/health", (_req, res) => {
-  res.json({ status: "ok", service: "mapa-costalog-api", databaseConfigured: Boolean(process.env.DATABASE_URL) });
+app.get("/api/v1/health", async (_req, res) => {
+  const databaseConfigured = Boolean(process.env.DATABASE_URL);
+  if (!databaseConfigured) {
+    return res.json({
+      status: "degraded",
+      service: "mapa-costalog-api",
+      databaseConfigured: false,
+      databaseConnected: false
+    });
+  }
+
+  try {
+    // Read-only connectivity check; does not inspect or modify application data.
+    await prisma.$queryRaw`SELECT 1`;
+    return res.json({
+      status: "ok",
+      service: "mapa-costalog-api",
+      databaseConfigured: true,
+      databaseConnected: true
+    });
+  } catch {
+    // Avoid exposing database hostnames, credentials, or internal errors publicly.
+    return res.json({
+      status: "degraded",
+      service: "mapa-costalog-api",
+      databaseConfigured: true,
+      databaseConnected: false
+    });
+  }
 });
 
 const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false });
