@@ -69,8 +69,10 @@ jobs:
       contents: read
       pages: write
       id-token: write
+    # Use a separate environment so the homologation branch is not blocked
+    # by branch restrictions on the default github-pages environment.
     environment:
-      name: github-pages
+      name: github-pages-homologacao
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy homologation website to GitHub Pages
