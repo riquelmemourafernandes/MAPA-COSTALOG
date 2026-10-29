@@ -1085,15 +1085,15 @@ export default function App() {
 
   const displayedRows = useMemo(() => {
     const filtered = rows.filter(row => {
-      const values = Object.values(row.data || {}).map(valueText).join(' ') + ' ' + [row.status,row.clientName,row.container,row.cte].map(valueText).join(' ');
+      const values = columns.map(column => valueText(displayedCellValue(row, column))).join(' ') + ' ' + [row.status,row.clientName,row.container,row.cte].map(valueText).join(' ');
       const matchesGlobal = values.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR'));
-      const matchesSelectedColumn = !filterColumn || valueText(row.data?.[filterColumn]).toLocaleLowerCase('pt-BR').includes(filterValue.toLocaleLowerCase('pt-BR'));
-      const matchesEachColumn = matchesColumnFilters(row.data || {}, columnFilters);
+      const selectedFilterColumn = columns.find(column => column.key === filterColumn);\n      const matchesSelectedColumn = !filterColumn || valueText(selectedFilterColumn ? displayedCellValue(row, selectedFilterColumn) : row.data?.[filterColumn]).toLocaleLowerCase('pt-BR').includes(filterValue.toLocaleLowerCase('pt-BR'));
+      const calculatedData = Object.fromEntries(columns.map(column => [column.key, displayedCellValue(row, column)]));\n      const matchesEachColumn = matchesColumnFilters(calculatedData, columnFilters);
       return matchesGlobal && matchesSelectedColumn && matchesEachColumn;
     });
     if (!sortConfig) return filtered;
     return [...filtered].sort((a,b) => {
-      const av = valueText(a.data?.[sortConfig.key]).trim(); const bv = valueText(b.data?.[sortConfig.key]).trim();
+      const sortColumn = columns.find(column => column.key === sortConfig.key);\n      const av = valueText(sortColumn ? displayedCellValue(a, sortColumn) : a.data?.[sortConfig.key]).trim(); const bv = valueText(sortColumn ? displayedCellValue(b, sortColumn) : b.data?.[sortConfig.key]).trim();
       const an = Number(av.replace(/\\./g,'').replace(',','.')); const bn = Number(bv.replace(/\\./g,'').replace(',','.'));
       const bothNumeric = av !== '' && bv !== '' && Number.isFinite(an) && Number.isFinite(bn);
       const compared = bothNumeric ? an-bn : av.localeCompare(bv,'pt-BR',{numeric:true,sensitivity:'base'});
@@ -2157,7 +2157,7 @@ export default function App() {
     const orderedRows = [...rows].sort((a,b) => Number(a.sheetRowNumber ?? a.sequence + 1) - Number(b.sheetRowNumber ?? b.sequence + 1));
     const lines = [
       visibleColumns.map(column => csvEscape(column.label || column.key)).join(','),
-      ...orderedRows.map(row => visibleColumns.map(column => csvEscape(row.data?.[column.key])).join(','))
+      ...orderedRows.map(row => visibleColumns.map(column => csvEscape(displayedCellValue(row, column))).join(','))
     ];
     const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
