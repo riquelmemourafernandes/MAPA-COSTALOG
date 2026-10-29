@@ -479,3 +479,170 @@ td:hover .cell-history,.cell-history:focus{opacity:1}
 
 .sheet-grid-compat-alert{padding:7px 12px;background:#fff8e7;border-top:1px solid #e6d5ad;
   color:#815f23;font-size:11px;line-height:1.5}
+
+
+/* Strong selection, like desktop spreadsheets.
+   Existing operational colors remain CSS backgroundColor of the cell. */
+.mapa-grid-panel .sheet-table tbody tr.sheet-whole-row-selected>td{
+  background-image:linear-gradient(rgb(15 35 41 / 24%),rgb(15 35 41 / 24%))!important;
+  box-shadow:inset 0 1px 0 #2b6275,inset 0 -1px 0 #2b6275!important;
+}
+.mapa-grid-panel .sheet-table tbody tr.sheet-whole-row-selected>td:first-of-type{
+  box-shadow:inset 3px 0 0 #175baf,inset 0 1px 0 #2b6275,inset 0 -1px 0 #2b6275!important;
+}
+.mapa-grid-panel .sheet-table tbody tr.sheet-whole-row-selected>th.sheet-row-number,
+.mapa-grid-panel .sheet-table tbody th.sheet-row-number.sheet-row-selected{
+  background:#205986!important;color:#fff!important;
+  box-shadow:inset 3px 0 0 #7cbbff!important;
+}
+.mapa-grid-panel .sheet-table tbody tr.sheet-row-active>th.sheet-row-number,
+.mapa-grid-panel .sheet-table tbody th.sheet-row-number.sheet-row-active-header{
+  background:#c0d5ec!important;color:#133e69!important;
+  box-shadow:inset 3px 0 0 #3476bb!important;
+}
+.mapa-grid-panel .sheet-table td.selected-cell,
+.mapa-grid-panel .sheet-table tr.sheet-virtual-empty-row>td.selected-cell{
+  position:relative!important;z-index:5!important;
+  outline:3px solid #175bea!important;outline-offset:-3px!important;
+  box-shadow:inset 0 0 0 1px #e9f4ff,0 0 0 1px rgb(24 80 176 / 22%)!important;
+}
+.mapa-grid-panel .sheet-table td.selected-cell::after{
+  content:"";position:absolute;right:0;bottom:0;width:6px;height:6px;
+  background:#175bea;border:1px solid #fff;pointer-events:none;z-index:8;
+}
+.mapa-grid-panel .sheet-table td.sheet-range-cell:not(.selected-cell){
+  background-image:linear-gradient(rgb(24 90 191 / 12%),rgb(24 90 191 / 12%))!important;
+  box-shadow:inset 0 0 0 1px rgb(37 102 189 / 24%);
+}
+.mapa-grid-panel .sheet-table tr.sheet-virtual-row-selected>td,
+.mapa-grid-panel .sheet-table tr.sheet-virtual-empty-row>td.sheet-range-cell{
+  background:#c4d5e8!important;
+  box-shadow:inset 0 1px #7c9dbc,inset 0 -1px #7c9dbc!important;
+}
+.mapa-grid-panel .sheet-table tr.sheet-virtual-empty-row>td.selected-cell{
+  background:#fff!important;
+  box-shadow:inset 0 0 0 1px #f1f8ff,0 0 0 1px rgb(24 80 176 / 20%)!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th.sheet-column-active-header{
+  background:#93bfe5!important;color:#143e69!important;
+  box-shadow:inset 0 -3px 0 #2863af;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th.sheet-column-selected{
+  background:#2c6397!important;color:#fff!important;
+  box-shadow:inset 0 -3px 0 #a0d0ff;
+}
+
+/* Chrome-only theme. Do not apply a theme filter to cells, status colors,
+   checkbox columns, or the white editing canvas. */
+.structural-theme-toggle{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  height:30px;min-width:105px;padding:5px 10px;
+  border:1px solid #d7e2d8;border-radius:6px;
+  background:#f9fbf9;color:#324e3d;font-size:11px;
+  font-weight:650;white-space:nowrap;cursor:pointer;
+}
+.structural-theme-toggle:hover{background:#e9f2ea}
+.app-shell.structural-dark{background:#141b22;color:#e6edef}
+.app-shell.structural-dark .main,
+.app-shell.structural-dark .content.map-content{background:#141b22;color:#e6edef}
+.app-shell.structural-dark .sidebar{background:#081c19;border-right:1px solid #31443e}
+.app-shell.structural-dark .topbar{
+  background:#171f27!important;border-bottom-color:#3b4950!important;
+  color:#e8f0f1;
+}
+.app-shell.structural-dark .breadcrumbs{color:#b2c0c4}
+.app-shell.structural-dark .breadcrumbs b{color:#e9f2f4}
+.app-shell.structural-dark .breadcrumbs span{color:#748990}
+.app-shell.structural-dark .sidebar-toggle,
+.app-shell.structural-dark .topbar .icon-button{color:#b6c8ca}
+.app-shell.structural-dark .sidebar-toggle:hover,
+.app-shell.structural-dark .topbar .icon-button:hover{background:#344047}
+.app-shell.structural-dark .structural-theme-toggle{
+  background:#2c3941;color:#e7f1f3;border-color:#62747d;
+}
+.app-shell.structural-dark .structural-theme-toggle:hover{background:#40505a}
+.app-shell.structural-dark .topbar .secondary{
+  background:#2c3941;color:#e7f1f3;border-color:#62747d;
+}
+.app-shell.structural-dark .mapa-grid-panel{
+  background:#1c2730!important;color:#e3ecee;border:1px solid #2a3b42;
+}
+.app-shell.structural-dark .mapa-grid-panel>.panel-heading,
+.app-shell.structural-dark .mapa-grid-panel .compact-map-heading{
+  background:#1c2730!important;border-bottom-color:#3b4d54!important;
+  color:#e7f0f2;
+}
+.app-shell.structural-dark .mapa-grid-panel .panel-heading h2,
+.app-shell.structural-dark .mapa-grid-panel .panel-heading p{color:#e3eaeb}
+.app-shell.structural-dark .mapa-grid-panel .toolbar{
+  background:#202c35!important;color:#d6e5e8;border-bottom:1px solid #3c4c54;
+}
+.app-shell.structural-dark .mapa-grid-panel .toolbar .secondary,
+.app-shell.structural-dark .mapa-grid-panel .sheet-action-strip .secondary,
+.app-shell.structural-dark .mapa-grid-panel .sheet-action-strip>button,
+.app-shell.structural-dark .mapa-grid-panel .sheet-format-select,
+.app-shell.structural-dark .mapa-grid-panel .sheet-add-many .secondary{
+  background:#2a3942!important;color:#e3eff2!important;border-color:#4c626a!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .toolbar input,
+.app-shell.structural-dark .mapa-grid-panel .toolbar select,
+.app-shell.structural-dark .mapa-grid-panel .toolbar .searchbox,
+.app-shell.structural-dark .mapa-grid-panel .toolbar .select-wrap{
+  background:#293740!important;color:#e6eff2!important;border-color:#506269!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .toolbar input::placeholder{
+  color:#bac9ce;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-action-strip,
+.app-shell.structural-dark .mapa-grid-panel .sheet-add-many{
+  background:#1b2831!important;color:#e2eaed;border-color:#3c4d54;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-action-strip .sheet-address{
+  background:#30414c!important;color:#e2eef2!important;border:1px solid #586d78;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th{
+  background:#273d4a!important;color:#dcebf3!important;
+  border-color:#4a6370!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th.sheet-column-active-header{
+  background:#326795!important;color:#fff!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th.sheet-column-selected{
+  background:#245586!important;color:#fff!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-table thead tr.sheet-letters-row .sheet-corner{
+  background:#213746!important;color:#e4f5fb!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-table tbody th.sheet-row-number{
+  background:#273a45!important;color:#cbdce2!important;
+  box-shadow:inset -1px 0 0 #485b64!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-table tbody tr.sheet-row-active>th.sheet-row-number,
+.app-shell.structural-dark .mapa-grid-panel .sheet-table tbody th.sheet-row-active-header{
+  background:#3b6685!important;color:#fff!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-table tbody th.sheet-row-selected,
+.app-shell.structural-dark .mapa-grid-panel .sheet-table tbody tr.sheet-whole-row-selected>th.sheet-row-number{
+  background:#1d5f9a!important;color:#fff!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-table thead tr.sheet-label-row th{
+  background:#101b17!important;color:#edfff3!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-scroll-status,
+.app-shell.structural-dark .mapa-grid-panel .table-footer{
+  background:#1b2831!important;color:#cadbe0!important;border-color:#3b4c53!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-scroll-status .secondary{
+  background:#293d49!important;color:#e5f0f2!important;border-color:#4c6069;
+}
+.app-shell.structural-dark .mapa-grid-panel .sheet-grid-wrap{
+  background:#fff!important;border-color:#354951!important;
+}
+/* Explicitly keep the spreadsheet cells themselves untinted in dark mode. */
+.app-shell.structural-dark .mapa-grid-panel .sheet-table tbody td:not(.sheet-range-cell):not(.selected-cell){
+  filter:none;
+}
+@media(max-width:700px){
+  .structural-theme-toggle{min-width:32px;padding:5px 7px}
+  .structural-theme-toggle span{display:none}
+}
