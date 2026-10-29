@@ -24,10 +24,14 @@ type CellStyle = { bold?: boolean; color?: string; background?: string; format?:
 type AuditEntry = { id: string; action: string; fieldKey?: string | null; beforeValue?: unknown; afterValue?: unknown; createdAt: string; user?: { name?: string; email?: string } | null };
 type UserProfile = { id: string; name: string; email: string; role: string; active: boolean };
 type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string; pendingApproval?: boolean };
-// Vercel's same-origin /api rewrite avoids browser CORS failures on preview URLs.
-const apiBase = typeof window !== 'undefined' && /(?:^|\.)vercel\.app$/.test(window.location.hostname)
-  ? window.location.origin
-  : (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+// Keep the existing same-origin production proxy by default. A Vercel Preview
+// can explicitly opt in to a SEPARATE staging backend using an environment
+// variable scoped to Preview only; never silently switch production traffic.
+const isVercelSite = typeof window !== 'undefined' && /(?:^|\.)vercel\.app$/.test(window.location.hostname);
+const previewHomologApi = (import.meta.env.VITE_HOMOLOG_API_URL || '').trim().replace(/\/+$/, '');
+const apiBase = isVercelSite && /^https:\/\/[^/]+$/.test(previewHomologApi)
+  ? previewHomologApi
+  : isVercelSite ? window.location.origin : (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 // Cabeçalho conferido na linha 1 de MAPA IMPORTAÇÃO > MAPA 1.0 (A:BT).
 // As posições BL:BP não têm título; não deslocar os valores adjacentes.
 const referenceHeader: Record<string, string> = {
