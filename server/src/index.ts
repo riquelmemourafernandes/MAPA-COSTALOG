@@ -8,19 +8,14 @@ import jwt, { type JwtPayload } from "jsonwebtoken";
 import { isCollectionCompleted, isDeliveryCompleted, parseAppointment, shouldAlertAppointment } from "./appointment-date.js";
 import { z } from "zod";
 import { submitAccessRequest } from "./access-requests.js";
+import { isAllowedFrontendOrigin } from "./frontend-origins.js";
 
 const app = express();
 const prisma = new PrismaClient();
 const port = Number(process.env.PORT || 3001);
 const jwtSecret = process.env.JWT_SECRET || "";
 const allowedOrigin = process.env.FRONTEND_ORIGIN || "";
-// Allow only the configured frontend and this project's Vercel aliases/previews.
-// Preview URLs are unique per deployment, so exact FRONTEND_ORIGIN matching alone
-// blocks browser login from a preview even though the API is healthy.
-function isAllowedFrontendOrigin(origin: string): boolean {
-  if (allowedOrigin && origin === allowedOrigin) return true;
-  return /^https:\/\/mapa-costalog(?:-[a-z0-9-]+)?-riquelmemourafernandes\.vercel\.app$/.test(origin);
-}
+const additionalOrigins = process.env.FRONTEND_ORIGINS || "";
 
 app.disable("x-powered-by");
 app.use(helmet());
@@ -28,8 +23,11 @@ app.use(cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true);
     if (!allowedOrigin && process.env.NODE_ENV !== "production") return callback(null, true);
-    if (isAllowedFrontendOrigin(origin)) return callback(null, true);
-    return callback(new Error("Origem não autorizada.")); 
+    if (isAllowedFrontendOrigin(origin, allowedOrigin, additionalOrigins)) return callback(null, true);
+    // A denied browser origin is a permission error, not an internal HTTP 500.
+    const denied = new Error("Origem não autorizada.");
+    denied.name = "CorsOriginDenied";
+    return callback(denied);
   },
   methods: ["GET", "POST", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
@@ -670,9 +668,18 @@ app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
   const diagnostic = error instanceof Error
     ? { name: error.name, message: error.message }
     : { name: "UnknownError", message: String(error) };
-  console.error("[API_ERROR]", { method: req.method, path: req.path, ...diagnostic });
-  return res.status(500).json({
-    error: { code: "INTERNAL_ERROR", message: "Não foi possível concluir a solicitação." }
+  const corsDenied = diagnostic.name === "CorsOriginDenied";
+  console.error("[API_ERROR]", {
+    method: req.method,
+    path: req.path,
+    ...(corsDenied ? { origin: req.header("origin") || "(sem origem)" } : {}),
+    ...diagnostic
+  });
+  return res.status(corsDenied ? 403 : 500).json({
+    error: {
+      code: corsDenied ? "CORS_ORIGIN_DENIED" : "INTERNAL_ERROR",
+      message: corsDenied ? "Origem não autorizada." : "Não foi possível concluir a solicitação."
+    }
   });
 });
 
