@@ -1125,3 +1125,53 @@ html.costalog-dark .sheet-cell-options {
 .app-shell .column-picker .column-options.column-drag-active::-webkit-scrollbar-thumb{
   background:var(--costalog-red);
 }
+
+
+/* User reference: remove the heavy black box around each MAPA cell.
+   Keep only the faint native-spreadsheet guides, in light and dark chrome. */
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table{
+  border:0!important;
+  border-spacing:0!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td:not(.selected-cell),
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>th.sheet-row-number,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td:not(.selected-cell),
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>th.sheet-row-number{
+  border-right:1px solid #e6e8eb!important;
+  border-bottom:1px solid #e6e8eb!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row>th,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row>th,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row>th,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row>th{
+  border-right:1px solid #d8dbe0!important;
+  border-bottom:1px solid #d8dbe0!important;
+}
+/* Checkbox overlay works in existing rows and in unfilled virtual rows. */
+.app-shell .mapa-grid-panel .sheet-table .sheet-placeholder-cell > .sheet-boolean-wrapper{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  height:var(--mapa-row-height,19px)!important;
+  max-height:var(--mapa-row-height,19px)!important;
+  min-height:0!important;
+  padding:0!important;
+  margin:0!important;
+  box-sizing:border-box;
+}
+.app-shell .mapa-grid-panel .sheet-table .sheet-value-checkbox{
+  accent-color:#454b58!important;
+  width:14px;
+  height:14px;
+  min-width:14px;
+  min-height:14px;
+}
+.app-shell .mapa-grid-panel .sheet-table td.sheet-boolean-cell .cell-content{
+  min-height:0;
+}
+/* Remove legacy inner rings while retaining the subtle selected border. */
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table td.sheet-range-cell:not(.selected-cell){
+  box-shadow:none!important;
+}
