@@ -1498,7 +1498,7 @@ export default function App() {
       return;
     }
     if(action==='resize-column' && currentColumn){
-      const answer=window.prompt('Largura da coluna em pixels (24 a 2400):',
+      const answer=window.prompt('Largura da coluna em pixels ('+MIN_COLUMN_WIDTH+' a '+MAX_COLUMN_WIDTH+'):',
         String(columnWidths[currentColumn.key]??sourceColumnWidth(currentColumn.key)));
       if(answer===null)return;
       const n=Number(answer);
