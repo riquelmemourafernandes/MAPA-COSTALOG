@@ -89,3 +89,19 @@ export function canPasteMatrix(
     start.column + width <= columnCount &&
     matrix.every(row => row.length === width);
 }
+
+
+export type GridKeyboardAction = "move" | "edit" | "confirm" | "cancel" | "ignore";
+
+// Mirrors the spreadsheet convention: Enter moves selection when not editing.
+// F2/double click/typing starts editing; Enter confirms only while editing.
+export function gridKeyboardAction(key: string, editing: boolean): GridKeyboardAction {
+  if (editing) {
+    if (key === "Enter" || key === "Tab") return "confirm";
+    if (key === "Escape") return "cancel";
+    return "ignore";
+  }
+  if (key === "F2") return "edit";
+  if (["Enter", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key)) return "move";
+  return "ignore";
+}
