@@ -163,7 +163,15 @@ export default function SheetColorPicker({kind,value,disabled=false,onSelect}: P
         </div>
         <div className="sheet-picker-rgb">
           <label>Hexadecimal<input aria-label="Cor hexadecimal" maxLength={7} value={hexInput}
-            onChange={event=>{const val=event.target.value;setHexInput(val);if(normalizeHex(val))setColor(val);}}
+            onChange={event=>{
+              const val=event.target.value;setHexInput(val);
+              const normalized=normalizeHex(val);
+              if(normalized){
+                setDraft(normalized);
+                const hsv=rgbToHsv(...hexToRgb(normalized));
+                setHue(hsv.h);setSat(hsv.s);setBrightness(hsv.v);
+              }
+            }}
             onBlur={()=>setHexInput(draft)}/></label>
           {(["Vermelho","Verde","Azul"] as const).map((label,index)=>
             <label key={label}>{label}<input type="number" min={0} max={255} step={1}
