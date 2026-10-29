@@ -907,7 +907,9 @@ export default function App() {
     }
     for (let row = 0; row < matrix.length; row++) for (let column = 0; column < matrix[row].length; column++) {
       const definition = visibleColumns[selectedPosition.column + column];
-      const parsed = parseEditableValue(definition.dataType, matrix[row][column]);
+      const parsed = LOCKED_COLUMN_FORMAT[definition.key]
+        ? parseSheetValue(matrix[row][column],LOCKED_COLUMN_FORMAT[definition.key])
+        : parseEditableValue(definition.dataType, matrix[row][column]);
       if (!parsed.ok) {
         setApiError('Colagem inválida na coluna ' + definition.label + ': ' + parsed.message + '. Nenhuma alteração foi aplicada.');
         return;
@@ -930,7 +932,9 @@ export default function App() {
         for (let j = 0; j < matrix[i].length; j++) {
           const column = visibleColumns[start.column + j];
           if (!column?.editable) throw new Error('A colagem inclui coluna protegida.');
-          const parsed = parseEditableValue(column.dataType, matrix[i][j]);
+          const parsed = LOCKED_COLUMN_FORMAT[column.key]
+            ? parseSheetValue(matrix[i][j],LOCKED_COLUMN_FORMAT[column.key])
+            : parseEditableValue(column.dataType, matrix[i][j]);
           if (!parsed.ok) throw new Error('Valor inválido em ' + column.label + '.');
           if (valueText(row.data?.[column.key]) !== matrix[i][j]) changes[column.key] = parsed.value;
         }
