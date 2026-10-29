@@ -45,7 +45,7 @@ function tokenize(s: string): Token[] {
     if (n) { out.push({ kind: 'number', value: n[0] }); i += n[0].length; continue; }
     const ref = /^\$?[A-Z]{1,3}\$?[1-9]\d*/i.exec(r);
     if (ref) { out.push({ kind: 'identifier', value: ref[0] }); i += ref[0].length; continue; }
-    const id = /^[\\p{L}_][\\p{L}0-9_.]*/iu.exec(r);
+    const id = /^[\p{L}_][\p{L}0-9_.]*/iu.exec(r);
     if (id) { out.push({ kind: 'identifier', value: id[0] }); i += id[0].length; continue; }
     const op = /^(?:<=|>=|<>|!=|==|[+\-*/^&%=<>():;,])/.exec(r);
     if (op) { out.push({ kind: 'operator', value: op[0] }); i += op[0].length; continue; }
@@ -84,7 +84,8 @@ class Parser {
         if (this.accept(':')) { const end = this.take(); const ref2 = end.kind === 'identifier' ? parseCellAddress(end.value) : null; if (!ref2) throw Error('Invalid range'); return { kind: 'range', start: ref, end: ref2 }; }
         return { kind: 'cell', ...ref };
       }
-      const rawName = t.value.toLocaleUpperCase('pt-BR');\n      const name = FORMULA_ALIASES[rawName] || rawName;
+      const rawName = t.value.toLocaleUpperCase('pt-BR');
+      const name = FORMULA_ALIASES[rawName] || rawName;
       if (name === 'TRUE') return { kind: 'literal', value: true };
       if (name === 'FALSE') return { kind: 'literal', value: false };
       if (this.accept('(')) {
