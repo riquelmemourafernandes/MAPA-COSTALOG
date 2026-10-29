@@ -766,17 +766,12 @@ export default function App() {
     if (success) {
       setEditingCell(null);
       setEditValue('');
-      if (move) {
-        selectGridCell(move.row, move.column, false, false);
-        // Selection is rendered before DOM focus can move to its new cell.
-        window.requestAnimationFrame(() => {
-          const target = gridRef.current?.querySelector<HTMLElement>(
-            '[data-grid-row="' + move.row + '"][data-grid-column="' + move.column + '"]');
-          target?.focus({ preventScroll: true });
-          target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-        });
-      }
+      // Enter confirms and moves down; Tab confirms and moves right.
+      // Focus only after the editor is removed from the DOM, so the next
+      // keyboard action stays inside the grid (instead of leaving the table).
+      if (move) selectGridCell(move.row, move.column, false, true);
     } else {
+      // Validation or API error: preserve the typed value and editor position.
       editorRef.current?.focus();
     }
   }
@@ -789,11 +784,14 @@ export default function App() {
     if (!extend || !selectionAnchor) setSelectionAnchor({ rowId: row.id, columnKey: column.key });
     setSelectedCell({ row, column });
     if (moveFocus) {
-      const target = gridRef.current?.querySelector<HTMLElement>(
-        '[data-grid-row="' + rowIndex + '"][data-grid-column="' + columnIndex + '"]'
-      );
-      target?.focus({ preventScroll: true });
-      target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      // The new focused element may not exist until React commits the selection.
+      // Target its stable row/column identity, not a stale page index.
+      window.requestAnimationFrame(() => {
+        const target = Array.from(gridRef.current?.querySelectorAll<HTMLElement>('[data-cell-id]') || [])
+          .find(item => item.dataset.cellId === row.id + ':' + column.key);
+        target?.focus({ preventScroll: true });
+        target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      });
     }
   }
   function selectEntireRow(rowIndex: number) {
@@ -1079,7 +1077,7 @@ export default function App() {
               placeholderPosition && visibleColumns[placeholderPosition.column]
                 ? visibleColumns[placeholderPosition.column].key + (placeholderPosition.row + 1) + ' (visual)'
                 : 'Selecione uma célula'}</span>
-            <span className="sheet-guide">Um clique seleciona · Enter desce · F2 ou duplo clique edita · Digitar substitui · Enter salva e desce</span>
+            <span className="sheet-guide">Clique seleciona · Enter confirma e desce ↓ · Tab confirma e vai à direita → · Shift+Enter sobe · Shift+Tab volta · F2 edita</span>
             <button className="secondary" type="button" disabled={!selectedBounds} onClick={() => void copyGridSelection()}>Copiar seleção</button>
           </div>
           <div className="table-wrap sheet-grid-wrap" ref={gridRef} tabIndex={0} onKeyDown={onGridKeyDown} onCopy={onGridCopy} onPaste={onGridPaste}>
@@ -1163,7 +1161,7 @@ export default function App() {
                                 event.preventDefault(); event.stopPropagation();
                                 const next = moveGridPosition({row:ri,column:ci}, event.key,
                                   displayedRows.length, visibleColumns.length, event.shiftKey);
-                                void finishCellEdit(row, column, editValue, next);
+                                void finishCellEdit(row, column, event.currentTarget.value, next);
                               }
                             }}
                             onBlur={event => {
@@ -1175,7 +1173,7 @@ export default function App() {
                             data-cell-id={row.id + ':' + column.key} tabIndex={selected ? 0 : -1}
                             role="gridcell" aria-readonly={!editable}
                             aria-label={column.key + row.sequence + ': ' + (column.label || column.key)}
-                            title={editable ? 'Clique para selecionar. Enter desce; F2 ou duplo clique edita.' : 'Somente leitura'}
+                            title={editable ? 'Clique para selecionar. Enter confirma e desce; Tab confirma e vai à direita; F2 ou duplo clique edita.' : 'Somente leitura'}
 >
                             {valueText(row.data?.[column.key])}
                           </span>
