@@ -1063,6 +1063,8 @@ export default function App() {
         event.preventDefault(); searchInputRef.current?.focus(); searchInputRef.current?.select();
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'h' && active === 'MAPA 2.0') {
         event.preventDefault(); setShowFindReplace(true);
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b' && active === 'MAPA 2.0' && !typing && userRole !== 'CONSULTA') {
+        event.preventDefault(); updateSelectedStyle({ bold: !selectedStyle.bold });
       } else if (event.key === 'Escape' && !typing) {
         setOpenTopMenu(null);
         if (showFindReplace) setShowFindReplace(false);
@@ -1073,7 +1075,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [active, userRole, apiBase, token, rows, cellStyles, rowStyles, columnStyles, rowHeights, columnWidths, visibleKeys, savedViews, blankSaving, pasteBusy, adminSheetBusy, bulkBusy, creatingRows]);
+  }, [active, userRole, apiBase, token, rows, cellStyles, rowStyles, columnStyles, rowHeights, columnWidths, visibleKeys, savedViews, blankSaving, pasteBusy, adminSheetBusy, bulkBusy, creatingRows, selectedStyle]);
   const visibleColumns = useMemo(() => columns.filter(c => c.visible !== false && visibleKeys.includes(c.key)).sort((a,b) => visibleKeys.indexOf(a.key)-visibleKeys.indexOf(b.key)), [columns, visibleKeys]);
   // When backend filtering is available, values are filtered before pagination.
   // On an older API, the same selection works over the loaded page only.
