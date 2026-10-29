@@ -241,6 +241,7 @@ export default function App() {
     try {
       const saved = JSON.parse(localStorage.getItem(styleStorageKey) || '{}');
       setRowStyles(saved?.rowStyles && typeof saved.rowStyles === 'object' ? saved.rowStyles : {});
+      setCellStyles(saved?.cellStyles && typeof saved.cellStyles === 'object' ? saved.cellStyles : {});
       setColumnStyles(saved?.columnStyles && typeof saved.columnStyles === 'object' ? saved.columnStyles : {});
     } catch { setRowStyles({}); setColumnStyles({}); }
   }, [styleStorageKey]);
@@ -435,7 +436,7 @@ export default function App() {
     presentationRef.current=next;
     setRowStyles(next.rowStyles);setCellStyles(next.cellStyles);setRowHeights(next.rowHeights);
     localStorage.setItem(styleStorageKey,JSON.stringify({
-      rowStyles:next.rowStyles,columnStyles
+      rowStyles:next.rowStyles,cellStyles:next.cellStyles,columnStyles
     }));
     localStorage.setItem(rowHeightStorageKey,JSON.stringify(next.rowHeights));
     return next;
@@ -484,7 +485,7 @@ export default function App() {
       setCellStyles(nextCellStyles);
     }
     localStorage.setItem(styleStorageKey, JSON.stringify({
-      rowStyles: nextRowStyles, columnStyles: nextColumnStyles
+      rowStyles: nextRowStyles, cellStyles: nextCellStyles, columnStyles: nextColumnStyles
     }));
     // Preferences are UI formatting, never modifications of operational rows.
     void (async () => {
