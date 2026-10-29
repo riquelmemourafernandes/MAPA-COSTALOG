@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import BaseCatalogSheet from './BaseCatalogSheet.js';
+import SheetContextMenu from './SheetContextMenu.js';
+import {type SheetContextKind,type SheetContextAction} from './sheet-context-menu.js';
 import { SCROLL_BATCH_SIZE, EMPTY_GRID_ROWS, normalizeCreateCount,
   normalizeRowHeight, mergeLoadedRows, shouldLoadNextBatch, virtualRowWindow } from './sheet-layout.js';
 import SheetColorPicker from './SheetColorPicker.js';
@@ -189,6 +191,10 @@ export default function App() {
   const [showStatusColors, setShowStatusColors] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{row: RecordRow; column: Column} | null>(null);
   const [selectionMode, setSelectionMode] = useState<'cell'|'row'|'column'>('cell');
+  const [sheetContextMenu, setSheetContextMenu] = useState<{
+    kind:SheetContextKind;x:number;y:number;rowIndex?:number;columnIndex?:number
+  }|null>(null);
+  const [adminSheetBusy,setAdminSheetBusy] = useState(false);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [selectedColumnKey, setSelectedColumnKey] = useState<string | null>(null);
   const [editingCell, setEditingCell] = useState<{rowId: string; columnKey: string} | null>(null);
@@ -280,7 +286,7 @@ export default function App() {
       const nextColumns = Array.isArray(columnsBody.items) ? columnsBody.items as Column[] : [];
       // Labels follow the source Sheet 1:1, without altering database config.
       const referenceColumns = nextColumns
-        .filter(column => referenceColumnKeys.has(column.key))
+        .filter(column => referenceColumnKeys.has(column.key) && column.visible !== false)
         .map(column => ({ ...column, label: referenceHeader[column.key] || '' }));
       setColumns(referenceColumns);
       const saved = localStorage.getItem(preferenceKey);
@@ -676,7 +682,7 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [active, userRole, apiBase, token]);
-  const visibleColumns = useMemo(() => columns.filter(c => visibleKeys.includes(c.key)).sort((a,b) => visibleKeys.indexOf(a.key)-visibleKeys.indexOf(b.key)), [columns, visibleKeys]);
+  const visibleColumns = useMemo(() => columns.filter(c => c.visible !== false && visibleKeys.includes(c.key)).sort((a,b) => visibleKeys.indexOf(a.key)-visibleKeys.indexOf(b.key)), [columns, visibleKeys]);
   // When backend filtering is available, values are filtered before pagination.
   // On an older API, the same selection works over the loaded page only.
   const displayedRows = useMemo(() => {
