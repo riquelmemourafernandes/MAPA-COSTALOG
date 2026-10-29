@@ -46,9 +46,9 @@ export function virtualRowWindow(
   return {start,end,top:offsets[start],bottom:totalHeight-offsets[end],totalHeight};
 }
 
-// 100,000 rows below the header are virtual: constant-size scrolling,
-// no million-element array and no empty records inserted into the database.
-export const SHEET_MAX_ROW = 100001;
+// Test mode: 100 editable virtual rows (2–101); row 1 remains the header.
+// Only filled rows are ever persisted to the API.
+export const SHEET_MAX_ROW = 101;
 export const SHEET_DEFAULT_HEIGHT = 35;
 export function sparseSheetWindow(
   scrollTop:number,viewportHeight:number,heights:Record<number,number>,
