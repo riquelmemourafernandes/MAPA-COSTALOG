@@ -35,6 +35,7 @@ jobs:
       - run: npx tsx --test ../src/sheet-grid.test.ts
       - run: npx tsx --test ../src/column-filter.test.ts ../src/base-prototype-data.test.ts
       - run: npx tsx --test ../src/sheet-color-utils.test.ts ../src/sheet-dropdown-utils.test.ts
+      - run: npx tsx --test ../src/sheet-formats.test.ts
       - run: npm run build
       - run: npx prisma validate --schema ../prisma/schema.prisma
         env:
