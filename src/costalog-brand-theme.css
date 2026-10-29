@@ -1072,3 +1072,56 @@ html.costalog-dark .sheet-cell-options {
 }
 /* Selected cell stays on its real boundary with the previously requested
    thin red selection marker, never a second internal outline. */
+
+/* MAPA 2.0: fluid column organizer with automatic scrolling during drag.
+   Mark the precise insertion side, without shifting rows while dragging. */
+.app-shell .column-picker .column-options{
+  position:relative;
+  max-height:min(52vh,480px);
+  overflow-y:auto!important;
+  overscroll-behavior:contain;
+  scroll-behavior:auto;
+  scrollbar-gutter:stable;
+  padding:4px 5px 5px 2px;
+}
+.app-shell .column-picker .column-option{
+  position:relative;
+  min-height:37px;
+  flex-shrink:0;
+  user-select:none;
+  transition:background-color 120ms ease,border-color 120ms ease,opacity 100ms ease;
+}
+.app-shell .column-picker .column-option:hover{
+  border-color:var(--costalog-red)!important;
+}
+.app-shell .column-picker .column-option.dragging{
+  opacity:.42;
+  cursor:grabbing;
+  border-color:var(--costalog-red)!important;
+}
+.app-shell .column-picker .column-option.column-drop-before{
+  box-shadow:inset 0 3px 0 var(--costalog-red)!important;
+}
+.app-shell .column-picker .column-option.column-drop-after{
+  box-shadow:inset 0 -3px 0 var(--costalog-red)!important;
+}
+.app-shell .column-picker .column-option-key{
+  font-weight:750;
+  font-variant-numeric:tabular-nums;
+  color:var(--costalog-red)!important;
+}
+.app-shell .column-picker .column-option .drag-handle{
+  color:var(--brand-muted)!important;
+}
+.app-shell .column-picker .column-options::-webkit-scrollbar{width:10px}
+.app-shell .column-picker .column-options::-webkit-scrollbar-track{
+  background:var(--brand-panel);
+}
+.app-shell .column-picker .column-options::-webkit-scrollbar-thumb{
+  background:var(--brand-border);
+  border:2px solid var(--brand-panel);
+  border-radius:12px;
+}
+.app-shell .column-picker .column-options.column-drag-active::-webkit-scrollbar-thumb{
+  background:var(--costalog-red);
+}
