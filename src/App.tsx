@@ -958,6 +958,66 @@ export default function App() {
   }, [selectedPosition, selectionAnchor, displayedRows, visibleColumns,
       selectionMode, selectedRowId, selectedColumnKey]);
 
+  function selectBlankCell(index:number,columnIndex:number,openEditor=false,replacement?:string){
+    const column=visibleColumns[columnIndex];
+    if(!sheetCanvas||!column)return;
+    setSelectedCell(null);setSelectionMode('cell');setSelectedRowId(null);
+    setSelectedColumnKey(null);setSelectedBlankRow(null);setSelectionAnchor(null);
+    setPlaceholderPosition({row:index,column:columnIndex});
+    if(openEditor){
+      if(userRole==='CONSULTA'||!column.editable || gridRangeSupported!==true ||
+         !loadedGridChunksRef.current.has(Math.floor(index/100)))return;
+      setBlankEditing({index,columnKey:column.key});
+      setBlankDraft(replacement??'');
+    }else{
+      setBlankEditing(null);
+      window.requestAnimationFrame(()=>{
+        const target=gridRef.current?.querySelector<HTMLElement>(
+          '[data-grid-empty-row="'+index+'"][data-grid-empty-column="'+columnIndex+'"]');
+        target?.focus({preventScroll:true});
+      });
+    }
+  }
+  async function saveBlankCell(index:number,column:Column,value:string,
+    key:'Enter'|'Tab'|null=null,shift=false){
+    if(blankSaving||userRole==='CONSULTA'||!token||gridRangeSupported!==true)return;
+    const parsed=LOCKED_COLUMN_FORMAT[column.key]
+      ?parseSheetValue(value,LOCKED_COLUMN_FORMAT[column.key])
+      :parseEditableValue(column.dataType,value);
+    if(!parsed.ok){setApiError(parsed.message+' na coluna '+column.label);return;}
+    if(parsed.value===null||parsed.value===''){
+      setBlankEditing(null);setBlankDraft('');
+    }else{
+      setBlankSaving(true);
+      try{
+        const response=await fetch(apiBase+'/api/v1/mapa',{
+          method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+          body:JSON.stringify({sheetRowNumber:index+2,data:{[column.key]:parsed.value}})
+        });
+        const body=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(body?.error?.message||
+          'Não foi possível gravar esta linha. Verifique a API de homologação.');
+        setRows(previous=>mergeLoadedRows(previous,[body.item as RecordRow]));
+        setTotal(previous=>previous+1);
+        setMaxSheetRowNumber(previous=>Math.max(previous,index+2));
+        setNotice('Linha '+(index+2)+' criada automaticamente ao preencher a célula.');
+        setApiError('');
+        setBlankEditing(null);setBlankDraft('');
+      }catch(error){
+        setApiError(error instanceof Error?error.message:'Falha ao criar a linha.');
+        setBlankSaving(false);return;
+      }finally{setBlankSaving(false);}
+    }
+    if(key){
+      const next=moveGridPosition({row:index,column:visibleColumns.indexOf(column)},key,
+        SHEET_MAX_ROW-1,visibleColumns.length,shift);
+      const nextRow=sheetRecordsByRow.get(next.row+2);
+      if(nextRow){
+        selectGridCell(displayedRows.findIndex(row=>row.id===nextRow.id),next.column,false,true);
+      }else selectBlankCell(next.row,next.column,false);
+    }else selectBlankCell(index,visibleColumns.indexOf(column),false);
+  }
+
   function beginCellEdit(rowIndex: number, columnIndex: number, replacement?: string) {
     const row = displayedRows[rowIndex], column = visibleColumns[columnIndex];
     if (!row || !column || !token || userRole === 'CONSULTA' || !column.editable || editingBusyRef.current || gridMutationBusyRef.current) return;
