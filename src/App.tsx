@@ -2240,6 +2240,102 @@ export default function App() {
     }
   }
 
+  async function replaceInSheet() {
+    const needle = replaceSearch;
+    if (!needle) { setApiError('Digite o texto que deseja localizar.'); return; }
+    if (userRole === 'CONSULTA') { setApiError('Seu perfil permite apenas consultar a planilha.'); return; }
+    const edits: { row: RecordRow; changes: Record<string, string | number | boolean | null> }[] = [];
+    let changedCells = 0;
+    for (const row of rows) {
+      const changes: Record<string, string | number | boolean | null> = {};
+      for (const column of columns) {
+        const value = row.data?.[column.key];
+        if (typeof value !== 'string' || !value) continue;
+        let next = value;
+        if (replaceMatchCase) next = value.split(needle).join(replaceWith);
+        else {
+          const lower = value.toLocaleLowerCase('pt-BR'), target = needle.toLocaleLowerCase('pt-BR');
+          let cursor = 0, output = '', found = lower.indexOf(target);
+          while (found >= 0) {
+            output += value.slice(cursor, found) + replaceWith;
+            cursor = found + needle.length;
+            found = lower.indexOf(target, cursor);
+          }
+          if (cursor > 0) next = output + value.slice(cursor);
+        }
+        if (next !== value) { changes[column.key] = next; changedCells++; }
+        if (changedCells > 2000) { setApiError('A substituição excede 2.000 células. Refine o texto e tente novamente.'); return; }
+      }
+      if (Object.keys(changes).length) edits.push({ row, changes });
+    }
+    if (!edits.length) { setNotice('Nenhuma ocorrência encontrada.'); setApiError(''); return; }
+    await updateGridRows(edits, 'Colagem');
+    setNotice('Localizar e substituir: ' + changedCells + ' célula(s) alterada(s).');
+    setShowFindReplace(false); setApiError('');
+  }
+  function addLocalColumn() {
+    if (!isGitHubPagesPreview || userRole !== 'ADMIN') {
+      setNotice('A criação de colunas compartilhadas exige suporte da API.'); return;
+    }
+    const used = new Set(columns.map(column => column.key));
+    let position = columns.length + 1, key = excelColumnKey(position - 1);
+    while (used.has(key)) { position++; key = excelColumnKey(position - 1); }
+    const column: Column = { key, label: 'Nova coluna', position, dataType: 'text', editable: true, visible: true };
+    setColumns(previous => [...previous, column]);
+    setVisibleKeys(previous => [...previous, key]);
+    setRows(previous => previous.map(row => ({ ...row, data: { ...row.data, [key]: '' } })));
+    setSelectedColumnKey(key); setSelectionMode('column');
+    setNotice('Coluna ' + key + ' criada nesta cópia local.');
+  }
+  async function handleSheetMenuAction(action: string) {
+    setOpenTopMenu(null); setApiError('');
+    switch (action) {
+      case 'import': localCsvInputRef.current?.click(); break;
+      case 'export': if (isGitHubPagesPreview) exportLocalCsv(); else setNotice('A exportação CSV está disponível nesta versão local.'); break;
+      case 'print': window.print(); break;
+      case 'undo': void replayEdit('undo'); break;
+      case 'redo': void replayEdit('redo'); break;
+      case 'copy': void copyGridSelection(); break;
+      case 'cut':
+        if (selectedBounds) void navigator.clipboard.writeText(selectedGridText()).then(() => void clearGridSelection()).catch(() => setApiError('O navegador bloqueou o recorte.'));
+        break;
+      case 'paste':
+        void navigator.clipboard.readText().then(pasteGridText).catch(() => setApiError('Permita o acesso à área de transferência ou use Ctrl+V.'));
+        break;
+      case 'clear': void clearGridSelection(); break;
+      case 'replace': setShowFindReplace(true); break;
+      case 'fillDown': void fillSelection('down'); break;
+      case 'fillRight': void fillSelection('right'); break;
+      case 'columns': setColumnMenu(value => !value); break;
+      case 'showColumns': {
+        const all = columns.map(column => column.key); setVisibleKeys(all);
+        localStorage.setItem(preferenceKey, JSON.stringify(all)); void persistPreferences({ visibleKeys: all }); break;
+      }
+      case 'theme': toggleStructuralDarkMode(); break;
+      case 'newRow': void createRow(); break;
+      case 'manyRows': setNewRowsOpen(true); break;
+      case 'newColumn': addLocalColumn(); break;
+      case 'bold': updateSelectedStyle({ bold: !selectedStyle.bold }); break;
+      case 'formatText': updateSelectedStyle({ format: 'text' }); break;
+      case 'formatNumber': updateSelectedStyle({ format: 'number' }); break;
+      case 'formatCurrency': updateSelectedStyle({ format: 'currency' }); break;
+      case 'formatDate': updateSelectedStyle({ format: 'date' }); break;
+      case 'clearFormat': updateSelectedStyle({ bold: false, color: '#47584E', background: '#FFFFFF', align: 'left', format: 'text' }); break;
+      case 'sortAsc': case 'sortDesc': {
+        const key = selectedCell?.column.key || selectedColumnKey;
+        if (key) setSortConfig({ key, direction: action === 'sortAsc' ? 'asc' : 'desc' });
+        else setNotice('Selecione uma célula ou coluna antes de classificar.');
+        break;
+      }
+      case 'clearFilters':
+        setQuery(''); setStatus(''); setFilterColumn(''); setFilterValue(''); setColumnFilters({}); setSortConfig(null); setPage(1); break;
+      case 'bulk': if (selectedRowIds.length) setBulkOpen(true); else setNotice('Selecione uma ou mais linhas primeiro.'); break;
+      case 'formulas': setNotice('Fórmulas disponíveis: SOMA/SUM, MÉDIA/AVERAGE, SE/IF, SEERRO/IFERROR, CONT.NÚM/COUNT, CONT.VALORES/COUNTA, MÍNIMO/MIN, MÁXIMO/MAX, SOMASE/SUMIF, CONT.SE/COUNTIF, arredondamento, datas e texto. Use = no início da célula.'); break;
+      case 'shortcuts': setNotice('Atalhos: Ctrl+C/V/X; Delete limpa; Enter/F2 edita; Ctrl+Z/Y desfaz/refaz; Ctrl+F busca; Ctrl+D preenche abaixo; Ctrl+R preenche à direita; Ctrl+Home/End navega.'); break;
+      case 'about': setNotice('MAPA COSTALOG — demonstração local inspirada em planilhas. Os dados locais ficam neste navegador, sem colaboração em tempo real.'); break;
+    }
+  }
+
   if (!token) {
     return <main className={'auth-layout '+(structuralDarkMode?'structural-dark':'')}>
       <button type="button" className="structural-theme-toggle auth-theme-toggle"
