@@ -137,3 +137,8 @@
   margin-left: 5px;
 }
 .mapa-grid-panel .sheet-table td.sheet-lookup-cell:not(.selected-cell):hover {background: #f5faf4;}
+
+.sheet-cell-options .sheet-status-option-swatch {
+  display:block;flex:0 0 12px;min-width:12px;width:12px;height:12px;
+  border:1px solid #0002;border-radius:2px;
+}
