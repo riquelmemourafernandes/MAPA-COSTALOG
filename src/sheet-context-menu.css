@@ -1,0 +1,14 @@
+.sheet-context-menu{position:fixed;z-index:2200;display:flex;flex-direction:column;
+  width:270px;max-height:calc(100dvh - 16px);overflow:auto;padding:6px;
+  border:1px solid #d6dfd7;border-radius:8px;background:#fff;color:#22372a;
+  box-shadow:0 12px 35px #15281b38;font:12px/1.35 inherit}
+.sheet-context-menu button{display:flex;align-items:center;justify-content:space-between;
+  gap:8px;width:100%;padding:8px 10px;min-height:34px;
+  background:transparent;border:0;border-radius:4px;color:#324f3c;
+  cursor:pointer;text-align:left;font-size:12px}
+.sheet-context-menu button:hover,.sheet-context-menu button:focus-visible{background:#edf4ed;outline:0}
+.sheet-context-menu button.danger{color:#ae3434}
+.sheet-context-menu button.danger:hover{background:#fff0ed}
+.sheet-context-menu button.separator{border-top:1px solid #e6ece5;border-radius:0;margin-top:4px;padding-top:11px}
+.sheet-context-menu kbd{white-space:nowrap;color:#8b9b8f;font-size:10px;font-weight:400;background:transparent}
+.sheet-context-caption{border-top:1px solid #e5ebe5;padding:8px 9px 4px;color:#86968b;font-size:10px}
