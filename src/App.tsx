@@ -274,13 +274,23 @@ export default function App() {
     if (!apiBase) { setApiError('A URL da API não está configurada nesta prévia.'); return; }
     setLoading(true);
     try {
+      // Confirm the deployed backend supports registration before sending any
+      // personal data or creating an account; the production API may be older.
+      const capabilitiesResponse = await fetch(apiBase + '/api/v1/auth/capabilities', { cache: 'no-store' });
+      const capabilities = await capabilitiesResponse.json().catch(() => ({}));
+      if (!capabilitiesResponse.ok || capabilities.requestAccess !== true || capabilities.approvalRequired !== true) {
+        throw new Error('A API do Render ainda não confirmou suporte à solicitação de acesso. A nova tela está disponível, mas a API correspondente precisa ser homologada e publicada pelo administrador. Nenhum cadastro foi enviado.');
+      }
       const response = await fetch(apiBase + '/api/v1/auth/request-access', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: requestName.trim(), email: requestEmail.trim(), password: requestPassword })
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível registrar a solicitação (HTTP ' + response.status + ').');
+      if (!response.ok) {
+        if (response.status >= 500) throw new Error('A API apresentou um erro interno ao processar o cadastro (HTTP ' + response.status + '). O responsável pelo Render deve verificar os logs; a solicitação não foi confirmada.');
+        throw new Error(body?.error?.message || 'Não foi possível registrar a solicitação (HTTP ' + response.status + ').');
+      }
       setRequestPassword('');
       setRequestSent(true);
     } catch (error) {
@@ -296,7 +306,11 @@ export default function App() {
       const response = await fetch(apiBase + '/api/v1/health', { cache: 'no-store', signal: AbortSignal.timeout(30000) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok || body.status !== 'ok') throw new Error('Resposta inesperada do servidor (HTTP ' + response.status + ').');
-      setConnectionStatus('API respondeu com sucesso. Se o login falhar, confira o usuário, a senha e a versão da API.');
+      const capabilitiesResponse = await fetch(apiBase + '/api/v1/auth/capabilities', { cache: 'no-store' });
+      const capabilities = await capabilitiesResponse.json().catch(() => ({}));
+      setConnectionStatus(capabilitiesResponse.ok && capabilities.requestAccess === true
+        ? 'API acessível; a versão do backend declara suporte a solicitações de acesso. Isso não confirma a gravação no banco.'
+        : 'API de saúde acessível, mas o cadastro de novos usuários ainda não está disponível ou o backend precisa ser atualizado no Render.');
     } catch (error) {
       setConnectionStatus(error instanceof Error && error.name === 'TimeoutError'
         ? 'A API não respondeu em 30 segundos. Confira o serviço no Render.'
