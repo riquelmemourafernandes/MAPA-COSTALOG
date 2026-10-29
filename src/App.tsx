@@ -1734,41 +1734,39 @@ export default function App() {
                 {visibleColumns.map(column => <col key={column.key} style={{width: columnWidths[column.key] || 180}} />)}
               </colgroup>
               <thead>
-                <tr>
-                  <th className="sheet-row-header"
-                    title={userRole==='ADMIN'?'Selecionar todas as células carregadas':'Cabeçalho de linhas'}
+                <tr className="sheet-letters-row">
+                  <th className="sheet-row-header sheet-corner" title="Selecionar células carregadas"
                     onClick={()=>{if(userRole==='ADMIN')selectAllLoadedCells();}}
-                    onContextMenu={event=>openSheetContext(event,'all')}>
-                    {userRole !== 'CONSULTA' && <input type="checkbox" aria-label="Selecionar todos os registros desta página"
-                      checked={displayedRows.length > 0 && displayedRows.every(row => selectedRowIds.includes(row.id))}
-                      onChange={event => setSelectedRowIds(previous => event.target.checked
-                        ? Array.from(new Set([...previous, ...displayedRows.map(row => row.id)]))
-                        : previous.filter(id => !displayedRows.some(row => row.id === id)))} />}
-                    <span>1</span>
-                  </th>
-                  {visibleColumns.map((column,headerIndex) => <th key={column.key}
-                    className={'sheet-column-header ' + (selectionMode==='column' && selectedColumnKey===column.key ? 'sheet-column-selected' : '')}
-                    scope="col"
-                    onContextMenu={event=>openSheetContext(event,'column',undefined,headerIndex)}
-                    onClick={event=>{
-                      if(!(event.target as HTMLElement).closest('button,.sheet-resize-handle'))
-                        selectEntireColumn(column);
-                    }}>
-                    <div className="sheet-column-title">
-                      <button className="sheet-column-key sheet-column-select" type="button"
-                        aria-label={'Selecionar coluna inteira ' + column.key}
-                        title={'Selecionar toda a coluna ' + column.key} onClick={()=>selectEntireColumn(column)}>{column.key}</button>
-                      <button className={'sheet-filter-trigger ' + (columnFilters[column.key] ? 'filter-active' : '')}
-                        type="button" title={'Filtrar e ordenar ' + column.label}
-                        aria-label={'Abrir filtro da coluna ' + (column.label || column.key)}
-                        aria-expanded={openFilterKey === column.key}
-                        onClick={event => showColumnFilter(event, column)}>
-                        <span className="sheet-header-name">{column.label || '(sem título)'}</span>
-                        <span aria-hidden="true">{columnFilters[column.key] ? '▼' : '▾'}</span>
-                      </button>
-                    </div>
-                    <span className="sheet-resize-handle" role="separator" aria-label={'Ajustar largura de ' + column.label}
-                      title="Arraste para ajustar a largura" onPointerDown={event => beginColumnResize(event, column)} />
+                    onContextMenu={event=>openSheetContext(event,'all')}>▦</th>
+                  {visibleColumns.map((column,ci)=><th key={column.key}
+                    className={'sheet-letter-header '+(selectionMode==='column'&&selectedColumnKey===column.key?'sheet-column-selected':'')}
+                    scope="col" title={'Selecionar coluna '+column.key}
+                    onClick={()=>selectEntireColumn(column)}
+                    onContextMenu={event=>openSheetContext(event,'column',undefined,ci)}>
+                    <button type="button" className="sheet-letter-button"
+                      aria-label={'Selecionar coluna inteira '+column.key}
+                      onClick={event=>{event.stopPropagation();selectEntireColumn(column);}}>
+                      {column.key}</button>
+                    <span className="sheet-resize-handle" role="separator"
+                      aria-label={'Ajustar largura da coluna '+column.key}
+                      onPointerDown={event=>beginColumnResize(event,column)}/>
+                  </th>)}
+                </tr>
+                <tr className="sheet-label-row">
+                  <th className="sheet-row-header sheet-header-number"
+                    title="Linha 1: cabeçalho fixo">1</th>
+                  {visibleColumns.map((column,ci)=><th key={column.key}
+                    className={'sheet-column-header '+(selectionMode==='column'&&selectedColumnKey===column.key?'sheet-column-selected':'')}
+                    scope="col" onContextMenu={event=>openSheetContext(event,'column',undefined,ci)}>
+                    <button type="button"
+                      className={'sheet-filter-trigger '+(columnFilters[column.key]?'filter-active':'')}
+                      title={'Filtrar '+column.label}
+                      aria-label={'Abrir filtro da coluna '+(column.label||column.key)}
+                      aria-expanded={openFilterKey===column.key}
+                      onClick={event=>showColumnFilter(event,column)}>
+                      <span className="sheet-header-name">{column.label||'(sem título)'}</span>
+                      <span aria-hidden="true">{columnFilters[column.key]?'▼':'▾'}</span>
+                    </button>
                   </th>)}
                 </tr>
               </thead>
