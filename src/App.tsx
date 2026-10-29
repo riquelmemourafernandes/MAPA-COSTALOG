@@ -1148,7 +1148,26 @@ export default function App() {
   function onGridKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const element = event.target as HTMLElement;
     if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(element.tagName) ||
-      pasteBusy || editingCell) return;
+      pasteBusy || adminSheetBusy || editingCell) return;
+    if(userRole==='ADMIN' && (event.ctrlKey||event.metaKey) && event.key.toLowerCase()==='a'){
+      event.preventDefault();selectAllLoadedCells();return;
+    }
+    if(userRole==='ADMIN' && (event.ctrlKey||event.metaKey) && event.key.toLowerCase()==='x'){
+      event.preventDefault();
+      if(selectedBounds)void navigator.clipboard.writeText(selectedGridText())
+        .then(()=>clearGridSelection())
+        .catch(()=>setApiError('Recorte bloqueado pelo navegador. Use o menu de contexto.'));
+      return;
+    }
+    if(userRole==='ADMIN' && event.shiftKey && event.key==='F10' && selectedPosition){
+      event.preventDefault();
+      const cell=gridRef.current?.querySelector<HTMLElement>(
+        '[data-grid-row="'+selectedPosition.row+'"][data-grid-column="'+selectedPosition.column+'"]');
+      const rect=cell?.getBoundingClientRect();
+      setSheetContextMenu({kind:'cell',rowIndex:selectedPosition.row,
+        columnIndex:selectedPosition.column,x:rect?.left||30,y:rect?.bottom||100});
+      return;
+    }
     if (!selectedPosition && placeholderPosition && displayedRows.length === 0) {
       const action = gridKeyboardAction(event.key, false);
       if (action === 'move') {
