@@ -2064,6 +2064,55 @@ export default function App() {
     finally{setCreatingRows(false);}
   }
 
+  function exportLocalCsv() {
+    if (!isGitHubPagesPreview) return;
+    const csvEscape = (value: unknown) => '"' + valueText(value).replace(/"/g, '""') + '"';
+    const orderedRows = [...rows].sort((a,b) => Number(a.sheetRowNumber ?? a.sequence + 1) - Number(b.sheetRowNumber ?? b.sequence + 1));
+    const lines = [
+      visibleColumns.map(column => csvEscape(column.label || column.key)).join(','),
+      ...orderedRows.map(row => visibleColumns.map(column => csvEscape(row.data?.[column.key])).join(','))
+    ];
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = 'mapa-costalog-local.csv'; anchor.click();
+    URL.revokeObjectURL(url);
+    setNotice('CSV exportado. O arquivo contém a cópia local atual da planilha.');
+  }
+  async function importLocalCsv(file: File) {
+    if (!isGitHubPagesPreview) return;
+    try {
+      const matrix = parseCsvMatrix(await file.text());
+      if (matrix.length < 2) throw new Error('O CSV precisa ter cabeçalho e pelo menos uma linha de dados.');
+      const used = new Set<string>();
+      const mapping = matrix[0].map((header, index) => {
+        const normalized = header.trim().toLocaleLowerCase('pt-BR');
+        const exact = columns.find(column => !used.has(column.key) &&
+          [column.key, column.label, column.key + ' - ' + column.label]
+            .some(candidate => candidate.trim().toLocaleLowerCase('pt-BR') === normalized));
+        if (exact) { used.add(exact.key); return exact; }
+        return visibleColumns[index] || null;
+      });
+      const sourceRows = matrix.slice(1).filter(values => values.some(value => value.trim() !== ''));
+      const imported: RecordRow[] = sourceRows.map((values, index) => {
+        const data: Record<string, unknown> = Object.fromEntries(columns.map(column => [column.key, '']));
+        mapping.forEach((column, colIndex) => { if (column) data[column.key] = values[colIndex] ?? ''; });
+        const position = index + 2;
+        return { id: 'local-import-' + Date.now().toString(36) + '-' + index, sequence: index + 1,
+          sheetRowNumber: position, data, status: valueText(data.C || ''), clientName: valueText(data.L || ''),
+          container: valueText(data.T || ''), cte: valueText(data.D || ''), updatedAt: new Date().toISOString() };
+      });
+      rowsRef.current = imported; setRows(imported); setTotal(imported.length);
+      setMaxSheetRowNumber(imported.length + 1); setSelectedCell(null); setSelectedRowIds([]);
+      setSelectionAnchor(null); setPlaceholderPosition(null); setPage(1); setSortConfig(null);
+      setQuery(''); setStatus(''); setFilterColumn(''); setFilterValue(''); setColumnFilters({});
+      setNotice('CSV importado: ' + imported.length + ' linha(s). A planilha local foi substituída pelo arquivo.');
+      setApiError('');
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : 'Não foi possível importar o CSV.');
+    }
+  }
+
   if (!token) {
     return <main className={'auth-layout '+(structuralDarkMode?'structural-dark':'')}>
       <button type="button" className="structural-theme-toggle auth-theme-toggle"
@@ -2260,6 +2309,12 @@ export default function App() {
               onClick={()=>void replayEdit('redo')}><Redo2 size={14}/> Refazer</button>
             <span className="sheet-undo-feedback" role="status" aria-live="polite">{undoFeedback}</span>
             <button className="secondary" type="button" disabled={!selectedBounds} onClick={() => void copyGridSelection()}>Copiar seleção</button>
+            {isGitHubPagesPreview && <>
+              <button className="secondary" type="button" onClick={exportLocalCsv}>Exportar CSV</button>
+              <button className="secondary" type="button" onClick={() => localCsvInputRef.current?.click()}>Importar CSV</button>
+              <input ref={localCsvInputRef} type="file" accept=".csv,text/csv" hidden
+                onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void importLocalCsv(file); event.currentTarget.value = ''; }} />
+            </>}
             <div className="sheet-status-guide">
               <button className="secondary" type="button" aria-expanded={showStatusColors}
                 onClick={() => setShowStatusColors(current => !current)}>Cores por status (C) ▾</button>
