@@ -6,7 +6,7 @@ import {type SheetContextKind,type SheetContextAction} from './sheet-context-men
 import { sourceColumnWidth, sourceRowHeight } from './mapa-source-dimensions.js';
 import { SCROLL_BATCH_SIZE, normalizeCreateCount,
   normalizeRowHeight, mergeLoadedRows, shouldLoadNextBatch, virtualRowWindow,
-  sparseSheetWindow, SHEET_MAX_ROW, SHEET_DEFAULT_HEIGHT,
+  sparseSheetWindow, SHEET_MAX_ROW,
   normalizeColumnWidth, totalSheetWidth, MIN_ROW_HEIGHT, MAX_ROW_HEIGHT,
   MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH, ROW_NUMBER_COLUMN_WIDTH } from './sheet-layout.js';
 import SheetColorPicker from './SheetColorPicker.js';
