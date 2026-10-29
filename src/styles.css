@@ -1082,3 +1082,5 @@ html.costalog-dark .sheet-cell-options-error{background:#532f30;color:#ffd9d9}
   cursor: col-resize;
   touch-action: none;
 }
+
+.local-demo-warning{margin:10px 16px 0;border-color:#e2d4a9;background:#fff9e8;color:#6b5727;line-height:1.45;align-items:flex-start}.local-demo-warning svg{flex-shrink:0;margin-top:1px}
