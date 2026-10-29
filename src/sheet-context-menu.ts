@@ -3,7 +3,7 @@ export type SheetContextAction =
   "copy" | "cut" | "paste" | "paste-values" | "select-all" |
   "clear" | "delete-rows" | "delete-column" | "hide-column" |
   "resize-row" | "resize-column" | "sort-asc" | "sort-desc" |
-  "filter" | "conditional" | "dropdown" | "insert-rows";
+  "filter" | "conditional" | "dropdown" | "insert-rows" | "add-checkbox" | "remove-checkbox";
 export type SheetContextOption = {
   id: SheetContextAction; label: string; shortcut?: string;
   danger?: boolean; separator?: boolean;
@@ -23,12 +23,18 @@ export function getSheetContextOptions(kind: SheetContextKind, admin: boolean): 
     {id:"delete-rows",label:"Excluir linhas carregadas selecionadas (até 100)",danger:true,separator:true}
   ];
   if(kind==="row")return [
-    ...common,{id:"insert-rows",label:"Adicionar linhas",separator:true},
+    ...common,
+    {id:"add-checkbox",label:"Inserir caixa de seleção",separator:true},
+    {id:"remove-checkbox",label:"Remover caixa de seleção"},
+    {id:"insert-rows",label:"Adicionar linhas",separator:true},
     {id:"resize-row",label:"Redimensionar altura da linha"},
     {id:"delete-rows",label:"Excluir linhas selecionadas",danger:true,separator:true}
   ];
   if(kind==="column")return [
-    ...common,{id:"resize-column",label:"Redimensionar largura",separator:true},
+    ...common,
+    {id:"add-checkbox",label:"Inserir caixas de seleção",separator:true},
+    {id:"remove-checkbox",label:"Remover caixas de seleção"},
+    {id:"resize-column",label:"Redimensionar largura",separator:true},
     {id:"sort-asc",label:"Classificar A → Z"},
     {id:"sort-desc",label:"Classificar Z → A"},
     {id:"filter",label:"Criar filtro"},
@@ -40,6 +46,8 @@ export function getSheetContextOptions(kind: SheetContextKind, admin: boolean): 
   return [
     ...common,
     {id:"select-all",label:"Selecionar todas as células carregadas",shortcut:"Ctrl+A",separator:true},
+    {id:"add-checkbox",label:"Inserir caixa de seleção",separator:true},
+    {id:"remove-checkbox",label:"Remover caixa de seleção"},
     {id:"resize-row",label:"Altura da linha"},
     {id:"resize-column",label:"Largura da coluna"},
     {id:"insert-rows",label:"Adicionar linhas",separator:true},
