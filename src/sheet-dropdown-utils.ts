@@ -20,3 +20,15 @@ export function resolveDropdownValue(
   if(highlightedIndex>=0 && highlightedIndex<options.length)return options[highlightedIndex];
   return null;
 }
+
+/** Clicking an existing cell opens every option; typing starts a search. */
+export function initialDropdownSearch(currentValue:string,initialQuery:string):string {
+  return initialQuery===currentValue ? "" : initialQuery;
+}
+/** Enter/Tab without a new choice preserves the original value. */
+export function confirmDropdownValue(
+  query:string,currentValue:string,options:string[],highlightedIndex:number
+):string|null {
+  if(!query.trim()&&highlightedIndex<0)return currentValue;
+  return resolveDropdownValue(query,options,highlightedIndex);
+}
