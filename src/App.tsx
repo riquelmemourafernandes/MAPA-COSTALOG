@@ -14,7 +14,7 @@ import {
   parseEditableValue, selectionBounds, serializeSelection, gridKeyboardAction,
   type GridPosition
 } from './sheet-grid.js';
-import { Activity, Bell, Bold, GripVertical, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound, ShieldCheck } from 'lucide-react';
+import { Activity, Bell, Bold, GripVertical, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Menu, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound, ShieldCheck } from 'lucide-react';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean; required?: boolean };
 type ValidationItem = { key: string; label: string; dataType: string; total: number; missing: number };
@@ -176,6 +176,8 @@ export default function App() {
   const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
   const [gridViewport, setGridViewport] = useState({scrollTop:0,height:560});
   const selectionDragRef = useRef(false);
+  const dragInfoRef = useRef<{row:number;column:number;x:number;y:number;moved:boolean}|null>(null);
+  const lastRequestedPageRef = useRef(0);
   const [retryRowsKey, setRetryRowsKey] = useState(0);
   const [total, setTotal] = useState(0);
   const [columnMenu, setColumnMenu] = useState(false);
@@ -699,10 +701,15 @@ export default function App() {
   function handleGridScroll(event: React.UIEvent<HTMLDivElement>) {
     const node=event.currentTarget;
     setGridViewport({scrollTop:node.scrollTop,height:node.clientHeight});
-    if(shouldLoadNextBatch({
+    if (lastRequestedPageRef.current === page + 1) return;
+    if (page >= Math.ceil(total / pageSize)) return;
+    if (shouldLoadNextBatch({
       scrollTop:node.scrollTop,scrollHeight:node.scrollHeight,clientHeight:node.clientHeight,
       loadedCount:rows.length,total,busy:loading||creatingRows
-    })) setPage(value=>value+1);
+    })) {
+      lastRequestedPageRef.current=page+1;
+      setPage(value=>value+1);
+    }
   }
   function toggleSidebar() {
     setSidebarCollapsed(previous=>{
@@ -730,16 +737,28 @@ export default function App() {
     window.addEventListener('pointerup',end,{once:true});
   }
   function beginRangeDrag(event:React.PointerEvent<HTMLTableCellElement>,ri:number,ci:number) {
-    if(event.button!==0 || editingCell ||
-      (event.target as HTMLElement).closest('input,select,button,textarea,[data-cell-editor]'))return;
+    if(event.button!==0 || (event.target as HTMLElement).closest('input,select,button,textarea,[data-cell-editor]'))return;
+    event.preventDefault();
     selectionDragRef.current=true;
+    dragInfoRef.current={row:ri,column:ci,x:event.clientX,y:event.clientY,moved:false};
+    if(editingCell)setEditingCell(null);
     selectGridCell(ri,ci,event.shiftKey,false);
-    const stop=()=>{selectionDragRef.current=false;window.removeEventListener('pointerup',stop);window.removeEventListener('pointercancel',stop);};
+    const stop=()=>{selectionDragRef.current=false;dragInfoRef.current=null;
+      window.removeEventListener('pointerup',stop);window.removeEventListener('pointercancel',stop);};
     window.addEventListener('pointerup',stop,{once:true});
     window.addEventListener('pointercancel',stop,{once:true});
   }
   function extendRangeDrag(ri:number,ci:number) {
-    if(selectionDragRef.current)selectGridCell(ri,ci,true,false);
+    if(!selectionDragRef.current)return;
+    if(dragInfoRef.current)dragInfoRef.current.moved=true;
+    selectGridCell(ri,ci,true,false);
+  }
+  function finishRangeDrag(ri:number,ci:number) {
+    const info=dragInfoRef.current;
+    if(!info || !selectionDragRef.current || info.moved || info.row!==ri || info.column!==ci)return;
+    const row=displayedRows[ri],column=visibleColumns[ci];
+    if(row&&column&&column.editable&&userRole!=='CONSULTA'&&
+      !isCheckboxColumn(column.key,column.dataType))beginCellEdit(ri,ci);
   }
 
   const localFilterOptions = useMemo(() => {
@@ -1099,6 +1118,30 @@ export default function App() {
     window.addEventListener('pointerup', onUp, { once: true });
   }
 
+  async function createManyRows() {
+    const count=normalizeCreateCount(newRowsCount);
+    if(!count||!apiBase||!token||creatingRows||userRole==='CONSULTA') {
+      setApiError('Informe de 1 a 100 linhas e confira suas permissões.');return;
+    }
+    if(!window.confirm('Criar '+count+' linhas vazias no MAPA? Elas serão registros reais na API conectada.'))return;
+    setCreatingRows(true);setApiError('');
+    try{
+      const response=await fetch(apiBase+'/api/v1/mapa/batch-blank',{
+        method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+        body:JSON.stringify({count})
+      });
+      const body=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(response.status===404
+        ? 'A API conectada ainda não suporta a criação de várias linhas. Habilite a API de homologação.'
+        : body?.error?.message||'Não foi possível criar as linhas.');
+      setNewRowsOpen(false);setPage(1);lastRequestedPageRef.current=0;
+      setRows([]);setRetryRowsKey(previous=>previous+1);
+      if(gridRef.current)gridRef.current.scrollTop=0;
+      setNotice(count+' linhas criadas com histórico de auditoria.');
+    }catch(error){setApiError(error instanceof Error?error.message:'Falha na criação.');}
+    finally{setCreatingRows(false);}
+  }
+
   if (!token) {
     return <main className="auth-layout">
       <div className="auth-intro">
@@ -1144,8 +1187,11 @@ export default function App() {
       </section>
     </main>;
   }
-  return <div className="app-shell">
+  return <div className={'app-shell ' + (sidebarCollapsed ? 'sidebar-collapsed' : '') +
+      (active === 'MAPA 1.0' ? ' map-fullscreen' : '')}>
     <aside className="sidebar">
+      <button type="button" className="sidebar-hide-button" title="Recolher menu"
+        aria-label="Recolher menu lateral" onClick={toggleSidebar}>☰</button>
       <div className="brand"><div className="brand-mark"><Truck size={22}/></div><div><strong>COSTALOG</strong><span>OPERAÇÕES</span></div></div>
       <div className="workspace"><span className="workspace-dot"/> MAPA operacional <ChevronDown size={15}/></div>
       <div className="nav-label">MENU PRINCIPAL</div>
@@ -1153,8 +1199,11 @@ export default function App() {
       <div className="sidebar-bottom"><div className="connection"><span className="connection-dot"/> {apiBase && token ? 'Conectado à API' : 'API não conectada'}</div><div className="user"><div className="avatar">C</div><div><b>Costalog</b><small>{token ? 'Usuário autenticado' : 'Acesso operacional'}</small></div><Settings2 size={17}/></div></div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="breadcrumbs">Operações <span>/</span> <b>{active}</b></div><div className="top-actions">{token && <button className="secondary" onClick={logout}><LogOut size={15}/> Sair</button>}<button className="icon-button" title="Notificações"><Bell size={18}/></button><div className="avatar small">C</div></div></header>
-      <section className="content">
+      <header className="topbar"><button type="button" className="sidebar-toggle" title={sidebarCollapsed?'Mostrar menu':'Ocultar menu'}
+          aria-label={sidebarCollapsed?'Mostrar menu lateral':'Ocultar menu lateral'}
+          aria-expanded={!sidebarCollapsed} onClick={toggleSidebar}><Menu size={18}/></button>
+        <div className="breadcrumbs">Operações <span>/</span> <b>{active}</b></div><div className="top-actions">{token && <button className="secondary" onClick={logout}><LogOut size={15}/> Sair</button>}<button className="icon-button" title="Notificações"><Bell size={18}/></button><div className="avatar small">C</div></div></header>
+      <section className={'content ' + (active === 'MAPA 1.0' ? 'map-content' : '')}>
         {active !== 'MAPA 1.0' && <div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPERAÇÕES</div><h1>{active}</h1><p>Grade operacional completa, com colunas configuráveis para cada usuário.</p></div></div>}
         {active !== 'MAPA 1.0' && <div className="notice"><ClipboardList size={17}/><span>{apiBase ? (token ? notice : 'Entre com sua conta para acessar os dados reais.') : 'Configure VITE_API_URL para conectar a aplicação à API. Nenhum dado fictício será exibido.'}</span></div>}
         {apiBase && !token && <form className="panel login-panel" onSubmit={login}><div><h2>Acessar MAPA COSTALOG</h2><p>Entre com seu usuário autorizado.</p></div><div className="login-fields"><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail corporativo" autoComplete="username"/><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha" autoComplete="current-password"/><button className="primary" disabled={loading}>{loading ? 'Conectando...' : 'Entrar'}</button></div>{apiError && <p className="api-error">{apiError}</p>}</form>}
@@ -1206,7 +1255,21 @@ export default function App() {
         </section>}
         {active === 'MAPA 1.0' && <>
         <section className="panel mapa-grid-panel">
-          <div className="panel-heading compact-map-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>Planilha operacional · edite as células autorizadas diretamente na grade.</p></div><div className="panel-actions">{token && userRole !== 'CONSULTA' && <button className="primary" disabled={loading} onClick={()=>void createRow()}><Plus size={16}/> Novo registro</button>}<button className="secondary" onClick={()=>setColumnMenu(value=>!value)}><Columns3 size={16}/> Escolher colunas ({visibleColumns.length})</button></div></div>
+          <div className="panel-heading compact-map-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>Planilha operacional · edite as células autorizadas diretamente na grade.</p></div><div className="panel-actions">{token && userRole !== 'CONSULTA' && <>
+        <button className="primary" disabled={loading||creatingRows} onClick={()=>void createRow()} title="Inserir uma linha">
+          <Plus size={16}/> Nova linha</button>
+        <button className="secondary" onClick={()=>setNewRowsOpen(value=>!value)} disabled={creatingRows}
+          title="Adicionar várias linhas de uma vez"><Plus size={14}/> Várias linhas</button>
+      </>}<button className="secondary" onClick={()=>setColumnMenu(value=>!value)}><Columns3 size={16}/> Escolher colunas ({visibleColumns.length})</button></div></div>
+          {newRowsOpen && <div className="sheet-add-many">
+            <label>Adicionar linhas <input type="number" min={1} max={100} step={1}
+              aria-label="Número de linhas para criar" value={newRowsCount}
+              onChange={event=>setNewRowsCount(Number(event.target.value))}/></label>
+            <button className="primary" disabled={creatingRows||!normalizeCreateCount(newRowsCount)}
+              onClick={()=>void createManyRows()}>{creatingRows?'Adicionando…':'Adicionar '+newRowsCount+' linhas'}</button>
+            <button className="secondary" onClick={()=>setNewRowsOpen(false)}>Cancelar</button>
+            <small>Até 100 por operação · registros reais somente após confirmar</small>
+          </div>}
           {columnMenu && <div className="column-picker"><div className="column-picker-actions"><b>Colunas exibidas e sequência</b><button className="secondary" onClick={()=>{const all=columns.map(c=>c.key);setVisibleKeys(all);localStorage.setItem(preferenceKey,JSON.stringify(all));void persistPreferences({visibleKeys:all});}}>Mostrar todas</button><button className="secondary" onClick={()=>{const defaults=columns.filter(c=>c.visible).map(c=>c.key);setVisibleKeys(defaults);localStorage.setItem(preferenceKey,JSON.stringify(defaults));void persistPreferences({visibleKeys:defaults});}}>Restaurar padrão</button></div><div className="column-options">{[...columns].sort((a,b)=>{const ai=visibleKeys.indexOf(a.key),bi=visibleKeys.indexOf(b.key);return ai<0?(bi<0?a.position-b.position:1):bi<0?-1:ai-bi}).map(column=><div className={"column-option "+(draggedColumn===column.key?"dragging":"")} key={column.key} draggable onDragStart={()=>setDraggedColumn(column.key)} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();if(draggedColumn)reorderColumn(draggedColumn,column.key);setDraggedColumn(null)}} onDragEnd={()=>setDraggedColumn(null)}><GripVertical size={15} className="drag-handle"/><input type="checkbox" checked={visibleKeys.includes(column.key)} onChange={()=>toggleColumn(column.key)}/><span>{column.label || '(coluna sem título)'}</span></div>)}</div><div className="saved-view-tools"><button className="secondary" onClick={()=>setShowViewTools(value=>!value)}><Filter size={14}/> Filtros personalizados</button>{showViewTools&&<div className="saved-view-editor"><div className="saved-view-save"><input value={viewName} onChange={event=>setViewName(event.target.value)} placeholder="Nome da configuração"/><button className="primary" onClick={()=>void saveCurrentView()}><Save size={14}/> Salvar filtro</button></div>{savedViews.map(view=><div className="saved-view-item" key={view.name}><button onClick={()=>applyView(view)}>{view.name}</button><small>{view.visibleKeys.length} colunas · {view.status||'Todos os status'}{view.query?' · busca: '+view.query:''}</small><button title="Excluir filtro" onClick={()=>{const next=savedViews.filter(item=>item.name!==view.name);setSavedViews(next);void persistPreferences({savedViews:next});}}><X size={14}/></button></div>)}</div>}</div></div>}<div className="toolbar"><div className="searchbox"><Search size={16}/><input ref={searchInputRef} value={query} onChange={e=>{setPage(1);setQuery(e.target.value)}} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="">Todos os status</option>{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><option key={value} value={value}>{value}</option>)}</select></div><div className="select-wrap"><Columns3 size={16}/><select aria-label="Filtrar por coluna" value={filterColumn} onChange={e=>{setPage(1);setFilterColumn(e.target.value)}}><option value="">Todas as colunas</option>{columns.map(column=><option key={column.key} value={column.key}>{column.label || column.key}</option>)}</select></div><input aria-label="Valor do filtro de coluna" className="column-filter-input" value={filterValue} onChange={e=>{setPage(1);setFilterValue(e.target.value)}} placeholder="Valor da coluna..."/><button className="secondary" onClick={()=>{setFilterColumn('');setFilterValue('');setColumnFilters({});setPage(1)}} disabled={!filterColumn&&!filterValue&&!Object.keys(columnFilters).length}>Limpar filtro</button><button className="secondary" disabled={!selectedCell} onClick={()=>selectedCell&&void openHistory(selectedCell.row,selectedCell.column)}><History size={14}/> Histórico da célula selecionada</button><button className="secondary" disabled={!canFormatSelection} title="Negrito na célula, linha ou coluna selecionada" onClick={()=>updateSelectedStyle({bold:!selectedStyle.bold})}><Bold size={14}/> Negrito</button><SheetColorPicker kind="text" value={selectedStyle.color||'#47584E'} disabled={!canFormatSelection}
   onSelect={color=>updateSelectedStyle({color})}/>
 <SheetColorPicker kind="background" value={selectedStyle.background||'#FFFFFF'} disabled={!canFormatSelection}
@@ -1235,7 +1298,7 @@ export default function App() {
               placeholderPosition && visibleColumns[placeholderPosition.column]
                 ? visibleColumns[placeholderPosition.column].key + (placeholderPosition.row + 1) + ' (visual)'
                 : 'Selecione uma célula'}</span>
-            <span className="sheet-guide">Clique seleciona · Enter confirma e desce ↓ · Tab confirma e vai à direita → · Shift+Enter sobe · Shift+Tab volta · F2 edita</span>
+            <span className="sheet-guide" aria-hidden="true"></span>
             <button className="secondary" type="button" disabled={!selectedBounds} onClick={() => void copyGridSelection()}>Copiar seleção</button>
             <div className="sheet-status-guide">
               <button className="secondary" type="button" aria-expanded={showStatusColors}
@@ -1248,7 +1311,8 @@ export default function App() {
               </div>}
             </div>
           </div>
-          <div className="table-wrap sheet-grid-wrap" ref={gridRef} tabIndex={0} onKeyDown={onGridKeyDown} onCopy={onGridCopy} onPaste={onGridPaste}>
+          <div className="table-wrap sheet-grid-wrap" ref={gridRef} tabIndex={0} onKeyDown={onGridKeyDown} onCopy={onGridCopy} onPaste={onGridPaste}
+            onScroll={handleGridScroll}>
             <table className="sheet-table" role="grid" aria-label="MAPA 1.0 - planilha operacional">
               <colgroup>
                 <col style={{width: 65}} />
@@ -1284,13 +1348,18 @@ export default function App() {
                 </tr>
               </thead>
               <tbody>
-                {displayedRows.map((row, ri) => {
+                {windowed.top > 0 && <tr className="sheet-virtual-spacer" aria-hidden="true">
+                  <td colSpan={visibleColumns.length+1} style={{height:windowed.top,padding:0,border:0}}/>
+                </tr>}
+                {visibleRenderedRows.map((row, index) => {
+                  const ri=windowed.start+index;
                   const conditionalBackground = statusRowColor(
                     Object.prototype.hasOwnProperty.call(pendingRowStatus, row.id)
                       ? pendingRowStatus[row.id] : (row.data?.C ?? row.status)
                   );
                   const conditionalTextColor = conditionalBackground ? statusRowTextColor(conditionalBackground) : undefined;
                   return <tr key={row.id} className={selectedRowIds.includes(row.id) ? 'bulk-selected-row' : ''}
+                    style={{height:normalizeRowHeight(rowHeights[row.id]||35)}}
                     data-status={String(row.data?.C ?? row.status ?? '')}>
                   <th scope="row" className={'sheet-row-number '+ (selectionMode === 'row' && selectedRowId===row.id ? 'sheet-row-selected' : '')}>
                     {userRole !== 'CONSULTA' && <input type="checkbox" aria-label={'Marcar registro ' + row.sequence + ' para edição em massa'}
@@ -1303,6 +1372,10 @@ export default function App() {
                       title={'Selecionar toda a linha ' + row.sequence}
                       aria-label={'Selecionar linha inteira ' + row.sequence}
                       onClick={()=>selectEntireRow(ri)}>{row.sequence}</button>
+                    <span className="sheet-row-resize-handle" role="separator"
+                      aria-label={'Arrastar para ajustar altura da linha '+row.sequence}
+                      title="Arraste para mudar a altura da linha"
+                      onPointerDown={event=>beginRowResize(event,row)}/>
                   </th>
                   {visibleColumns.map((column, ci) => {
                     const selected = selectionMode === 'cell' && selectedPosition?.row === ri && selectedPosition.column === ci;
@@ -1323,11 +1396,14 @@ export default function App() {
                         color: style.color || conditionalTextColor,
                         textAlign: checkbox ? 'center' : (style.align || 'left'),
                         backgroundColor: conditionalBackground ?? style.background}}
-                      onClick={event => {
-                        selectGridCell(ri, ci, event.shiftKey, !lookup);
-                        if (lookup && editable && !event.shiftKey) beginCellEdit(ri, ci);
+                      onPointerDown={event=>beginRangeDrag(event,ri,ci)}
+                      onPointerMove={event=>{
+                        const info=dragInfoRef.current;
+                        if(info && Math.hypot(event.clientX-info.x,event.clientY-info.y)>6)
+                          info.moved=true;
                       }}
-                      onDoubleClick={() => { if (!checkbox) beginCellEdit(ri, ci); }}>
+                      onPointerEnter={()=>extendRangeDrag(ri,ci)}
+                      onPointerUp={()=>finishRangeDrag(ri,ci)}>
                       <div className="cell-content">
                         {checkbox ? (
                           <span className="sheet-boolean-wrapper"
@@ -1403,9 +1479,13 @@ export default function App() {
                   })}
                 </tr>;
                 })}
-                {!loading && displayedRows.length === 0 && Array.from({length: 12}, (_, index) =>
+                {windowed.bottom > 0 && <tr className="sheet-virtual-spacer" aria-hidden="true">
+                  <td colSpan={visibleColumns.length+1} style={{height:windowed.bottom,padding:0,border:0}}/>
+                </tr>}
+                {!loading && rows.length >= total && displayedRows.length < 35 &&
+                  Array.from({length: EMPTY_GRID_ROWS - Math.min(EMPTY_GRID_ROWS,displayedRows.length)}, (_, index) =>
                   <tr className="sheet-placeholder-row" key={'placeholder-' + index} aria-label="Linha visual vazia, sem registro salvo">
-                    <th scope="row" className="sheet-row-number">{index + 1}</th>
+                    <th scope="row" className="sheet-row-number">{displayedRows.length ? '＋' : index + 1}</th>
                     {visibleColumns.map((column, ci) => {
                       const chosen = placeholderPosition?.row === index && placeholderPosition.column === ci;
                       return <td key={column.key} className={'sheet-placeholder-cell ' + (chosen ? 'selected-cell' : '')}
@@ -1428,7 +1508,7 @@ export default function App() {
             {!loading && displayedRows.length === 0 &&
               <div className="sheet-empty-message" role="status">
                 {total === 0 ? 'Sem registros operacionais carregados. A grade vazia é apenas visual; use “Novo registro” com permissão de edição para criar uma linha.'
-                  : 'Nenhuma linha corresponde aos filtros nesta página. Limpe os filtros ou mude de página.'}
+                  : 'Nenhuma linha corresponde aos filtros desta visualização. Limpe os filtros.'}
               </div>}
           </div>
           {openFilterKey && filterMenuRect && <div className="sheet-filter-popover"
@@ -1477,7 +1557,12 @@ export default function App() {
             </div>
           </div>}
           <footer className="table-footer"><span>{apiBase && token ? 'Dados do banco • edição individual com auditoria' : 'Sem dados de demonstração'}</span><span><span className="green-dot"/> {visibleColumns.length} coluna(s) selecionada(s)</span></footer>
-          <div className="pagination"><button className="secondary" disabled={page<=1 || loading} onClick={()=>setPage(value=>Math.max(1,value-1))}>Anterior</button><span>Página {page} de {Math.max(1,Math.ceil(total/pageSize))}</span><button className="secondary" disabled={page>=Math.ceil(total/pageSize) || loading} onClick={()=>setPage(value=>value+1)}>Próxima</button></div>
+          <div className="sheet-scroll-status" role="status">
+            <span>{displayedRows.length} de {total} registros carregados · Role para continuar</span>
+            {rows.length < total && <button className="secondary" disabled={loading}
+              onClick={()=>{lastRequestedPageRef.current=page+1;setPage(value=>value+1)}}>
+              {loading?'Carregando…':'Carregar mais linhas'}</button>}
+          </div>
         </section>
         </>}
         {pastePreview && <div className="modal-backdrop">
