@@ -9,7 +9,7 @@ import { isCollectionCompleted, isDeliveryCompleted, parseAppointment, shouldAle
 import { z } from "zod";
 import { submitAccessRequest } from "./access-requests.js";
 import { isAllowedFrontendOrigin } from "./frontend-origins.js";
-import { BASE_COLUMN_LIST } from "./base-cadastros.js";
+import { BASE_COLUMN_LIST, BASE_LIST_KEYS, normalizeBaseLabel, baseItemSchema, baseUpdateSchema } from "./base-cadastros.js";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -180,6 +180,100 @@ app.get("/api/v1/auth/me", (req, res) => {
 // Dropdown values are read-only and require an authenticated user.
 // Prefer the standalone BASE catalog. Existing operational values are used
 // as a compatibility fallback until BASE is populated in homologation.
+// BASE reference values. Soft deletion preserves history and existing MAPA rows.
+// All changes are audited and restricted to administrators/supervisors.
+app.get("/api/v1/base/catalog", async (req, res, next) => {
+  try {
+    const listName = String(req.query.listName || "").trim().toUpperCase();
+    if (!BASE_LIST_KEYS.has(listName)) return res.status(400).json({
+      error: { code: "INVALID_LIST", message: "Escolha uma lista de cadastros válida." }
+    });
+    const search = String(req.query.search || "").trim().slice(0, 120);
+    const items = await prisma.lookupValue.findMany({
+      where: { listName, ...(search ? {label: {contains: search, mode: "insensitive"}} : {}) },
+      orderBy: [{active: "desc"}, {label: "asc"}], take: 2000,
+      select: {id:true,label:true,active:true,metadata:true,updatedAt:true}
+    });
+    return res.json({items});
+  } catch (error) { return next(error); }
+});
+
+app.post("/api/v1/base/catalog",
+  requireRole(UserRole.ADMIN, UserRole.SUPERVISOR), async (req, res, next) => {
+  try {
+    const parsed = baseItemSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({
+      error: {code: "VALIDATION_ERROR", message: "Revise os dados do cadastro."}
+    });
+    const {listName,label,metadata} = parsed.data;
+    const normalized = normalizeBaseLabel(label);
+    const old = await prisma.lookupValue.findUnique({
+      where: {listName_normalized: {listName,normalized}}
+    });
+    if (old) return res.status(409).json({error: {
+      code: "DUPLICATE", message: old.active ?
+        "Esse cadastro já existe na BASE." :
+        "Esse nome está inativo. Reative o cadastro existente."
+    }});
+    const item = await prisma.$transaction(async tx => {
+      const created = await tx.lookupValue.create({data: {listName,label,normalized,metadata}});
+      await tx.auditLog.create({data:{
+        entityType:"BASE_CADASTRO",entityId:created.id,action:"CREATE",
+        afterValue:{listName,label,metadata},userId:req.authUser!.id
+      }});
+      return created;
+    });
+    return res.status(201).json({item});
+  } catch (error) {
+    // Unique index also protects concurrent inserts.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
+      return res.status(409).json({error:{code:"DUPLICATE",message:"Esse cadastro já existe na BASE."}});
+    return next(error);
+  }
+});
+
+app.patch("/api/v1/base/catalog/:id",
+  requireRole(UserRole.ADMIN, UserRole.SUPERVISOR), async (req, res, next) => {
+  try {
+    const parsed = baseUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({
+      error:{code:"VALIDATION_ERROR",message:"Revise a alteração do cadastro."}
+    });
+    const previous = await prisma.lookupValue.findUnique({where:{id:req.params.id}});
+    if (!previous || !BASE_LIST_KEYS.has(previous.listName))
+      return res.status(404).json({error:{code:"NOT_FOUND",message:"Cadastro não encontrado."}});
+    const label = parsed.data.label ?? previous.label;
+    const normalized = normalizeBaseLabel(label);
+    if (normalized !== previous.normalized) {
+      const duplicate = await prisma.lookupValue.findUnique({
+        where:{listName_normalized:{listName:previous.listName,normalized}}
+      });
+      if (duplicate) return res.status(409).json({error:{
+        code:"DUPLICATE",message:"Já existe cadastro com esse nome nesta lista."
+      }});
+    }
+    const nextMetadata = parsed.data.metadata ?? previous.metadata;
+    const item = await prisma.$transaction(async tx=>{
+      const updated = await tx.lookupValue.update({where:{id:previous.id},data:{
+        label,normalized,active:parsed.data.active ?? previous.active,
+        ...(parsed.data.metadata ? {metadata:parsed.data.metadata} : {})
+      }});
+      await tx.auditLog.create({data:{
+        entityType:"BASE_CADASTRO",entityId:previous.id,action:"UPDATE",
+        beforeValue:{label:previous.label,active:previous.active,metadata:previous.metadata} as Prisma.InputJsonObject,
+        afterValue:{label:updated.label,active:updated.active,metadata:nextMetadata} as Prisma.InputJsonObject,
+        userId:req.authUser!.id
+      }});
+      return updated;
+    });
+    return res.json({item});
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
+      return res.status(409).json({error:{code:"DUPLICATE",message:"Esse cadastro já existe na BASE."}});
+    return next(error);
+  }
+});
+
 app.get("/api/v1/base/options", async (req, res, next) => {
   try {
     const column = String(req.query.column || "").trim().toUpperCase().slice(0, 4);
