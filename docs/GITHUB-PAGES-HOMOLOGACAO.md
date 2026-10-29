@@ -1,70 +1,60 @@
-# Homologação do MAPA 2.0 no GitHub Pages
+# MAPA Costalog — modo público de demonstração no GitHub Pages
 
-Esta prévia é **independente do Vercel de produção**. Ela é gerada somente a
-partir da branch `feat/roadmap-phase1-filters` e publicada como arquivos
-estáticos pelo GitHub Actions.
-
-## Endereço previsto
+## Endereço público
 
 https://riquelmemourafernandes.github.io/MAPA-COSTALOG/
 
-O endereço só estará acessível quando o workflow de deploy terminar com
-**success** e o GitHub Pages estiver configurado para receber GitHub Actions.
+O GitHub Actions compila e publica o frontend estático a partir da branch
+`feat/roadmap-phase1-filters`. A publicação não precisa de Render, Vercel,
+Supabase, API remota nem banco de dados externo.
 
-## Ativação do GitHub Pages (requer administrador do repositório)
+## O que funciona neste modo
 
-1. Repositório **Settings → Pages → Build and deployment → Source → GitHub Actions**.
-2. Em **Settings → Environments → github-pages**, verifique as regras de
-   proteção. A branch `feat/roadmap-phase1-filters` deve ser autorizada a
-   publicar a prévia, caso haja restrições de branch.
-3. Confira o workflow em **Actions → MAPA 2.0 - GitHub Pages Homologacao**.
-   O passo `Deploy homologation website to GitHub Pages` precisa concluir
-   com **success**.
+- Grade de 72 colunas baseada no cabeçalho MAPA 1.0, com linhas fictícias.
+- Editar célula com duplo clique, Enter ou F2.
+- Selecionar células, linhas e colunas; usar o menu de contexto com botão direito.
+- Copiar e colar intervalos tabulados do Excel/Sheets; Delete limpa a seleção.
+- Inserir e excluir linhas e colunas.
+- Pesquisar, filtrar por status e ordenar colunas.
+- Desfazer/refazer alterações recentes.
+- Importar CSV/TSV e exportar um CSV.
+- Salvar automaticamente no armazenamento local do navegador (`localStorage`).
 
-A integração atual de GitHub não possui acesso administrativo para alterar
-essas configurações por conta própria.
+## Limitações importantes
 
-## API de homologação (Render)
+Este é um modo de demonstração **sem autenticação e sem segurança de acesso**.
+Não há login real nem perfis protegidos; qualquer pessoa que abra o link pode
+usar as ferramentas de demonstração. Não coloque senhas, dados pessoais,
+clientes reais, dados operacionais ou informações confidenciais nele.
 
-O frontend publicado no Pages usa exclusivamente:
+Os registros são exemplos fictícios. As alterações ficam somente no navegador
+e perfil em que foram feitas; não são compartilhadas com outras pessoas nem
+sincronizadas entre dispositivos. Limpar os dados do navegador pode apagá-las.
+Use **Exportar CSV** para guardar uma cópia local dos seus testes.
 
-`https://mapa-costalog-api-homologacao.onrender.com`
+Sem API e banco de dados, estas funções não estão disponíveis como operações
+reais compartilhadas:
 
-O valor é inserido na compilação por `VITE_HOMOLOG_API_URL`; nenhum segredo
-é inserido no JavaScript distribuído. Se a URL estiver ausente ou diferente,
-o site de GitHub Pages **não** recorre à API de produção.
+- Login seguro, gestão de usuários e permissões de administrador.
+- Banco de dados central, sincronização multiusuário e auditoria centralizada.
+- Painéis operacionais, histórico remoto, alertas e notificações.
+- Cadastros compartilhados e persistência entre dispositivos.
 
-Para permitir o login e chamadas autenticadas no ambiente de homologação,
-no **serviço de homologação do Render** configure:
+A interface não finge que essas funções estão ativas. A faixa de aviso no site
+explica que se trata de uma demonstração local.
 
-`FRONTEND_ORIGINS=https://riquelmemourafernandes.github.io`
+## Publicação
 
-Se `FRONTEND_ORIGINS` já contiver outras origens, acrescente esta URL,
-separando por vírgulas. Preserve `FRONTEND_ORIGIN` existente e **não**
-altere o serviço de produção. Depois, aplique o redeploy da **API de
-homologação** para efetivar a variável. O valor de CORS é apenas a origem
-`https://riquelmemourafernandes.github.io`, sem o caminho
-`/MAPA-COSTALOG/`.
+1. O repositório deve ter **Settings → Pages → Build and deployment → Source → GitHub Actions**.
+2. Em **Actions**, abra `MAPA Costalog - GitHub Pages (demonstração local)`.
+3. Aguarde o build e o deploy terminarem com sucesso.
+4. O caminho-base `/MAPA-COSTALOG/` é configurado apenas pelo modo de build
+   `github-pages`.
 
-A API deve responder em `/api/v1/health`; receber `Cannot GET /` na raiz
-do servidor não significa que a API esteja parada. Confirme também que a
-homologação usa seu banco de teste, e não o banco operacional de produção.
+## Futuro servidor próprio
 
-## Segurança e limitações
-
-- O site estático do GitHub Pages é **público**. Nenhum segredo, token, senha
-  ou dump da planilha deve ser versionado ou colocado em variáveis `VITE_*`.
-- O login continua sendo controlado pela API de homologação. O Pages só
-  fornece frontend; não substitui o Render nem o banco.
-- Não crie, altere ou sincronize dados operacionais de produção durante testes.
-- O ambiente usa o caminho-base `/MAPA-COSTALOG/` apenas no Vite com
-  `--mode github-pages`. Builds do Vercel permanecem com `/`.
-
-## Diagnóstico rápido
-
-- **404** no Pages: verificar `Source = GitHub Actions` e o job `deploy`.
-- **Página branca ou assets 404**: conferir o build `--mode github-pages`.
-- **Falha de login, CORS ou Network Error**: validar a URL de homologação,
-  configuração de `FRONTEND_ORIGINS` e disponibilidade do Render.
-- **Deployment rejected by environment protection**: liberar a branch de
-  homologação no ambiente `github-pages` do repositório.
+O código da aplicação conectada permanece no repositório para uma etapa futura
+de hospedagem própria. Para trabalhar com dados reais, será necessário escolher
+e executar uma API e um banco de dados sob seu controle. O GitHub Pages sozinho
+não executa backend nem fornece armazenamento compartilhado; por isso, esta
+versão pública não tenta simular um login seguro.
