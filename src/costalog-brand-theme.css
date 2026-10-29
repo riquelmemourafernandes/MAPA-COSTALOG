@@ -888,3 +888,24 @@ html.costalog-dark .sheet-cell-options {
     max-width:100%;
   }
 }
+/* MAPA 2.0: selection is the cell's real 1px boundary, not an inset outline.
+   It follows the same exact edges used by the grid in both themes. */
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td.selected-cell,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr.sheet-virtual-empty-row>td.selected-cell,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td.selected-cell{
+  outline:none!important;
+  outline-offset:0!important;
+  box-shadow:none!important;
+  border:1px solid var(--costalog-red)!important;
+  background-image:none;
+  background-clip:border-box;
+}
+/* Remove the corner fill handle and the second internal focus ring. */
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table td.selected-cell::after{
+  display:none!important;
+  content:none!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table td.selected-cell .cell-content>span:focus{
+  outline:none!important;
+  box-shadow:none!important;
+}
