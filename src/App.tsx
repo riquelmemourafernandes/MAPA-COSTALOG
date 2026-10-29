@@ -24,7 +24,7 @@ import {
 } from './sheet-grid.js';
 import { Activity, Bell, Bold, GripVertical, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Menu, Moon, Sun, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound, ShieldCheck, Undo2, Redo2 } from 'lucide-react';
 import { buildUndoRecord, matchesUndoState, undoShortcut, type UndoRecord } from './sheet-undo.js';
-import { evaluateFormula, type FormulaValue } from './formula-engine.js';
+import { columnKeyToIndex, evaluateFormula, translateFormulaReferences, type FormulaValue } from './formula-engine.js';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean; required?: boolean };
 function parseGridCellValue(column: Column, value: string) {
@@ -1737,8 +1737,48 @@ export default function App() {
     }
   }
 
+  async function fillSelection(direction: 'down' | 'right') {
+    if (!selectedBounds || userRole === 'CONSULTA' || !token || pasteBusy || gridMutationBusyRef.current) return;
+    const bounds = selectedBounds;
+    const count = (bounds.bottom - bounds.top + 1) * (bounds.right - bounds.left + 1);
+    if (count < 2 || count > 2000) { setApiError('Selecione um intervalo de 2 a 2.000 células para preencher.'); return; }
+    const edits: { row: RecordRow; changes: Record<string, string | number | boolean | null> }[] = [];
+    for (let ri = bounds.top; ri <= bounds.bottom; ri++) {
+      for (let ci = bounds.left; ci <= bounds.right; ci++) {
+        if ((direction === 'down' && ri === bounds.top) || (direction === 'right' && ci === bounds.left)) continue;
+        const targetRow = displayedRows[ri], targetColumn = visibleColumns[ci];
+        const sourceRow = displayedRows[direction === 'down' ? bounds.top : ri];
+        const sourceColumn = visibleColumns[direction === 'down' ? ci : bounds.left];
+        if (!targetRow || !targetColumn || !sourceRow || !sourceColumn) continue;
+        if (!targetColumn.editable) { setApiError('O intervalo inclui uma coluna protegida. Nada foi preenchido.'); return; }
+        const sourceValue = valueText(sourceRow.data?.[sourceColumn.key]);
+        const rowOffset = Number(targetRow.sheetRowNumber ?? targetRow.sequence + 1) -
+          Number(sourceRow.sheetRowNumber ?? sourceRow.sequence + 1);
+        const columnOffset = columnKeyToIndex(targetColumn.key) - columnKeyToIndex(sourceColumn.key);
+        const copied = sourceValue.trim().startsWith('=')
+          ? translateFormulaReferences(sourceValue, rowOffset, columnOffset) : sourceValue;
+        const changes: Record<string, string | number | boolean | null> = { [targetColumn.key]: copied === '' ? null : copied };
+        const existing = edits.find(edit => edit.row.id === targetRow.id);
+        if (existing) Object.assign(existing.changes, changes);
+        else edits.push({ row: targetRow, changes });
+      }
+    }
+    if (edits.length) await updateGridRows(edits, 'Colagem');
+  }
+
   function onGridKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const element = event.target as HTMLElement;
+    if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+      const key = event.key.toLowerCase();
+      if (key === 'home' && displayedRows.length && visibleColumns.length) {
+        event.preventDefault(); selectGridCell(0, 0, false, true); return;
+      }
+      if (key === 'end' && displayedRows.length && visibleColumns.length) {
+        event.preventDefault(); selectGridCell(displayedRows.length - 1, visibleColumns.length - 1, false, true); return;
+      }
+      if (key === 'd') { event.preventDefault(); void fillSelection('down'); return; }
+      if (key === 'r') { event.preventDefault(); void fillSelection('right'); return; }
+    }
     if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(element.tagName) ||
       pasteBusy || adminSheetBusy || editingCell) return;
     if(userRole==='ADMIN' && (event.ctrlKey||event.metaKey) && event.key.toLowerCase()==='a'){
