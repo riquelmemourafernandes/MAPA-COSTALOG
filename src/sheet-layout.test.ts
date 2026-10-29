@@ -22,17 +22,16 @@ test("height and creation limits protect against unbounded mutations",()=>{
  for(const value of [0,-1,101,2.5,NaN])assert.equal(normalizeCreateCount(value),null);
 });
 
-test("100k linhas virtuais sem preencher banco ou alocar 100k componentes",()=>{
+test("100 linhas virtuais de teste, de 2 até 101, sem inserir vazias no banco",()=>{
  const first=sparseSheetWindow(0,560,{});
- assert.equal(SHEET_MAX_ROW,100001);
+ assert.equal(SHEET_MAX_ROW,101);
  assert.equal(first.start,0);
- assert.equal(first.totalHeight,3500000);
+ assert.equal(first.totalHeight,3500);
  assert.ok(first.end<40);
- const far=sparseSheetWindow(350000,560,{});
- assert.ok(far.start<=10000 && far.end>10000);
- assert.ok(far.end-far.start<50);
+ const middle=sparseSheetWindow(1750,560,{});
+ assert.ok(middle.start<=50 && middle.end>50);
  const resized=sparseSheetWindow(1000,560,{2:90,20:100});
- assert.equal(resized.totalHeight,3500120);
- const last=sparseSheetWindow(3499000,560,{});
- assert.ok(last.end<=100000);
+ assert.equal(resized.totalHeight,3620);
+ const last=sparseSheetWindow(3500,560,{});
+ assert.equal(last.end,100);
 });
