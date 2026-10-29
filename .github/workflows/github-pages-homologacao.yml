@@ -1,0 +1,78 @@
+name: MAPA 2.0 - GitHub Pages Homologacao
+
+on:
+  push:
+    branches:
+      - feat/roadmap-phase1-filters
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'vite.config.ts'
+      - 'tsconfig*.json'
+      - '.github/workflows/github-pages-homologacao.yml'
+  workflow_dispatch:
+
+# Never trigger deployment from main or from a pull request.
+permissions:
+  contents: read
+
+concurrency:
+  group: mapa-costalog-pages-homologacao
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/feat/roadmap-phase1-filters'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout homologation branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # No package-lock.json is committed in this repository.
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build Pages preview against staging API only
+        run: npm run build -- --mode github-pages
+        env:
+          VITE_HOMOLOG_API_URL: https://mapa-costalog-api-homologacao.onrender.com
+
+      - name: Verify Pages base path and compiled output
+        shell: bash
+        run: |
+          test -s dist/index.html
+          grep -q '/MAPA-COSTALOG/assets/' dist/index.html
+          test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload compiled website
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./dist
+
+  deploy:
+    if: github.ref == 'refs/heads/feat/roadmap-phase1-filters'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy homologation website to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
