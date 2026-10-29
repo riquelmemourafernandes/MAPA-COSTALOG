@@ -1709,6 +1709,121 @@ export default function App() {
       column:visibleColumns[visibleColumns.length-1]});
     gridRef.current?.focus({preventScroll:true});
   }
+  function checkboxTargets():{position:number;key:string}[]{
+    const targets:{position:number;key:string}[]=[];
+    if(selectionMode==='column' && selectedColumnKey && sheetCanvas){
+      for(let position=2;position<=SHEET_MAX_ROW;position++)
+        targets.push({position,key:selectedColumnKey});
+    }else if(selectionMode==='row'&&selectedBlankRow!==null&&sheetCanvas){
+      for(const column of visibleColumns)
+        targets.push({position:selectedBlankRow+2,key:column.key});
+    }else if(selectedBounds){
+      for(let r=selectedBounds.top;r<=selectedBounds.bottom;r++){
+        const row=displayedRows[r];
+        if(!row)continue;
+        const position=Number(row.sheetRowNumber??row.sequence+1);
+        for(let c=selectedBounds.left;c<=selectedBounds.right;c++){
+          const column=visibleColumns[c];
+          if(column)targets.push({position,key:column.key});
+        }
+      }
+    }else if(placeholderPosition&&sheetCanvas){
+      const column=visibleColumns[placeholderPosition.column];
+      if(column)targets.push({position:placeholderPosition.row+2,key:column.key});
+    }
+    return targets;
+  }
+  function updateCheckboxSelection(add:boolean){
+    if(!isGitHubPagesPreview){
+      setNotice('Caixas personalizadas estão disponíveis na demonstração local. A API precisará de suporte para salvá-las em outras instalações.');
+      return;
+    }
+    if(userRole==='CONSULTA')return;
+    const targets=checkboxTargets();
+    if(!targets.length){
+      setNotice('Selecione uma célula ou um intervalo antes de inserir caixas de seleção.');
+      return;
+    }
+    if(targets.length>1500){
+      setNotice('Selecione até 1.500 células por operação para preservar o desempenho.');
+      return;
+    }
+    const distinct=Array.from(new Map(targets.map(item=>[customCheckboxKey(item.position,item.key),item])).values());
+    const keys=distinct.map(item=>customCheckboxKey(item.position,item.key));
+    const existingRows=rowsRef.current;
+    const replacements=new Map<string,Set<string>>();
+    if(add){
+      for(const {position,key} of distinct){
+        if(customCheckboxCells[customCheckboxKey(position,key)])continue;
+        const row=existingRows.find(item=>Number(item.sheetRowNumber??item.sequence+1)===position);
+        const current=row?.data?.[key];
+        const compatible=current===undefined||current===null||current===''||
+          typeof current==='boolean'||
+          (typeof current==='string' && ['true','false','sim','não','nao','yes','no','1','0'].includes(current.trim().toLocaleLowerCase('pt-BR')));
+        if(!compatible&&row){
+          const pending=replacements.get(row.id)??new Set<string>();
+          pending.add(key);
+          replacements.set(row.id,pending);
+        }
+      }
+      const count=[...replacements.values()].reduce((n,item)=>n+item.size,0);
+      if(count && !window.confirm('A seleção contém '+count+' célula(s) com valores. Inserir as caixas substituirá esses valores por desmarcado (FALSO). Continuar?'))return;
+    }
+    const changedKeys=keys.filter(key=>Boolean(customCheckboxCells[key])!==add);
+    if(!changedKeys.length){
+      setNotice(add?'A seleção já contém caixas de seleção.':'Não há caixas personalizadas para remover na seleção.');
+      return;
+    }
+    const before:Record<string,boolean>={},after:Record<string,boolean>={};
+    const next={...customCheckboxCells};
+    for(const key of changedKeys){
+      before[key]=Boolean(customCheckboxCells[key]);
+      after[key]=add;
+      if(add)next[key]=true;
+      else delete next[key];
+    }
+    const edits:UndoRecord[]=[];
+    if(replacements.size){
+      const replacedRows=existingRows.map(row=>{
+        const keysToReplace=replacements.get(row.id);
+        if(!keysToReplace)return row;
+        const data={...row.data};
+        for(const key of keysToReplace)data[key]=false;
+        const updated:RecordRow={...row,data,updatedAt:new Date().toISOString(),
+          ...(keysToReplace.has('C')?{status:'false'}:{})};
+        const edit=buildUndoRecord(row,updated,[...keysToReplace]);
+        if(edit)edits.push(edit);
+        return updated;
+      });
+      rowsRef.current=replacedRows;
+      setRows(replacedRows);
+    }
+    setCustomCheckboxCells(next);
+    rememberUndo({kind:'checkboxes',label:add?'Inserir caixas de seleção':'Remover caixas de seleção',
+      keys:changedKeys,before,after,edits});
+    setNotice(add?changedKeys.length+' caixa(s) de seleção inserida(s) nesta cópia local.':
+      changedKeys.length+' caixa(s) de seleção removida(s).');
+  }
+  function toggleCustomCheckbox(position:number,column:Column,checked:boolean){
+    if(!isGitHubPagesPreview||userRole==='CONSULTA')return;
+    const previous=rowsRef.current.find(row=>Number(row.sheetRowNumber??row.sequence+1)===position);
+    const updated:RecordRow=previous
+      ? {...previous,data:{...previous.data,[column.key]:checked},updatedAt:new Date().toISOString(),
+        ...(column.key==='C'?{status:String(checked)}:{})}
+      : {id:'local-sheet-row-'+position,sequence:position-1,sheetRowNumber:position,
+          data:{[column.key]:checked},status:column.key==='C'?String(checked):'',
+          updatedAt:new Date().toISOString()};
+    const next=previous?rowsRef.current.map(row=>row.id===previous.id?updated:row):
+      [...rowsRef.current,updated].sort((a,b)=>Number(a.sheetRowNumber??a.sequence+1)-Number(b.sheetRowNumber??b.sequence+1));
+    rowsRef.current=next;
+    setRows(next);
+    setTotal(next.length);
+    setMaxSheetRowNumber(old=>Math.max(old,position));
+    const edit=buildUndoRecord(previous??{id:updated.id,data:{}},updated,[column.key]);
+    if(edit)rememberUndo({kind:'cells',label:'Marcar caixa '+column.key+position,edits:[edit]});
+    setNotice('Caixa '+column.key+position+(checked?' marcada':' desmarcada')+' nesta cópia local.');
+  }
+
   function openSheetContext(event: React.MouseEvent<HTMLElement>, kind:SheetContextKind,
     rowIndex?:number,columnIndex?:number) {
     if(userRole!=='ADMIN')return;
