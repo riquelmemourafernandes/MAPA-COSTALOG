@@ -11,7 +11,7 @@ import {LOCKED_COLUMN_FORMAT,formatSheetValue,parseSheetValue,toDateInput,type S
 import { matchesColumnFilters, uniqueFilterValues, type ColumnFilterMap } from './column-filter.js';
 import {
   canPasteMatrix, moveGridPosition, parseClipboardGrid,
-  parseEditableValue, selectionBounds, serializeSelection, gridKeyboardAction,
+  parseEditableValue, selectionBounds, serializeSelection, gridKeyboardAction, planClearSelection,
   type GridPosition
 } from './sheet-grid.js';
 import { Activity, Bell, Bold, GripVertical, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Menu, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound, ShieldCheck } from 'lucide-react';
@@ -140,6 +140,7 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const editingBusyRef = useRef(false);
+  const gridMutationBusyRef = useRef(false);
   const editorRef = useRef<HTMLInputElement>(null);
   const [token, setToken] = useState(() => apiBase ? sessionStorage.getItem('mapa-costalog-token') || '' : '');
   const [userKey, setUserKey] = useState(() => sessionStorage.getItem('mapa-costalog-user') || 'usuario');
@@ -194,7 +195,6 @@ export default function App() {
   const [editValue, setEditValue] = useState('');
   const [placeholderPosition, setPlaceholderPosition] = useState<GridPosition | null>(null);
   const [selectionAnchor, setSelectionAnchor] = useState<{rowId: string; columnKey: string} | null>(null);
-  const [pastePreview, setPastePreview] = useState<{matrix: string[][]; start: GridPosition} | null>(null);
   const [pasteBusy, setPasteBusy] = useState(false);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
@@ -757,8 +757,13 @@ export default function App() {
     const info=dragInfoRef.current;
     if(!info || !selectionDragRef.current || info.moved || info.row!==ri || info.column!==ci)return;
     const row=displayedRows[ri],column=visibleColumns[ci];
-    if(row&&column&&column.editable&&userRole!=='CONSULTA'&&
-      !isCheckboxColumn(column.key,column.dataType))beginCellEdit(ri,ci);
+    if(!row||!column)return;
+    if(BASE_COLUMN_LIST[column.key]&&column.editable&&userRole!=='CONSULTA')beginCellEdit(ri,ci);
+    else {
+      const target=Array.from(gridRef.current?.querySelectorAll<HTMLElement>('[data-cell-id]')||[])
+        .find(item=>item.dataset.cellId===row.id+':'+column.key);
+      target?.focus({preventScroll:true});
+    }
   }
 
   const localFilterOptions = useMemo(() => {
@@ -989,6 +994,9 @@ export default function App() {
       }
       return;
     }
+    if(event.key==='Delete'||event.key==='Backspace'){
+      event.preventDefault();void clearGridSelection();return;
+    }
     if (gridKeyboardAction(event.key, false) === 'edit') {
       event.preventDefault();
       beginCellEdit(selectedPosition.row, selectedPosition.column);
@@ -1021,80 +1029,76 @@ export default function App() {
       setNotice('Seleção copiada para a área de transferência.');
     } catch { setApiError('Não foi possível copiar. Selecione a célula e utilize Ctrl+C.'); }
   }
-  function onGridPaste(event: React.ClipboardEvent<HTMLDivElement>) {
-    const element = event.target as HTMLElement;
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)) return;
-    event.preventDefault();
-    if (userRole === 'CONSULTA') { setApiError('Seu perfil permite apenas consultar a planilha.'); return; }
-    if (!selectedPosition || pasteBusy) {
-      if (placeholderPosition) setApiError('A linha selecionada é apenas visual. Crie um registro antes de colar.');
-      return;
-    }
-    const matrix = parseClipboardGrid(event.clipboardData.getData('text/plain'));
-    if (!canPasteMatrix(matrix, selectedPosition, displayedRows.length, visibleColumns.length, 200) ||
-        matrix[0].length > 40) {
-      setApiError('A colagem deve caber na página atual, ser retangular e conter no máximo 200 células (até 40 colunas por linha).');
-      return;
-    }
-    for (let offset = 0; offset < matrix[0].length; offset++) {
-      if (!visibleColumns[selectedPosition.column + offset]?.editable) {
-        setApiError('A seleção inclui coluna protegida. Nenhuma alteração foi aplicada.');
-        return;
-      }
-    }
-    for (let row = 0; row < matrix.length; row++) for (let column = 0; column < matrix[row].length; column++) {
-      const definition = visibleColumns[selectedPosition.column + column];
-      const parsed = LOCKED_COLUMN_FORMAT[definition.key]
-        ? parseSheetValue(matrix[row][column],LOCKED_COLUMN_FORMAT[definition.key])
-        : parseEditableValue(definition.dataType, matrix[row][column]);
-      if (!parsed.ok) {
-        setApiError('Colagem inválida na coluna ' + definition.label + ': ' + parsed.message + '. Nenhuma alteração foi aplicada.');
-        return;
-      }
-    }
-    setApiError('');
-    setPastePreview({ matrix, start: selectedPosition });
-  }
-  async function applyGridPaste() {
-    if (!pastePreview || pasteBusy || !token || userRole === 'CONSULTA') return;
-    const { matrix, start } = pastePreview;
-    if (!canPasteMatrix(matrix, start, displayedRows.length, visibleColumns.length, 200)) return;
-    setPasteBusy(true);
-    let updated = 0;
-    try {
-      // One audited PATCH per row, sequentially, with optimistic concurrency.
-      for (let i = 0; i < matrix.length; i++) {
-        const row = displayedRows[start.row + i];
-        const changes: Record<string, string | number | boolean | null> = {};
-        for (let j = 0; j < matrix[i].length; j++) {
-          const column = visibleColumns[start.column + j];
-          if (!column?.editable) throw new Error('A colagem inclui coluna protegida.');
-          const parsed = LOCKED_COLUMN_FORMAT[column.key]
-            ? parseSheetValue(matrix[i][j],LOCKED_COLUMN_FORMAT[column.key])
-            : parseEditableValue(column.dataType, matrix[i][j]);
-          if (!parsed.ok) throw new Error('Valor inválido em ' + column.label + '.');
-          if (valueText(row.data?.[column.key]) !== matrix[i][j]) changes[column.key] = parsed.value;
-        }
-        if (!Object.keys(changes).length) continue;
-        const response = await fetch(apiBase + '/api/v1/mapa/' + encodeURIComponent(row.id), {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-          body: JSON.stringify({ changes, expectedUpdatedAt: row.updatedAt })
+  async function updateGridRows(
+    edits: {row:RecordRow;changes:Record<string,string|number|boolean|null>}[],
+    action: 'Colagem' | 'Limpeza'
+  ) {
+    if(gridMutationBusyRef.current || !token || !apiBase || userRole==='CONSULTA')return;
+    gridMutationBusyRef.current=true;setPasteBusy(true);setApiError('');
+    let saved=0;
+    try{
+      for(const {row,changes} of edits){
+        if(!Object.keys(changes).length)continue;
+        const response=await fetch(apiBase+'/api/v1/mapa/'+encodeURIComponent(row.id),{
+          method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+          body:JSON.stringify({changes,expectedUpdatedAt:row.updatedAt})
         });
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body?.error?.message || 'Falha ao salvar a linha #' + row.sequence);
-        setRows(previous => previous.map(item => item.id === row.id ? body.item as RecordRow : item));
-        updated++;
+        const body=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(body?.error?.message||'Não foi possível atualizar a linha '+row.sequence);
+        setRows(previous=>previous.map(item=>item.id===row.id?body.item as RecordRow:item));
+        saved++;
       }
-      setNotice('Colagem concluída: ' + updated + ' linha(s) atualizada(s), com histórico de auditoria.');
-      setApiError('');
-    } catch (error) {
-      setApiError('Colagem interrompida após ' + updated + ' linha(s) salva(s): ' +
-        (error instanceof Error ? error.message : 'Erro de gravação') + '. Atualize a grade antes de tentar novamente.');
-    } finally {
-      setPasteBusy(false);
-      setPastePreview(null);
+      setNotice(action+' aplicada diretamente: '+saved+' linha(s) atualizada(s).');
+    }catch(error){
+      setApiError(action+' interrompida após '+saved+' linha(s) salva(s): '+
+        (error instanceof Error?error.message:'Falha de gravação')+
+        '. As células restantes não foram alteradas. Recarregue antes de tentar novamente.');
+    }finally{
+      gridMutationBusyRef.current=false;setPasteBusy(false);
     }
+  }
+  async function clearGridSelection() {
+    if(!selectedBounds || pasteBusy || gridMutationBusyRef.current)return;
+    if(userRole==='CONSULTA'){setApiError('Sem permissão para limpar células.');return;}
+    const planned=planClearSelection(selectedBounds,displayedRows,visibleColumns,2000);
+    if(!planned){setApiError('Seleção protegida, fora da grade ou maior que 2.000 células. Nada foi apagado.');return;}
+    const changesById=new Map(planned.map(item=>[item.rowId,item.changes]));
+    const edits=displayedRows.filter(row=>changesById.has(row.id))
+      .map(row=>({row,changes:changesById.get(row.id)!}));
+    if(edits.length)await updateGridRows(edits,'Limpeza');
+  }
+  function onGridPaste(event: React.ClipboardEvent<HTMLDivElement>) {
+    const element=event.target as HTMLElement;
+    if(['INPUT','TEXTAREA','SELECT'].includes(element.tagName))return;
+    event.preventDefault();
+    if(userRole==='CONSULTA'){setApiError('Seu perfil permite apenas consultar a planilha.');return;}
+    if(pasteBusy||gridMutationBusyRef.current)return;
+    if(!selectedPosition){
+      setApiError(placeholderPosition?'A linha ainda é visual. Crie registros antes de colar.':'Selecione uma célula para colar.');
+      return;
+    }
+    const matrix=parseClipboardGrid(event.clipboardData.getData('text/plain'));
+    if(!canPasteMatrix(matrix,selectedPosition,displayedRows.length,visibleColumns.length,2000)){
+      setApiError('A colagem deve ser retangular, caber nas linhas carregadas e conter até 2.000 células.');
+      return;
+    }
+    const edits:{row:RecordRow;changes:Record<string,string|number|boolean|null>}[]=[];
+    // Validate all target cells before the first audited PATCH.
+    for(let i=0;i<matrix.length;i++){
+      const row=displayedRows[selectedPosition.row+i];
+      const changes:Record<string,string|number|boolean|null>={};
+      for(let j=0;j<matrix[i].length;j++){
+        const column=visibleColumns[selectedPosition.column+j];
+        if(!column?.editable){setApiError('Coluna protegida. Nenhuma célula foi alterada.');return;}
+        const parsed=LOCKED_COLUMN_FORMAT[column.key]
+          ?parseSheetValue(matrix[i][j],LOCKED_COLUMN_FORMAT[column.key])
+          :parseEditableValue(column.dataType,matrix[i][j]);
+        if(!parsed.ok){setApiError('Valor inválido em '+column.label+'. Nenhuma célula foi alterada.');return;}
+        if(row.data?.[column.key]!==parsed.value)changes[column.key]=parsed.value;
+      }
+      if(Object.keys(changes).length)edits.push({row,changes});
+    }
+    void updateGridRows(edits,'Colagem');
   }
   function beginColumnResize(event: React.PointerEvent<HTMLSpanElement>, column: Column) {
     if (event.button !== 0) return;
@@ -1403,7 +1407,8 @@ export default function App() {
                           info.moved=true;
                       }}
                       onPointerEnter={()=>extendRangeDrag(ri,ci)}
-                      onPointerUp={()=>finishRangeDrag(ri,ci)}>
+                      onPointerUp={()=>finishRangeDrag(ri,ci)}
+                      onDoubleClick={()=>{if(editable&&!checkbox)beginCellEdit(ri,ci);}}>
                       <div className="cell-content">
                         {checkbox ? (
                           <span className="sheet-boolean-wrapper"
@@ -1468,7 +1473,7 @@ export default function App() {
                             aria-label={column.key + row.sequence + ': ' + (column.label || column.key)}
                             title={editable ? lookup
                               ? 'Clique para abrir as opções da BASE; digite para pesquisar. Enter confirma e desce; Tab confirma e vai à direita.'
-                              : 'Clique para selecionar. Enter confirma e desce; Tab confirma e vai à direita; F2 ou duplo clique edita.'
+                              : 'Clique para selecionar; Enter ou duplo clique edita. Delete limpa.'
                               : 'Somente leitura'}
 >
                             {formatSheetValue(row.data?.[column.key],displayFormat)}
@@ -1565,31 +1570,6 @@ export default function App() {
           </div>
         </section>
         </>}
-        {pastePreview && <div className="modal-backdrop">
-        <section className="history-modal sheet-paste-modal" role="dialog" aria-modal="true" aria-labelledby="sheet-paste-title">
-          <header>
-            <div><h2 id="sheet-paste-title">Confirmar colagem na planilha</h2>
-              <p>{pastePreview.matrix.length} linha(s) × {pastePreview.matrix[0].length} coluna(s) · até {pastePreview.matrix.length * pastePreview.matrix[0].length} células</p>
-            </div>
-            <button className="secondary" type="button" disabled={pasteBusy} onClick={() => setPastePreview(null)}>Cancelar</button>
-          </header>
-          <p className="sheet-paste-warning">A colagem substituirá os valores das células selecionadas. As alterações serão gravadas nos registros reais e auditadas. Confira antes de confirmar.</p>
-          <div className="sheet-paste-preview">
-            <table><thead><tr>{pastePreview.matrix[0].slice(0, 6).map((_, i) =>
-              <th key={i}>{visibleColumns[pastePreview.start.column + i]?.key}</th>)}</tr></thead>
-              <tbody>{pastePreview.matrix.slice(0, 6).map((line, i) =>
-                <tr key={i}>{line.slice(0, 6).map((value, j) => <td key={j}>{value || '∅'}</td>)}</tr>)}</tbody>
-            </table>
-          </div>
-          <small>Prévia limitada às primeiras 6 linhas e 6 colunas. A colagem é sequencial; uma falha pode interromper após algumas linhas já terem sido salvas.</small>
-          <div className="sheet-paste-actions">
-            <button type="button" className="secondary" disabled={pasteBusy} onClick={() => setPastePreview(null)}>Cancelar</button>
-            <button type="button" className="primary" disabled={pasteBusy} onClick={() => void applyGridPaste()}>
-              {pasteBusy ? 'Salvando...' : 'Confirmar colagem'}
-            </button>
-          </div>
-        </section>
-      </div>}
       {bulkOpen&&<div className="modal-backdrop" onClick={()=>!bulkBusy&&setBulkOpen(false)}><section className="history-modal bulk-edit-modal" onClick={event=>event.stopPropagation()}><header><div><h2><Save size={18}/> Edição em massa</h2><p>Revise o campo e o valor antes de aplicar aos registros selecionados.</p></div><button className="secondary" disabled={bulkBusy} onClick={()=>setBulkOpen(false)}><X size={16}/></button></header><div className="bulk-edit-content"><div className="bulk-summary"><strong>{selectedRows.length} registro(s) selecionado(s)</strong><span>As alterações serão gravadas individualmente e registradas no histórico.</span></div><label>Coluna a alterar<select value={bulkColumn} onChange={event=>setBulkColumn(event.target.value)}><option value="">Selecione uma coluna</option>{editableColumns.map(column=><option key={column.key} value={column.key}>{column.label} ({column.dataType})</option>)}</select></label><label>Novo valor<input value={bulkValue} onChange={event=>setBulkValue(event.target.value)} placeholder="Deixe vazio para limpar o campo"/></label>{bulkColumn&&<div className="bulk-preview"><b>Prévia das alterações</b><div className="bulk-preview-table"><div><span>Registro</span><span>Valor atual</span><span>Novo valor</span></div>{selectedRows.slice(0,8).map(row=><div key={row.id}><span>#{row.sequence}</span><span>{valueText(row.data?.[bulkColumn])||'—'}</span><span>{bulkValue||'—'}</span></div>)}</div>{selectedRows.length>8&&<small>Exibindo 8 de {selectedRows.length} registros.</small>}</div>}<div className="bulk-actions"><button className="secondary" disabled={bulkBusy} onClick={()=>setBulkOpen(false)}>Cancelar</button><button className="primary" disabled={bulkBusy||!bulkColumn||!selectedRows.length} onClick={()=>void applyBulkEdit()}>{bulkBusy?'Salvando...':'Aplicar alterações'}</button></div><small>Atalhos: Ctrl+F buscar · Ctrl+Shift+N novo registro · Esc limpar filtros.</small></div></section></div>}{historyTarget&&<div className="modal-backdrop" onClick={()=>setHistoryTarget(null)}><section className="history-modal" onClick={event=>event.stopPropagation()}><header><div><h2><History size={18}/> Histórico da célula</h2><p>Registro #{historyTarget.row.sequence} · {historyTarget.column.label||"Coluna sem título"}</p></div><button className="icon-button" onClick={()=>setHistoryTarget(null)}><X size={18}/></button></header>{historyLoading?<div className="empty-state">Carregando histórico…</div>:historyItems.length===0?<div className="empty-state">Nenhuma edição encontrada para esta célula.</div>:<div className="history-list">{historyItems.map(item=><article key={item.id}><div className="history-meta"><b>{item.user?.name||item.user?.email||"Usuário não identificado"}</b><time>{new Date(item.createdAt).toLocaleString("pt-BR")}</time></div><p><span>Ação:</span> {item.action}</p><p><span>Antes:</span> {valueText(item.beforeValue&&typeof item.beforeValue==="object"&&historyTarget.column.key in (item.beforeValue as Record<string,unknown>)?(item.beforeValue as Record<string,unknown>)[historyTarget.column.key]:item.beforeValue)}</p><p><span>Depois:</span> {valueText(item.afterValue&&typeof item.afterValue==="object"&&historyTarget.column.key in (item.afterValue as Record<string,unknown>)?(item.afterValue as Record<string,unknown>)[historyTarget.column.key]:item.afterValue)}</p></article>)}</div>}</section></div>}
         <footer className="app-footer">MAPA COSTALOG <span>•</span> Aplicação web operacional em desenvolvimento</footer>
       </section>
