@@ -1664,7 +1664,7 @@ export default function App() {
                       onChange={event => setSelectedRowIds(previous => event.target.checked
                         ? Array.from(new Set([...previous, ...displayedRows.map(row => row.id)]))
                         : previous.filter(id => !displayedRows.some(row => row.id === id)))} />}
-                    <span>#</span>
+                    <span>1</span>
                   </th>
                   {visibleColumns.map((column,headerIndex) => <th key={column.key}
                     className={'sheet-column-header ' + (selectionMode==='column' && selectedColumnKey===column.key ? 'sheet-column-selected' : '')}
@@ -1696,8 +1696,60 @@ export default function App() {
                 {windowed.top > 0 && <tr className="sheet-virtual-spacer" aria-hidden="true">
                   <td colSpan={visibleColumns.length+1} style={{height:windowed.top,padding:0,border:0}}/>
                 </tr>}
-                {visibleRenderedRows.map((row, index) => {
-                  const ri=windowed.start+index;
+                {renderedSlots.map(({row,ri,index}) => {
+                  if(!row) return <tr key={'virtual-'+index}
+                    className={'sheet-virtual-empty-row '+(selectedBlankRow===index?'sheet-virtual-row-selected':'')}
+                    style={{height:SHEET_DEFAULT_HEIGHT}}>
+                    <th scope="row" className={'sheet-row-number '+(selectedBlankRow===index?'sheet-row-selected':'')}
+                      onClick={()=>{setSelectedBlankRow(index);setSelectionMode('row');
+                        setSelectedCell(null);setPlaceholderPosition({row:index,column:0});
+                        setBlankEditing(null);gridRef.current?.focus({preventScroll:true});}}
+                      title={'Selecionar toda a linha '+(index+2)}>{index+2}</th>
+                    {visibleColumns.map((column,ci)=>{
+                      const chosen=placeholderPosition?.row===index&&placeholderPosition.column===ci;
+                      const selectedColumn=selectionMode==='column'&&selectedColumnKey===column.key;
+                      const editing=blankEditing?.index===index&&blankEditing.columnKey===column.key;
+                      const loaded=loadedGridChunksRef.current.has(Math.floor(index/100));
+                      const ready=gridRangeSupported===true&&loaded&&column.editable&&userRole!=='CONSULTA';
+                      return <td key={column.key}
+                        className={'sheet-placeholder-cell '+(chosen?'selected-cell ':'')+
+                          (selectedColumn||selectedBlankRow===index?'sheet-range-cell ':'')+
+                          (ready?'editable-cell ':'')}
+                        aria-selected={chosen||selectedColumn||selectedBlankRow===index}
+                        onClick={()=>selectBlankCell(index,ci,Boolean(BASE_COLUMN_LIST[column.key]))}
+                        onDoubleClick={()=>selectBlankCell(index,ci,true)}
+                        title={ready?'Clique, digite ou pressione Enter para preencher.':'Aguardando carregamento da grade'}>
+                        {editing ? BASE_COLUMN_LIST[column.key] ?
+                          <SheetDropdownEditor columnKey={column.key}
+                            rowLabel={column.label+' linha '+(index+2)}
+                            currentValue="" initialQuery={blankDraft}
+                            fallbackOptions={rows.map(item=>valueText(item.data?.[column.key])).filter(Boolean)}
+                            apiBase={apiBase} token={token}
+                            onConfirm={(value,key,shift)=>void saveBlankCell(index,column,value,key,shift)}
+                            onCancel={()=>setBlankEditing(null)}
+                            onPasteCell={text=>{setBlankDraft(text);}}/>
+                          : <input className="sheet-cell-editor sheet-blank-editor" autoFocus
+                              type={column.key==='A'?'date':'text'}
+                              inputMode={column.key==='Q'?'decimal':undefined}
+                              aria-label={column.label+' linha '+(index+2)}
+                              value={blankDraft} onChange={event=>setBlankDraft(event.target.value)}
+                              onClick={event=>event.stopPropagation()}
+                              onKeyDown={event=>{
+                                if(event.key==='Escape'){event.preventDefault();setBlankEditing(null);return;}
+                                if(event.key==='Enter'||event.key==='Tab'){
+                                  event.preventDefault();event.stopPropagation();
+                                  void saveBlankCell(index,column,event.currentTarget.value,
+                                    event.key,event.shiftKey);
+                                }
+                              }}/>
+                          : <span data-grid-empty-row={index} data-grid-empty-column={ci}
+                              tabIndex={chosen?0:-1} role="gridcell"
+                              aria-label={column.key+(index+2)+' vazio'}
+                              aria-readonly={!ready}>&nbsp;</span>}
+                      </td>;
+                    })}
+                  </tr>;
+                  
                   const conditionalBackground = statusRowColor(
                     Object.prototype.hasOwnProperty.call(pendingRowStatus, row.id)
                       ? pendingRowStatus[row.id] : (row.data?.C ?? row.status)
@@ -1719,9 +1771,9 @@ export default function App() {
                         ? [...previous.filter(id => id !== row.id), row.id]
                         : previous.filter(id => id !== row.id))} />}
                     <button className="sheet-row-select" type="button"
-                      title={'Selecionar toda a linha ' + row.sequence}
-                      aria-label={'Selecionar linha inteira ' + row.sequence}
-                      onClick={()=>selectEntireRow(ri)}>{row.sequence}</button>
+                      title={'Selecionar toda a linha ' + (sheetCanvas ? Number(row.sheetRowNumber??ri+2) : ri+2)}
+                      aria-label={'Selecionar linha inteira ' + (sheetCanvas ? Number(row.sheetRowNumber??ri+2) : ri+2)}
+                      onClick={()=>selectEntireRow(ri)}>{sheetCanvas ? Number(row.sheetRowNumber??ri+2) : ri+2}</button>
                     <span className="sheet-row-resize-handle" role="separator"
                       aria-label={'Arrastar para ajustar altura da linha '+row.sequence}
                       title="Arraste para mudar a altura da linha"
@@ -1835,33 +1887,11 @@ export default function App() {
                 {windowed.bottom > 0 && <tr className="sheet-virtual-spacer" aria-hidden="true">
                   <td colSpan={visibleColumns.length+1} style={{height:windowed.bottom,padding:0,border:0}}/>
                 </tr>}
-                {!loading && rows.length >= total && displayedRows.length < 35 &&
-                  Array.from({length: EMPTY_GRID_ROWS - Math.min(EMPTY_GRID_ROWS,displayedRows.length)}, (_, index) =>
-                  <tr className="sheet-placeholder-row" key={'placeholder-' + index} aria-label="Linha visual vazia, sem registro salvo">
-                    <th scope="row" className="sheet-row-number">{displayedRows.length ? '＋' : index + 1}</th>
-                    {visibleColumns.map((column, ci) => {
-                      const chosen = placeholderPosition?.row === index && placeholderPosition.column === ci;
-                      return <td key={column.key} className={'sheet-placeholder-cell ' + (chosen ? 'selected-cell' : '')}
-                        aria-selected={chosen}
-                        onClick={() => {
-                          setSelectedCell(null);
-                          setPlaceholderPosition({row:index,column:ci});
-                          const element = gridRef.current?.querySelector<HTMLElement>(
-                            '[data-grid-empty-row="' + index + '"][data-grid-empty-column="' + ci + '"]');
-                          element?.focus({preventScroll:true});
-                        }}>
-                        <span data-grid-empty-row={index} data-grid-empty-column={ci} tabIndex={chosen ? 0 : -1}
-                          role="gridcell" aria-disabled="true"
-                          title="Linha visual ainda não salva; use Novo registro para cadastrar.">&nbsp;</span>
-                      </td>;
-                    })}
-                  </tr>)}
               </tbody>
             </table>
-            {!loading && displayedRows.length === 0 &&
+            {!loading && displayedRows.length === 0 && !sheetCanvas &&
               <div className="sheet-empty-message" role="status">
-                {total === 0 ? 'Sem registros operacionais carregados. A grade vazia é apenas visual; use “Novo registro” com permissão de edição para criar uma linha.'
-                  : 'Nenhuma linha corresponde aos filtros desta visualização. Limpe os filtros.'}
+                Nenhum registro corresponde aos filtros. Limpe os filtros para voltar à grade completa.
               </div>}
           </div>
           {sheetContextMenu && userRole==='ADMIN' &&
