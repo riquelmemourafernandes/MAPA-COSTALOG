@@ -103,7 +103,6 @@ export default function BasePrototype({userRole,onOpenMapa,importOnly=false}:Pro
         <p>Modelo inspirado na aba BASE do Google Sheets e nas linhas 12202–12256 do MAPA 1.0.</p>
       </div>
       <button type="button" className="basep-link" onClick={onOpenMapa}>Abrir MAPA 1.0</button>
-    </div>
     </div>}
     <div className="basep-banner" role="status">
       <ShieldCheck size={18}/>
@@ -116,7 +115,6 @@ export default function BasePrototype({userRole,onOpenMapa,importOnly=false}:Pro
         onClick={()=>{setTab('base');setError('');}}><Database size={16}/> BASE de cadastros</button>
       <button type="button" role="tab" aria-selected={tab==='import'} className={tab==='import'?'active':''}
         onClick={()=>{setTab('import');setError('');}}><FileSpreadsheet size={16}/> Importar 55 linhas</button>
-    </div>
     </div>}
     {(notice||error)&& <div className={'basep-flash '+(error?'basep-error':'')} role="status">
       {error||notice}<button type="button" aria-label="Dispensar mensagem" onClick={()=>{setError('');setNotice('');}}><X size={15}/></button>
