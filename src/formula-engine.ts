@@ -37,7 +37,7 @@ function tokenize(s: string): Token[] {
     if (id) { out.push({ kind: 'identifier', value: id[0] }); i += id[0].length; continue; }
     const op = /^(?:<=|>=|<>|!=|==|[+\-*/^&%=<>():;,])/.exec(r);
     if (op) { out.push({ kind: 'operator', value: op[0] }); i += op[0].length; continue; }
-    return [{ kind: 'identifier', value: '#ERROR!' }, { kind: 'eof', value: '' }];
+    const formulaError = /^#(?:REF!|DIV\/0!|VALUE!|NAME\?|NUM!|N\/A|ERROR!)/i.exec(r);\n    if (formulaError) { out.push({ kind: 'identifier', value: formulaError[0] }); i += formulaError[0].length; continue; }\n    return [{ kind: 'identifier', value: '#ERROR!' }, { kind: 'eof', value: '' }];
   }
   out.push({ kind: 'eof', value: '' }); return out;
 }
@@ -64,7 +64,7 @@ class Parser {
     if (t.kind === 'string') return { kind: 'literal', value: t.value };
     if (t.value === '(') { const n = this.compare(); if (!this.accept(')')) throw Error('Expected )'); return n; }
     if (t.kind === 'identifier') {
-      if (t.value === '#ERROR!') throw Error('Invalid token');
+      if (/^#(?:REF!|DIV\/0!|VALUE!|NAME\?|NUM!|N\/A|ERROR!)$/i.test(t.value)) return { kind: 'literal', value: t.value };
       const ref = parseCellAddress(t.value);
       if (ref) {
         if (this.accept(':')) { const end = this.take(); const ref2 = end.kind === 'identifier' ? parseCellAddress(end.value) : null; if (!ref2) throw Error('Invalid range'); return { kind: 'range', start: ref, end: ref2 }; }
