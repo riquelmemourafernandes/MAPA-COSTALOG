@@ -93,15 +93,39 @@ export function canPasteMatrix(
 
 export type GridKeyboardAction = "move" | "edit" | "confirm" | "cancel" | "ignore";
 
-// Mirrors the spreadsheet convention: Enter moves selection when not editing.
-// F2/double click/typing starts editing; Enter confirms only while editing.
+// Spreadsheet mode: Enter opens an existing cell for partial editing.
+// While editing, Enter confirms and moves down; Tab confirms and moves right.
 export function gridKeyboardAction(key: string, editing: boolean): GridKeyboardAction {
   if (editing) {
     if (key === "Enter" || key === "Tab") return "confirm";
     if (key === "Escape") return "cancel";
     return "ignore";
   }
-  if (key === "F2") return "edit";
-  if (["Enter", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key)) return "move";
+  if (key === "F2" || key === "Enter") return "edit";
+  if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key)) return "move";
   return "ignore";
+}
+
+// Delete/Backspace clears selected grid cells, never removes rows or formatting.
+// Returns null on a protected target or an excessively large selection.
+export function planClearSelection(
+  bounds: ReturnType<typeof selectionBounds>,
+  rows: {id:string;data:Record<string,unknown>}[],
+  columns: {key:string;editable:boolean}[], maxCells = 2000
+): {rowId:string;changes:Record<string,null>}[] | null {
+  const count = (bounds.bottom-bounds.top+1)*(bounds.right-bounds.left+1);
+  if(count<=0||count>maxCells||bounds.top<0||bounds.left<0||
+      bounds.bottom>=rows.length||bounds.right>=columns.length)return null;
+  const edits:{rowId:string;changes:Record<string,null>}[]=[];
+  for(let r=bounds.top;r<=bounds.bottom;r++){
+    const row=rows[r],changes:Record<string,null>={};
+    for(let c=bounds.left;c<=bounds.right;c++){
+      const column=columns[c];
+      if(!column.editable)return null;
+      const value=row.data?.[column.key];
+      if(value!==null && value!==undefined && value!=="") changes[column.key]=null;
+    }
+    if(Object.keys(changes).length)edits.push({rowId:row.id,changes});
+  }
+  return edits;
 }
