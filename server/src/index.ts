@@ -298,7 +298,16 @@ app.get("/api/v1/base/options", async (req, res, next) => {
         AND (${q} = '' OR data ->> ${column} ILIKE ${like})
       ORDER BY label ASC LIMIT 150
     `;
-    oldValues.forEach(item => { if (item.label) suggestions.add(item.label); });
+    // The attendant column is governed exclusively by active BASE records.
+    // For other lists, keep legacy values usable but exclude explicitly
+    // inactivated BASE entries (without modifying historical MAPA rows).
+    const excluded = await prisma.lookupValue.findMany({
+      where: {listName,active:false},select:{label:true},take:2000
+    });
+    const inactiveNames = new Set(excluded.map(item=>normalizeBaseLabel(item.label)));
+    if (column !== "B") oldValues.forEach(item => {
+      if (item.label && !inactiveNames.has(normalizeBaseLabel(item.label))) suggestions.add(item.label);
+    });
     const items = [...suggestions]
       .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base", numeric: true }))
       .slice(0, 150);
