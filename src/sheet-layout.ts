@@ -45,3 +45,33 @@ export function virtualRowWindow(
   const end = Math.min(heights.length,last + overscan + 1);
   return {start,end,top:offsets[start],bottom:totalHeight-offsets[end],totalHeight};
 }
+
+// 100,000 rows below the header are virtual: constant-size scrolling,
+// no million-element array and no empty records inserted into the database.
+export const SHEET_MAX_ROW = 100001;
+export const SHEET_DEFAULT_HEIGHT = 35;
+export function sparseSheetWindow(
+  scrollTop:number,viewportHeight:number,heights:Record<number,number>,
+  rowCount=SHEET_MAX_ROW-1,overscan=8
+):{start:number;end:number;top:number;bottom:number;totalHeight:number}{
+  const adjustments=Object.entries(heights).map(([key,value])=>[Number(key)-2,normalizeRowHeight(value)-SHEET_DEFAULT_HEIGHT] as const)
+    .filter(([index,delta])=>index>=0&&index<rowCount&&delta!==0)
+    .sort((a,b)=>a[0]-b[0]);
+  function offset(index:number){
+    let result=index*SHEET_DEFAULT_HEIGHT;
+    for(const [at,delta] of adjustments){if(at>=index)break;result+=delta;}
+    return result;
+  }
+  function findRow(y:number){
+    let lo=0,hi=rowCount;
+    while(lo<hi){
+      const mid=(lo+hi)>>1;
+      if(offset(mid+1)<=y)lo=mid+1;else hi=mid;
+    }
+    return lo;
+  }
+  const totalHeight=offset(rowCount);
+  const start=Math.max(0,findRow(Math.max(0,scrollTop))-overscan);
+  const end=Math.min(rowCount,findRow(scrollTop+Math.max(0,viewportHeight))+overscan+1);
+  return {start,end,top:offset(start),bottom:totalHeight-offset(end),totalHeight};
+}
