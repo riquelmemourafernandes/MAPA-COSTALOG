@@ -1510,7 +1510,10 @@ export default function App() {
               </colgroup>
               <thead>
                 <tr>
-                  <th className="sheet-row-header">
+                  <th className="sheet-row-header"
+                    title={userRole==='ADMIN'?'Selecionar todas as células carregadas':'Cabeçalho de linhas'}
+                    onClick={()=>{if(userRole==='ADMIN')selectAllLoadedCells();}}
+                    onContextMenu={event=>openSheetContext(event,'all')}>
                     {userRole !== 'CONSULTA' && <input type="checkbox" aria-label="Selecionar todos os registros desta página"
                       checked={displayedRows.length > 0 && displayedRows.every(row => selectedRowIds.includes(row.id))}
                       onChange={event => setSelectedRowIds(previous => event.target.checked
@@ -1518,7 +1521,14 @@ export default function App() {
                         : previous.filter(id => !displayedRows.some(row => row.id === id)))} />}
                     <span>#</span>
                   </th>
-                  {visibleColumns.map(column => <th key={column.key} className={'sheet-column-header ' + (selectionMode==='column' && selectedColumnKey===column.key ? 'sheet-column-selected' : '')} scope="col">
+                  {visibleColumns.map((column,headerIndex) => <th key={column.key}
+                    className={'sheet-column-header ' + (selectionMode==='column' && selectedColumnKey===column.key ? 'sheet-column-selected' : '')}
+                    scope="col"
+                    onContextMenu={event=>openSheetContext(event,'column',undefined,headerIndex)}
+                    onClick={event=>{
+                      if(!(event.target as HTMLElement).closest('button,.sheet-resize-handle'))
+                        selectEntireColumn(column);
+                    }}>
                     <div className="sheet-column-title">
                       <button className="sheet-column-key sheet-column-select" type="button"
                         aria-label={'Selecionar coluna inteira ' + column.key}
@@ -1551,7 +1561,12 @@ export default function App() {
                   return <tr key={row.id} className={selectedRowIds.includes(row.id) ? 'bulk-selected-row' : ''}
                     style={{height:normalizeRowHeight(rowHeights[row.id]||35)}}
                     data-status={String(row.data?.C ?? row.status ?? '')}>
-                  <th scope="row" className={'sheet-row-number '+ (selectionMode === 'row' && selectedRowId===row.id ? 'sheet-row-selected' : '')}>
+                  <th scope="row" className={'sheet-row-number '+ (selectionMode === 'row' && selectedRowId===row.id ? 'sheet-row-selected' : '')}
+                    onContextMenu={event=>openSheetContext(event,'row',ri)}
+                    onClick={event=>{
+                      if(!(event.target as HTMLElement).closest('input,button,.sheet-row-resize-handle'))
+                        selectEntireRow(ri);
+                    }}>
                     {userRole !== 'CONSULTA' && <input type="checkbox" aria-label={'Marcar registro ' + row.sequence + ' para edição em massa'}
                       checked={selectedRowIds.includes(row.id)}
                       title="Marcar registro para edição em massa"
@@ -1586,6 +1601,7 @@ export default function App() {
                         color: style.color || conditionalTextColor,
                         textAlign: checkbox ? 'center' : (style.align || 'left'),
                         backgroundColor: conditionalBackground ?? style.background}}
+                      onContextMenu={event=>openSheetContext(event,'cell',ri,ci)}
                       onPointerDown={event=>beginRangeDrag(event,ri,ci)}
                       onPointerMove={event=>{
                         const info=dragInfoRef.current;
@@ -1703,6 +1719,10 @@ export default function App() {
                   : 'Nenhuma linha corresponde aos filtros desta visualização. Limpe os filtros.'}
               </div>}
           </div>
+          {sheetContextMenu && userRole==='ADMIN' &&
+            <SheetContextMenu kind={sheetContextMenu.kind} x={sheetContextMenu.x}
+              y={sheetContextMenu.y} onClose={()=>setSheetContextMenu(null)}
+              onAction={action=>void performSheetContextAction(action)}/>}
           {openFilterKey && filterMenuRect && <div className="sheet-filter-popover"
             role="dialog" aria-label={'Filtro da coluna ' + (referenceHeader[openFilterKey] || openFilterKey)}
             style={{position:'fixed', top:Math.max(8,filterMenuRect.top), left:filterMenuRect.left}}>
