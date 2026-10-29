@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canPasteMatrix, moveGridPosition, parseClipboardGrid,
-  parseEditableValue, selectionBounds, serializeSelection, gridKeyboardAction
+  parseEditableValue, selectionBounds, serializeSelection, gridKeyboardAction, planClearSelection
 } from "./sheet-grid.js";
 
 test("seleção retangular em qualquer sentido", () => {
@@ -45,8 +45,8 @@ test("recusa colagem maior que a grade, truncada ou excessiva", () => {
   assert.equal(canPasteMatrix([Array(201).fill("x")],{row:0,column:0},2,202),false);
 });
 
-test("Enter move a seleção; F2 edita; Enter durante edição confirma", () => {
-  assert.equal(gridKeyboardAction("Enter", false), "move");
+test("Enter abre editor; Enter no editor confirma e desce; Tab navega", () => {
+  assert.equal(gridKeyboardAction("Enter", false), "edit");
   assert.equal(gridKeyboardAction("F2", false), "edit");
   assert.equal(gridKeyboardAction("Enter", true), "confirm");
   assert.equal(gridKeyboardAction("Tab", false), "move");
@@ -62,4 +62,18 @@ test("Enter move a seleção; F2 edita; Enter durante edição confirma", () => 
   assert.deepEqual(moveGridPosition({row:4,column:3}, "Tab", 5, 4), {row:4,column:0});
   assert.equal(gridKeyboardAction("Enter", true), "confirm");
   assert.equal(gridKeyboardAction("Tab", true), "confirm");
+});
+
+test("Delete/Backspace planeja limpar apenas células selecionadas e não altera linhas",()=>{
+ const rows=[
+ {id:"a",data:{A:"data",B:"Atendente",C:""}},
+ {id:"b",data:{A:"data",B:null,C:"Em aberto"}}];
+ const columns=[{key:"A",editable:true},{key:"B",editable:true},{key:"C",editable:true}];
+ assert.deepEqual(planClearSelection({top:0,bottom:1,left:1,right:2},rows,columns),[
+  {rowId:"a",changes:{B:null}},{rowId:"b",changes:{C:null}}
+ ]);
+ assert.deepEqual(rows[0].data,{A:"data",B:"Atendente",C:""});
+ assert.equal(planClearSelection({top:0,bottom:1,left:1,right:2},rows,
+   [{key:"A",editable:true},{key:"B",editable:false},{key:"C",editable:true}]),null);
+ assert.equal(planClearSelection({top:0,bottom:1,left:0,right:2},rows,columns,2),null);
 });
