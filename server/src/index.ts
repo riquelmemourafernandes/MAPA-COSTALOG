@@ -330,6 +330,36 @@ app.get("/api/v1/config/columns", async (_req, res, next) => {
   }
 });
 
+// ADMIN-only reversible column removal: hide it from the operational grid
+// without destroying per-row JSON fields or their audit history.
+app.patch("/api/v1/config/columns/:key/archive",
+  requireRole(UserRole.ADMIN), async (req, res, next) => {
+    try {
+      const key = String(req.params.key || "").toUpperCase();
+      if (!/^[A-Z]{1,3}$/.test(key)) return res.status(400).json({error:{
+        code:"INVALID_COLUMN", message:"Coluna inválida."}});
+      const existing = await prisma.mapaColumn.findUnique({where:{key}});
+      if (!existing || !existing.visible) return res.status(404).json({error:{
+        code:"NOT_FOUND",message:"A coluna não existe ou já foi arquivada."}});
+      const visibleCount = await prisma.mapaColumn.count({where:{visible:true}});
+      if(visibleCount<=1) return res.status(400).json({error:{
+        code:"LAST_COLUMN",message:"Não é possível remover a última coluna."}});
+      const updated = await prisma.$transaction(async tx=>{
+        const column=await tx.mapaColumn.update({
+          where:{key},data:{visible:false,editable:false}
+        });
+        await tx.auditLog.create({data:{
+          entityType:"MAPA_COLUMN",entityId:existing.id,action:"ARCHIVE",
+          fieldKey:key,userId:req.authUser!.id,
+          beforeValue:{key:existing.key,label:existing.label,visible:existing.visible,editable:existing.editable},
+          afterValue:{key:column.key,label:column.label,visible:false,editable:false}
+        }});
+        return column;
+      });
+      return res.json({item:updated,archived:true});
+    } catch(error) { return next(error); }
+  });
+
 app.get("/api/v1/dashboard/summary", async (_req, res, next) => {
   try {
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -481,6 +511,42 @@ app.get("/api/v1/mapa/validations", async (_req, res, next) => {
 
 // Add N blank spreadsheet rows atomically. No partial result or changes
 // to existing records; each new row receives its own audit entry.
+// ADMIN-only reversible row deletion. Atomic, audited and limited to
+// 100 identifiers per request; never physically deletes operational data.
+app.post("/api/v1/mapa/archive-selected",
+  requireRole(UserRole.ADMIN), async (req, res, next) => {
+    try {
+      const schema=z.object({ids:z.array(z.string().min(1).max(100)).min(1).max(100)
+        .refine(ids=>new Set(ids).size===ids.length,"IDs repetidos.")}).strict();
+      const parsed=schema.safeParse(req.body);
+      if(!parsed.success) return res.status(400).json({error:{
+        code:"INVALID_SELECTION",message:"Selecione entre 1 e 100 linhas distintas."}});
+      const archived=await prisma.$transaction(async tx=>{
+        const items=await tx.mapaRow.findMany({where:{
+          id:{in:parsed.data.ids},archivedAt:null
+        }});
+        if(items.length!==parsed.data.ids.length)
+          return null;
+        const now=new Date();
+        await tx.mapaRow.updateMany({where:{
+          id:{in:parsed.data.ids},archivedAt:null
+        },data:{archivedAt:now,updatedById:req.authUser!.id}});
+        for(const item of items){
+          await tx.auditLog.create({data:{
+            entityType:"MAPA_ROW",entityId:item.id,mapaRowId:item.id,
+            action:"ARCHIVE",userId:req.authUser!.id,
+            beforeValue:{sequence:item.sequence,archivedAt:null},
+            afterValue:{sequence:item.sequence,archivedAt:now.toISOString()}
+          }});
+        }
+        return items.length;
+      },{timeout:30000});
+      if(archived===null) return res.status(409).json({error:{
+        code:"STALE_SELECTION",message:"Alguma linha já foi removida. Recarregue e tente novamente."}});
+      return res.json({archived});
+    }catch(error){return next(error);}
+  });
+
 app.post("/api/v1/mapa/batch-blank",
   requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.OPERACAO),
   async (req, res, next) => {
