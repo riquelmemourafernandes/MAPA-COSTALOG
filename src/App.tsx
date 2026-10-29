@@ -60,7 +60,7 @@ const apiBase = isGitHubPagesPreview
     : isVercelSite ? window.location.origin : (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 // Cabeçalho conferido na linha 1 de MAPA IMPORTAÇÃO > MAPA 1.0 (A:BT).
 // As posições BL:BP não têm título; não deslocar os valores adjacentes.
-const referenceHeader: Record<string, string> = {
+export const referenceHeader: Record<string, string> = {
   "A":"DATA",
   "B":"ATENDENTE",
   "C":"STATUS",
