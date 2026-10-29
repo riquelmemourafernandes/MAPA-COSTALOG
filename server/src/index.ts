@@ -478,7 +478,9 @@ app.post("/api/v1/mapa", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRo
     if (rejected.length) return res.status(400).json({ error: { code: "FIELDS_NOT_EDITABLE", message: "Existem colunas inválidas ou não editáveis.", details: rejected } });
     for (const [key, value] of Object.entries(parsed.data.data)) {
       const type = allowed.get(key)!.dataType;
-      const valid = value === null || ((type === "number" || type === "currency") ? typeof value === "number" : type === "boolean" ? typeof value === "boolean" : typeof value === "string");
+      const valid = value === null || (key === "Q" ? typeof value === "number" :
+        key === "A" ? typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value))
+        : (type === "number" || type === "currency") ? typeof value === "number" : type === "boolean" ? typeof value === "boolean" : typeof value === "string"));
       if (!valid) return res.status(400).json({ error: { code: "INVALID_FIELD_TYPE", message: `Valor inválido para a coluna ${key}.` } });
     }
     const data = parsed.data.data as Prisma.InputJsonObject;
@@ -527,6 +529,9 @@ app.patch("/api/v1/mapa/:id", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, U
     const invalidTypes = allowedColumns.filter((column) => {
       const value = parsed.data.changes[column.key];
       if (value === null) return false;
+      if (column.key === "Q") return typeof value !== "number";
+      if (column.key === "A") return typeof value !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value));
       if (column.dataType === "number" || column.dataType === "currency") return typeof value !== "number";
       if (column.dataType === "boolean") return typeof value !== "boolean";
       if (column.dataType === "date" || column.dataType === "datetime") {
@@ -758,7 +763,9 @@ app.put("/api/v1/preferences", async (req, res, next) => {
     const styleSchema = z.object({
       bold: z.boolean().optional(),
       color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-      background: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional()
+      background: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+      format: z.enum(["text","number","currency","date"]).optional(),
+      align: z.enum(["left","center","right"]).optional()
     }).strict();
     const schema = z.object({
       visibleKeys: z.array(z.string().max(80)).max(128).optional(),
