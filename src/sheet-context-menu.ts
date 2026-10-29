@@ -19,7 +19,8 @@ export function getSheetContextOptions(kind: SheetContextKind, admin: boolean): 
   ];
   if(kind==="all")return [
     ...common, {id:"select-all",label:"Selecionar todas as células carregadas",shortcut:"Ctrl+A",separator:true},
-    {id:"insert-rows",label:"Adicionar várias linhas"}
+    {id:"insert-rows",label:"Adicionar várias linhas"},
+    {id:"delete-rows",label:"Excluir linhas carregadas selecionadas (até 100)",danger:true,separator:true}
   ];
   if(kind==="row")return [
     ...common,{id:"insert-rows",label:"Adicionar linhas",separator:true},
