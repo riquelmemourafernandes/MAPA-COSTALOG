@@ -980,8 +980,37 @@ app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
+// Optional first-admin bootstrap for hosting environments where interactive Shell is unavailable.
+async function bootstrapAdminFromEnvironment() {
+  const name = process.env.ADMIN_NAME?.trim();
+  const email = process.env.ADMIN_EMAIL?.trim().toLocaleLowerCase("pt-BR");
+  const password = process.env.ADMIN_PASSWORD || "";
+  const requested = Boolean(name || email || password);
+  if (!requested) return;
+
+  if (!name || !email || !email.includes("@") || password.length < 8) {
+    console.error("[ADMIN_BOOTSTRAP] Cadastro inicial ignorado: configure ADMIN_NAME, ADMIN_EMAIL e ADMIN_PASSWORD (mínimo 8 caracteres).");
+    return;
+  }
+
+  const existingUsers = await prisma.user.count();
+  if (existingUsers > 0) {
+    console.log("[ADMIN_BOOTSTRAP] Cadastro inicial ignorado: já existe pelo menos um usuário.");
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  await prisma.user.create({
+    data: { name, email, passwordHash, role: UserRole.ADMIN, active: true }
+  });
+  console.log("[ADMIN_BOOTSTRAP] Administrador inicial criado; senha não registrada nos logs.");
+}
+
 const server = app.listen(port, () => {
   console.log(`MAPA Costalog API ouvindo na porta ${port}`);
+});
+void bootstrapAdminFromEnvironment().catch((error) => {
+  console.error("[ADMIN_BOOTSTRAP] Não foi possível concluir o cadastro inicial:", error instanceof Error ? error.message : "erro desconhecido");
 });
 
 async function shutdown() {
