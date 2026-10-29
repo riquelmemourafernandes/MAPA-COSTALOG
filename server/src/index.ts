@@ -90,8 +90,7 @@ function requireRole(...roles: UserRole[]) {
 }
 
 const createRowSchema = z.object({
-  data: z.record(z.string().min(1).max(80), z.union([z.string().max(20000), z.number().finite(), z.boolean(), z.null()])).default({}),
-  sheetRowNumber: z.number().int().min(2).max(100001).optional()
+  data: z.record(z.string().min(1).max(80), z.union([z.string().max(20000), z.number().finite(), z.boolean(), z.null()])).default({})
 });
 
 const patchSchema = z.object({
@@ -105,8 +104,35 @@ const patchSchema = z.object({
   expectedUpdatedAt: z.string().datetime().optional()
 });
 
-app.get("/api/v1/health", (_req, res) => {
-  res.json({ status: "ok", service: "mapa-costalog-api", databaseConfigured: Boolean(process.env.DATABASE_URL) });
+app.get("/api/v1/health", async (_req, res) => {
+  const databaseConfigured = Boolean(process.env.DATABASE_URL);
+  if (!databaseConfigured) {
+    return res.json({
+      status: "degraded",
+      service: "mapa-costalog-api",
+      databaseConfigured: false,
+      databaseConnected: false
+    });
+  }
+
+  try {
+    // Read-only connectivity check; does not inspect or modify application data.
+    await prisma.$queryRaw`SELECT 1`;
+    return res.json({
+      status: "ok",
+      service: "mapa-costalog-api",
+      databaseConfigured: true,
+      databaseConnected: true
+    });
+  } catch {
+    // Avoid exposing database hostnames, credentials, or internal errors publicly.
+    return res.json({
+      status: "degraded",
+      service: "mapa-costalog-api",
+      databaseConfigured: true,
+      databaseConnected: false
+    });
+  }
 });
 
 const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false });
@@ -400,31 +426,10 @@ app.get("/api/v1/mapa", async (req, res, next) => {
     }
     const [countRows, items] = await prisma.$transaction([
       prisma.$queryRaw<Array<{ total: bigint }>>`SELECT COUNT(*)::bigint AS total FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike}) AND (${filterColumn} = '' OR COALESCE(data ->> ${filterColumn}, '') ILIKE ${filterLike})`,
-      prisma.$queryRaw<any[]> `SELECT id, sequence, operational_key AS "operationalKey", CASE WHEN operational_key ~ '^SHEET:[0-9]{1,6}$' THEN substring(operational_key FROM 7)::int ELSE sequence + 1 END AS "sheetRowNumber", data, status, client_name AS "clientName", container, cte, collection_date AS "collectionDate", delivery_date AS "deliveryDate", archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt", updated_by_id AS "updatedById" FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike}) AND (${filterColumn} = '' OR COALESCE(data ->> ${filterColumn}, '') ILIKE ${filterLike}) ORDER BY CASE WHEN operational_key ~ '^SHEET:[0-9]{1,6}$' THEN substring(operational_key FROM 7)::int ELSE sequence + 1 END ASC OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize}`
+      prisma.$queryRaw<any[]> `SELECT id, sequence, operational_key AS "operationalKey", data, status, client_name AS "clientName", container, cte, collection_date AS "collectionDate", delivery_date AS "deliveryDate", archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt", updated_by_id AS "updatedById" FROM mapa_rows WHERE archived_at IS NULL AND (${statusFilter} = '' OR LOWER(COALESCE(status, '')) = LOWER(${statusFilter})) AND (${search} = '' OR data::text ILIKE ${searchLike} OR COALESCE(status, '') ILIKE ${searchLike} OR COALESCE(client_name, '') ILIKE ${searchLike} OR COALESCE(container, '') ILIKE ${searchLike} OR COALESCE(cte, '') ILIKE ${searchLike} OR COALESCE(operational_key, '') ILIKE ${searchLike}) AND (${filterColumn} = '' OR COALESCE(data ->> ${filterColumn}, '') ILIKE ${filterLike}) ORDER BY sequence DESC OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize}`
     ]);
-    const maximum=await prisma.$queryRawUnsafe<Array<{last:number|null}>>(
-      "SELECT MAX(CASE WHEN operational_key ~ '^SHEET:[0-9]{1,6}$' THEN substring(operational_key FROM 7)::int ELSE sequence + 1 END)::int AS last FROM mapa_rows WHERE archived_at IS NULL");
-    return res.json({ items, page, pageSize, total: Number(countRows[0]?.total || 0),
-      maxSheetRowNumber: maximum[0]?.last ?? 1 });
+    return res.json({ items, page, pageSize, total: Number(countRows[0]?.total || 0) });
   } catch (error) { return next(error); }
-});
-
-// Read sparse spreadsheet positions without creating empty database records.
-app.get("/api/v1/mapa/grid", async (req, res, next) => {
-  try{
-    const parsed=z.object({start:z.coerce.number().int().min(2).max(100001),
-      count:z.coerce.number().int().min(1).max(200).default(100)}).safeParse(req.query);
-    if(!parsed.success)return res.status(400).json({error:{
-      code:"INVALID_RANGE",message:"Intervalo inválido."}});
-    const {start,count}=parsed.data,end=Math.min(100001,start+count-1);
-    const items=await prisma.$queryRawUnsafe<Array<{id:string;sheetRowNumber:number}>>(
-      `SELECT id,sequence,operational_key AS "operationalKey",
-         CASE WHEN operational_key ~ '^SHEET:[0-9]{1,6}$' THEN substring(operational_key FROM 7)::int ELSE sequence + 1 END AS "sheetRowNumber",
-         data,status,client_name AS "clientName",container,cte,updated_at AS "updatedAt"
-       FROM mapa_rows WHERE archived_at IS NULL AND (CASE WHEN operational_key ~ '^SHEET:[0-9]{1,6}$' THEN substring(operational_key FROM 7)::int ELSE sequence + 1 END) BETWEEN $1 AND $2
-       ORDER BY "sheetRowNumber" ASC`,start,end);
-    return res.json({items,start,end});
-  }catch(error){return next(error);}
 });
 
 app.get("/api/v1/dashboard/appointment-alerts", async (req, res, next) => {
@@ -616,26 +621,14 @@ app.post("/api/v1/mapa", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRo
     const data = parsed.data.data as Prisma.InputJsonObject;
     const valueFor = (key: string) => typeof data[key] === "string" ? data[key] as string : null;
     const row = await prisma.$transaction(async tx => {
-      const position=parsed.data.sheetRowNumber;
-      if(position!==undefined){
-        await tx.$queryRawUnsafe('SELECT pg_advisory_xact_lock(81274, $1)',position);
-        const collisions=await tx.$queryRawUnsafe<Array<{id:string}>>(
-          "SELECT id FROM mapa_rows WHERE archived_at IS NULL AND (operational_key=$1 OR (sequence=$2 AND (operational_key IS NULL OR operational_key !~ '^SHEET:[0-9]{1,6}$'))) LIMIT 1",
-          'SHEET:'+position,position-1);
-        if(collisions.length)return null;
-      }
       const created = await tx.mapaRow.create({ data: {
-        data,...(position===undefined?{}:{operationalKey:'SHEET:'+position}),
+        data,
         status: valueFor("C"), clientName: valueFor("L"), container: valueFor("T"), cte: valueFor("D"), updatedById: req.authUser!.id
       } });
       await tx.auditLog.create({ data: { entityType: "MAPA_ROW", entityId: created.id, mapaRowId: created.id, action: "CREATE", userId: req.authUser!.id, afterValue: data } });
       return created;
     });
-    if(!row)return res.status(409).json({error:{
-      code:'SHEET_ROW_OCCUPIED',message:'Linha já preenchida. Atualize a planilha.'}});
-    return res.status(201).json({item:{
-      ...row,sheetRowNumber:parsed.data.sheetRowNumber??row.sequence+1
-    }});
+    return res.status(201).json({ item: row });
   } catch (error) { return next(error); }
 });
 
