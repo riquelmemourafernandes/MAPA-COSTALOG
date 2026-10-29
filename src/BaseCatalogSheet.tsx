@@ -20,6 +20,7 @@ export default function BaseCatalogSheet({apiBase,token,userRole,onOpenMapa}:Pro
   const [loading,setLoading]=useState(false);
   const [busy,setBusy]=useState(false);
   const [ready,setReady]=useState(false);
+  const [backendUnavailable,setBackendUnavailable]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [editing,setEditing]=useState<string|null>(null);
@@ -31,14 +32,27 @@ export default function BaseCatalogSheet({apiBase,token,userRole,onOpenMapa}:Pro
   const fetchList=useCallback(async()=>{
     if(!token||!apiBase)return;
     setLoading(true);setReady(false);setError("");
+    setBackendUnavailable(false);
     try{
       const response=await fetch(apiBase+"/api/v1/base/catalog?"+new URLSearchParams({listName}),{
         headers:{Authorization:"Bearer "+token},cache:"no-store"
       });
       const body=await response.json().catch(()=>({}));
+      // A preview frontend can load successfully while its rewrite still
+      // points to the older production API. Do not mistake this for an empty BASE.
+      if(response.status===404||response.status===405){
+        setBackendUnavailable(true);
+        setItems([]);
+        return;
+      }
       if(!response.ok)throw new Error(body?.error?.message||
-        "O servidor ainda não recebeu a atualização da BASE. É necessário homologar a API.");
-      if(!Array.isArray(body.items))throw new Error("Resposta inválida do cadastro.");
+        "Não foi possível carregar os cadastros. Confira sua sessão e a API.");
+      if(!Array.isArray(body.items)){
+        setBackendUnavailable(true);
+        setItems([]);
+        return;
+      }
+      setBackendUnavailable(false);
       setItems(body.items as Item[]);setReady(true);
     }catch(e){setReady(false);setError(messageOf(e));setItems([]);}
     finally{setLoading(false);}
@@ -95,6 +109,17 @@ export default function BaseCatalogSheet({apiBase,token,userRole,onOpenMapa}:Pro
       <button className={tab==="import"?"active":""} onClick={()=>setTab("import")}>Importação de testes</button>
     </nav>
     {tab==="import"?<BasePrototype userRole={userRole} onOpenMapa={onOpenMapa} importOnly/>:
+     backendUnavailable ? <div className="bc-offline-demo">
+       <div className="bc-offline-notice" role="status">
+         <strong>A API da BASE ainda não está conectada a esta prévia.</strong>
+         <span>O site está usando a API anterior do Render. Abaixo está uma demonstração local
+           para testar inclusão, edição e inativação sem gravar nada no banco.
+           Esses cadastros não aparecerão no MAPA até conectarmos uma API atualizada de homologação.</span>
+         <button className="bc-outline" type="button" onClick={()=>void fetchList()}
+           disabled={loading}>{loading?"Verificando…":"Verificar conexão novamente"}</button>
+       </div>
+       <BasePrototype userRole={userRole} onOpenMapa={onOpenMapa}/>
+     </div>:
     <>
       <div className="bc-info"><Database size={16}/>
         <span>Os dados são salvos na BASE do servidor. Apenas administradores e supervisores podem incluir, renomear ou inativar. Remover da lista não apaga registros antigos do MAPA.</span>
