@@ -17,11 +17,12 @@ type Props = {
   token: string;
   onConfirm: (value: string, key: "Enter" | "Tab" | null, shift: boolean) => void;
   onCancel: () => void;
+  onPasteCell: (text: string) => void;
 };
 
 export default function SheetDropdownEditor({
   columnKey, rowLabel, currentValue, initialQuery, fallbackOptions,
-  apiBase, token, onConfirm, onCancel
+  apiBase, token, onConfirm, onCancel, onPasteCell
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   // A click on an existing cell shows ALL choices, not only matching old text.
@@ -115,6 +116,11 @@ export default function SheetDropdownEditor({
   }
 
   function onKeys(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (!query && (event.key === "Delete" || event.key === "Backspace")) {
+      event.preventDefault(); event.stopPropagation();
+      onConfirm("", null, false);
+      return;
+    }
     if (event.key === "Escape") {
       event.preventDefault(); event.stopPropagation(); onCancel(); return;
     }
@@ -140,6 +146,10 @@ export default function SheetDropdownEditor({
         placeholder={currentValue || "Selecionar…"} value={query}
         onChange={event => { setQuery(event.target.value); setExpanded(true); }}
         onKeyDown={onKeys}
+        onPaste={event => {
+          event.preventDefault(); event.stopPropagation();
+          onPasteCell(event.clipboardData.getData("text/plain"));
+        }}
         onBlur={onCancel}
         onClick={event => { event.stopPropagation(); setExpanded(true); }}
       />
