@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import BaseCatalogSheet from './BaseCatalogSheet.js';
 import {inheritRowPresentation,nearestPreviousRowId,type PresentationSnapshot} from './sheet-row-format.js';
 import SheetContextMenu from './SheetContextMenu.js';
@@ -801,7 +801,8 @@ export default function App() {
     normalizeRowHeight(rowHeights['slot:'+position]??(row?rowHeights[row.id]:undefined)??SHEET_DEFAULT_HEIGHT);
   const windowed = useMemo(() => sheetCanvas
     ? sparseSheetWindow(gridViewport.scrollTop,gridViewport.height,sheetHeightOverrides)
-    : virtualRowWindow(displayedRows.map(row=>rowHeights[row.id]||SHEET_DEFAULT_HEIGHT),
+    : virtualRowWindow(displayedRows.map((row,index)=>
+        rowHeightAt(Number(row.sheetRowNumber??index+2),row)),
         gridViewport.scrollTop,gridViewport.height),
   [sheetCanvas,displayedRows,sheetHeightOverrides,rowHeights,gridViewport.scrollTop,gridViewport.height]);
   const renderedSlots = useMemo(()=>{
@@ -1914,7 +1915,8 @@ export default function App() {
                     className={'sheet-virtual-empty-row '+
                       (selectedBlankRow===index?'sheet-virtual-row-selected ':'')+
                       (selectionMode==='cell' && placeholderPosition?.row===index?'sheet-row-active ':'')}
-                    style={{height:rowHeightAt(index+2)}}>
+                    style={{height:rowHeightAt(index+2),
+                      '--mapa-row-height':rowHeightAt(index+2)+'px'} as CSSProperties}>
                     <th scope="row" className={'sheet-row-number '+
                       (selectedBlankRow===index?'sheet-row-selected ':'')+
                       (selectionMode==='cell'&&placeholderPosition?.row===index?'sheet-row-active-header':'')}
@@ -1982,7 +1984,8 @@ export default function App() {
                     className={(selectedRowIds.includes(row.id)?'bulk-selected-row ':'')+
                       (selectionMode==='row'&&selectedRowIds.includes(row.id)?'sheet-whole-row-selected ':'')+
                       (selectionMode==='cell'&&selectedCell?.row.id===row.id?'sheet-row-active':'')}
-                    style={{height:rowHeightAt(Number(row.sheetRowNumber??ri+2),row)}}
+                    style={{height:rowHeightAt(Number(row.sheetRowNumber??ri+2),row),
+                      '--mapa-row-height':rowHeightAt(Number(row.sheetRowNumber??ri+2),row)+'px'} as CSSProperties}
                     data-status={String(row.data?.C ?? row.status ?? '')}>
                   <th scope="row" className={'sheet-row-number '+
                     (selectionMode==='row'&&selectedRowIds.includes(row.id)?'sheet-row-selected ':'')+
