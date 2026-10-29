@@ -45,6 +45,8 @@ export default function App() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const editingBusyRef = useRef(false);
+  const editorRef = useRef<HTMLInputElement>(null);
   const [token, setToken] = useState(() => apiBase ? sessionStorage.getItem('mapa-costalog-token') || '' : '');
   const [userKey, setUserKey] = useState(() => sessionStorage.getItem('mapa-costalog-user') || 'usuario');
   const [userRole, setUserRole] = useState(() => sessionStorage.getItem('mapa-costalog-role') || '');
@@ -78,6 +80,8 @@ export default function App() {
   const [viewName, setViewName] = useState('');
   const [showViewTools, setShowViewTools] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{row: RecordRow; column: Column} | null>(null);
+  const [editingCell, setEditingCell] = useState<{rowId: string; columnKey: string} | null>(null);
+  const [editValue, setEditValue] = useState('');
   const [selectionAnchor, setSelectionAnchor] = useState<{rowId: string; columnKey: string} | null>(null);
   const [pastePreview, setPastePreview] = useState<{matrix: string[][]; start: GridPosition} | null>(null);
   const [pasteBusy, setPasteBusy] = useState(false);
@@ -424,30 +428,33 @@ export default function App() {
       else setBulkOpen(false);
     } finally { setBulkBusy(false); }
   }
-  async function saveCell(row: RecordRow, column: Column, value: string) {
-    if (!apiBase || !token || !column.editable) return;
+  async function saveCell(row: RecordRow, column: Column, value: string): Promise<boolean> {
+    if (!apiBase || !token || !column.editable || userRole === 'CONSULTA') return false;
     const previousValue = valueText(row.data?.[column.key]);
-    if (value === previousValue) return;
+    if (value === previousValue) return true;
     const parsed = parseEditableValue(column.dataType, value);
     if (!parsed.ok) {
-      setApiError(parsed.message + ' na coluna ' + column.label + '.'); return;
+      setApiError(parsed.message + ' na coluna ' + column.label + '.');
+      return false;
     }
-    const parsedValue = parsed.value;
     try {
       const response = await fetch(apiBase + '/api/v1/mapa/' + encodeURIComponent(row.id), {
         method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({ changes: { [column.key]: parsedValue }, expectedUpdatedAt: row.updatedAt })
+        body: JSON.stringify({ changes: { [column.key]: parsed.value }, expectedUpdatedAt: row.updatedAt })
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar.');
       setRows(previous => previous.map(item => item.id === row.id ? body.item as RecordRow : item));
       setNotice('Alteração salva no banco e registrada no histórico.');
       setApiError('');
+      return true;
     } catch (error) {
       setApiError(error instanceof Error ? error.message : 'Falha ao salvar.');
       setNotice('A alteração não foi confirmada. Atualize a tela antes de continuar.');
+      return false;
     }
   }
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -503,6 +510,45 @@ export default function App() {
     );
   }, [selectedPosition, selectionAnchor, displayedRows, visibleColumns]);
 
+  function beginCellEdit(rowIndex: number, columnIndex: number, replacement?: string) {
+    const row = displayedRows[rowIndex], column = visibleColumns[columnIndex];
+    if (!row || !column || !token || userRole === 'CONSULTA' || !column.editable || editingBusyRef.current) return;
+    setSelectionAnchor({ rowId: row.id, columnKey: column.key });
+    setSelectedCell({ row, column });
+    setEditValue(replacement === undefined ? valueText(row.data?.[column.key]) : replacement);
+    setEditingCell({ rowId: row.id, columnKey: column.key });
+  }
+
+  async function finishCellEdit(row: RecordRow, column: Column, value: string,
+    move?: { row: number; column: number }) {
+    if (editingBusyRef.current) return;
+    editingBusyRef.current = true;
+    const success = await saveCell(row, column, value);
+    editingBusyRef.current = false;
+    if (success) {
+      setEditingCell(null);
+      setEditValue('');
+      if (move) {
+        selectGridCell(move.row, move.column, false, false);
+        // Selection is rendered before DOM focus can move to its new cell.
+        window.requestAnimationFrame(() => {
+          const target = gridRef.current?.querySelector<HTMLElement>(
+            '[data-grid-row="' + move.row + '"][data-grid-column="' + move.column + '"]');
+          target?.focus({ preventScroll: true });
+          target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        });
+      } else {
+        window.requestAnimationFrame(() => {
+          const target = gridRef.current?.querySelector<HTMLElement>(
+            '[data-cell-id="' + row.id + ':' + column.key + '"]');
+          target?.focus({ preventScroll: true });
+        });
+      }
+    } else {
+      editorRef.current?.focus();
+    }
+  }
+
   function selectGridCell(rowIndex: number, columnIndex: number, extend = false, moveFocus = false) {
     const row = displayedRows[rowIndex], column = visibleColumns[columnIndex];
     if (!row || !column) return;
@@ -518,8 +564,19 @@ export default function App() {
   }
   function onGridKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const element = event.target as HTMLElement;
-    if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(element.tagName) || !selectedPosition || pasteBusy) return;
-    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(event.key)) return;
+    if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(element.tagName) ||
+      !selectedPosition || pasteBusy || editingCell) return;
+    if (event.key === 'Enter' || event.key === 'F2') {
+      event.preventDefault();
+      beginCellEdit(selectedPosition.row, selectedPosition.column);
+      return;
+    }
+    if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.length === 1) {
+      event.preventDefault();
+      beginCellEdit(selectedPosition.row, selectedPosition.column, event.key);
+      return;
+    }
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(event.key)) return;
     event.preventDefault();
     const next = moveGridPosition(selectedPosition, event.key, displayedRows.length, visibleColumns.length, event.shiftKey);
     selectGridCell(next.row, next.column, event.shiftKey && event.key.startsWith('Arrow'), true);
