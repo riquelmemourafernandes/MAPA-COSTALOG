@@ -148,7 +148,7 @@ function evalNode(n: Node, ctx: Context): FormulaValue | FormulaValue[] {
       case 'OR': return flat.some(v => num(v) !== 0 || str(v).toUpperCase() === 'TRUE');
       case 'NOT': return !(num(scalar(0)) !== 0 && str(scalar(0)).toUpperCase() !== 'FALSE');
       case 'ISBLANK': return scalar(0) === null || scalar(0) === '';
-      case 'ISNUMBER': return typeof scalar(0) === 'number' || (typeof scalar(0) === 'string' && scalar(0).trim() !== '' && Number.isFinite(num(scalar(0))));
+      case 'ISNUMBER': { const value = scalar(0); return typeof value === 'number' || (typeof value === 'string' && value.trim() !== '' && Number.isFinite(num(value))); }
       case 'ISTEXT': return typeof scalar(0) === 'string' && !isError(scalar(0));
       case 'ISERROR': return isError(scalar(0));
       case 'LEN': return str(scalar(0)).length;
