@@ -1075,7 +1075,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [active, userRole, apiBase, token, rows, cellStyles, rowStyles, columnStyles, rowHeights, columnWidths, visibleKeys, savedViews, blankSaving, pasteBusy, adminSheetBusy, bulkBusy, creatingRows, selectedStyle]);
+  }, [active, userRole, apiBase, token, rows, cellStyles, rowStyles, columnStyles, rowHeights, columnWidths, visibleKeys, savedViews, blankSaving, pasteBusy, adminSheetBusy, bulkBusy, creatingRows, selectedStyle.bold, showFindReplace]);
   const visibleColumns = useMemo(() => columns.filter(c => c.visible !== false && visibleKeys.includes(c.key)).sort((a,b) => visibleKeys.indexOf(a.key)-visibleKeys.indexOf(b.key)), [columns, visibleKeys]);
   // When backend filtering is available, values are filtered before pagination.
   // On an older API, the same selection works over the loaded page only.
@@ -2486,7 +2486,7 @@ export default function App() {
         </section>}
         {active === 'MAPA 2.0' && <>
         <section className="panel mapa-grid-panel">
-          <div className="panel-heading compact-map-heading"><div><h2><Table2 size={19}/> MAPA 2.0</h2><p>Planilha operacional · edite as células autorizadas diretamente na grade.</p></div><div className="panel-actions">{token && userRole !== 'CONSULTA' && !sheetCanvas && <>
+          <div className="panel-heading compact-map-heading"><div><h2><Table2 size={19}/> MAPA 2.0</h2><p>Planilha operacional · edite as células autorizadas diretamente na grade.</p></div><div className="panel-actions">{token && userRole !== 'CONSULTA' && <>
         <button className="primary" disabled={loading||creatingRows} onClick={()=>void createRow()} title="Inserir uma linha">
           <Plus size={16}/> Nova linha</button>
         <button className="secondary" onClick={()=>setNewRowsOpen(value=>!value)} disabled={creatingRows}
@@ -2505,7 +2505,7 @@ export default function App() {
               </div>}
             </div>)}
           </div>
-          {newRowsOpen && !sheetCanvas && <div className="sheet-add-many">
+          {newRowsOpen && <div className="sheet-add-many">
             <label>Adicionar linhas <input type="number" min={1} max={100} step={1}
               aria-label="Número de linhas para criar" value={newRowsCount}
               onChange={event=>setNewRowsCount(Number(event.target.value))}/></label>
