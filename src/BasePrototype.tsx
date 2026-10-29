@@ -10,12 +10,12 @@ import {
 } from './base-prototype-data.js';
 import './base-prototype.css';
 
-type Props = { userRole: string; onOpenMapa: () => void };
+type Props = { userRole: string; onOpenMapa: () => void; importOnly?: boolean };
 type DemoTab = 'base' | 'import';
 const safeDate = (n: number) => String(n).padStart(2,'0');
-export default function BasePrototype({userRole,onOpenMapa}:Props) {
+export default function BasePrototype({userRole,onOpenMapa,importOnly=false}:Props) {
   const canManage = userRole === 'ADMIN' || userRole === 'SUPERVISOR';
-  const [tab,setTab] = useState<DemoTab>('base');
+  const [tab,setTab] = useState<DemoTab>(importOnly?'import':'base');
   const [catalog,setCatalog] = useState<DemoCatalog>(createDemoCatalog);
   const [category,setCategory] = useState<string>('CLIENTE');
   const [search,setSearch] = useState('');
@@ -96,7 +96,7 @@ export default function BasePrototype({userRole,onOpenMapa}:Props) {
   const previewRows = draftRows.length ? draftRows : importedRows;
   const previewVisible = previewRows.slice(previewStart,previewStart+8);
   return <section className="basep-page">
-    <div className="basep-head">
+    {!importOnly&&<div className="basep-head">
       <div>
         <p className="basep-eyebrow">MAPA-COSTALOG / HOMOLOGAÇÃO DE INTERFACE</p>
         <h2>BASE de cadastros e importação</h2>
@@ -104,18 +104,20 @@ export default function BasePrototype({userRole,onOpenMapa}:Props) {
       </div>
       <button type="button" className="basep-link" onClick={onOpenMapa}>Abrir MAPA 1.0</button>
     </div>
+    </div>}
     <div className="basep-banner" role="status">
       <ShieldCheck size={18}/>
       <div><strong>Protótipo isolado — sem gravação no banco</strong>
         <span>Alterações, exclusões e importações aqui são simulações locais. Nenhuma conta, registro ou planilha é modificada.</span>
       </div>
     </div>
-    <div className="basep-tabs" role="tablist" aria-label="Áreas do protótipo">
+    {!importOnly&&<div className="basep-tabs" role="tablist" aria-label="Áreas do protótipo">
       <button type="button" role="tab" aria-selected={tab==='base'} className={tab==='base'?'active':''}
         onClick={()=>{setTab('base');setError('');}}><Database size={16}/> BASE de cadastros</button>
       <button type="button" role="tab" aria-selected={tab==='import'} className={tab==='import'?'active':''}
         onClick={()=>{setTab('import');setError('');}}><FileSpreadsheet size={16}/> Importar 55 linhas</button>
     </div>
+    </div>}
     {(notice||error)&& <div className={'basep-flash '+(error?'basep-error':'')} role="status">
       {error||notice}<button type="button" aria-label="Dispensar mensagem" onClick={()=>{setError('');setNotice('');}}><X size={15}/></button>
     </div>}
