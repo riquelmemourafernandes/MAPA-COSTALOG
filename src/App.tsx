@@ -788,13 +788,14 @@ export default function App() {
   // It does not overwrite a value changed since the recorded edit; HTTP 409
   // also prevents stale writes if a collaborator edits during the request.
   async function replayEdit(direction:'undo'|'redo'){
-    if(active!=='MAPA 2.0'||userRole==='CONSULTA'||!token||!apiBase||
-       undoBusyRef.current||gridMutationBusyRef.current||editingBusyRef.current||
-       blankSaving||pasteBusy||adminSheetBusy||bulkBusy||creatingRows)return;
+    if(active!=='MAPA 2.0'||undoBusyRef.current||gridMutationBusyRef.current||
+       editingBusyRef.current||blankSaving||pasteBusy||adminSheetBusy||
+       bulkBusy||creatingRows)return;
     const stacks=undoStacksRef.current;
     const source=stacks[direction],target=stacks[direction==='undo'?'redo':'undo'];
     const entry=source[source.length-1];
     if(!entry){setNotice(direction==='undo'?'Nada para desfazer.':'Nada para refazer.');return;}
+    if(entry.kind!=='size'&&(!token||!apiBase||userRole==='CONSULTA'))return;
     undoBusyRef.current=true;
     setApiError('');
     try{
@@ -920,7 +921,7 @@ export default function App() {
         ['INPUT','TEXTAREA','SELECT'].includes(target.tagName) &&
         !(target instanceof HTMLInputElement && target.type==='checkbox')));
       const shortcut=undoShortcut(event);
-      if(shortcut && active==='MAPA 2.0' && userRole!=='CONSULTA' && !typing){
+      if(shortcut && active==='MAPA 2.0' && !typing){
         event.preventDefault();
         event.stopPropagation();
         void replayEdit(shortcut);
@@ -1060,9 +1061,12 @@ export default function App() {
     event.preventDefault();event.stopPropagation();
     const storageKey='slot:'+position;
     const currentHeight=rowHeightAt(position,row);
+    const originalValue=rowHeights[storageKey]??null;
     const startY=event.clientY;
+    let finalHeight=currentHeight;
     const move=(ev:PointerEvent)=>{
       const height=normalizeRowHeight(currentHeight+ev.clientY-startY);
+      finalHeight=height;
       setRowHeights(previous=>({...previous,[storageKey]:height}));
     };
     const end=()=>{
@@ -1072,6 +1076,9 @@ export default function App() {
         localStorage.setItem(rowHeightStorageKey,JSON.stringify(previous));
         return previous;
       });
+      if(finalHeight!==currentHeight)
+        rememberUndo({kind:'size',label:'Altura da linha '+position,
+          target:'row',key:storageKey,before:originalValue,after:finalHeight});
     };
     window.addEventListener('pointermove',move);
     window.addEventListener('pointerup',end,{once:true});
@@ -1824,9 +1831,12 @@ export default function App() {
     event.preventDefault(); event.stopPropagation();
     const th = event.currentTarget.closest('th');
     const startWidth = th?.getBoundingClientRect().width || 180;
+    const originalValue=columnWidths[column.key]??null;
     const startX = event.clientX;
+    let finalWidth=startWidth;
     const onMove = (move: PointerEvent) => {
       const width = normalizeColumnWidth(startWidth + move.clientX - startX);
+      finalWidth=width;
       setColumnWidths(previous => ({ ...previous, [column.key]: width }));
     };
     const onUp = () => {
@@ -1836,6 +1846,9 @@ export default function App() {
         localStorage.setItem(widthKey, JSON.stringify(previous));
         return previous;
       });
+      if(Math.round(finalWidth)!==Math.round(startWidth))
+        rememberUndo({kind:'size',label:'Largura da coluna '+column.key,
+          target:'column',key:column.key,before:originalValue,after:finalWidth});
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp, { once: true });
@@ -2057,10 +2070,10 @@ export default function App() {
                 ? visibleColumns[placeholderPosition.column].key + (placeholderPosition.row + 1) + ' (visual)'
                 : 'Selecione uma célula'}</span>
             <span className="sheet-guide" aria-hidden="true"></span>
-            <button className="secondary" type="button" disabled={!undoCounts.undo||undoBusyRef.current||pasteBusy||editingCell!==null||userRole==='CONSULTA'}
+            <button className="secondary" type="button" disabled={!undoCounts.undo||undoBusyRef.current||pasteBusy||editingCell!==null}
               title="Desfazer a última alteração (Ctrl+Z)" aria-label="Desfazer"
               onClick={()=>void replayEdit('undo')}><Undo2 size={14}/> Desfazer</button>
-            <button className="secondary" type="button" disabled={!undoCounts.redo||undoBusyRef.current||pasteBusy||editingCell!==null||userRole==='CONSULTA'}
+            <button className="secondary" type="button" disabled={!undoCounts.redo||undoBusyRef.current||pasteBusy||editingCell!==null}
               title="Refazer alteração (Ctrl+Y / Ctrl+Shift+Z)" aria-label="Refazer"
               onClick={()=>void replayEdit('redo')}><Redo2 size={14}/> Refazer</button>
             <button className="secondary" type="button" disabled={!selectedBounds} onClick={() => void copyGridSelection()}>Copiar seleção</button>
