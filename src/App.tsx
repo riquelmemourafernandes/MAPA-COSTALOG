@@ -744,7 +744,7 @@ export default function App() {
   }
   async function applyBulkEdit() {
     const column = editableColumns.find(item => item.key === bulkColumn);
-    if (!column || !selectedRows.length || !apiBase || !token) return;
+    if (!column || !selectedRows.length || (!apiBase && !isGitHubPagesPreview) || !token) return;
     const trimmed = bulkValue.trim();
     const parsedValue: unknown = trimmed === '' ? null :
       (column.dataType === 'number' || column.dataType === 'currency' ? Number(trimmed.replace(',', '.')) :
@@ -761,6 +761,12 @@ export default function App() {
     try {
       for (const row of selectedRows) {
         if (valueText(row.data?.[column.key]) === valueText(parsedValue)) continue;
+        if (isGitHubPagesPreview) {
+          const updated: RecordRow = { ...row, data: { ...row.data, [column.key]: parsedValue }, updatedAt: new Date().toISOString() };
+          succeeded.push(updated);
+          const edit = buildUndoRecord(row, updated, [column.key]); if (edit) undoEdits.push(edit);
+          continue;
+        }
         try {
           const response = await fetch(apiBase + '/api/v1/mapa/' + encodeURIComponent(row.id), {
             method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
@@ -777,7 +783,9 @@ export default function App() {
       if(undoEdits.length)rememberUndo({kind:'cells',label:'Edição em massa',edits:undoEdits});
       if (succeeded.length) setRows(previous => previous.map(row => succeeded.find(updated => updated.id === row.id) || row));
       setSelectedRowIds(failures.length ? selectedRows.filter(row => failures.some(message => message.startsWith('Registro #' + row.sequence + ':'))).map(row => row.id) : []);
-      setNotice('Edição em massa: ' + succeeded.length + ' registro(s) atualizado(s)' + (failures.length ? '; ' + failures.length + ' falha(s).' : '. Cada alteração foi registrada no histórico.'));
+      setNotice(isGitHubPagesPreview
+        ? 'Edição em massa salva neste navegador: ' + succeeded.length + ' registro(s) atualizado(s).'
+        : 'Edição em massa: ' + succeeded.length + ' registro(s) atualizado(s)' + (failures.length ? '; ' + failures.length + ' falha(s).' : '. Cada alteração foi registrada no histórico.'));
       if (failures.length) setApiError(failures.slice(0, 5).join(' · ') + (failures.length > 5 ? ' · e outras falhas.' : ''));
       else setBulkOpen(false);
     } finally { setBulkBusy(false); }
@@ -1941,6 +1949,12 @@ export default function App() {
     }
     const matrix=parseClipboardGrid(plainText);
     if(!canPasteMatrix(matrix,selectedPosition,displayedRows.length,visibleColumns.length,2000)){
+      if (isGitHubPagesPreview && matrix.length && matrix.every(row => row.length === matrix[0].length) &&
+          selectedPosition.column + matrix[0].length <= visibleColumns.length) {
+        const selectedRow = displayedRows[selectedPosition.row];
+        const startRow = Number(selectedRow?.sheetRowNumber ?? selectedPosition.row + 2) - 2;
+        if (startRow >= 0) { void pasteVirtualRange(plainText, { row: startRow, column: selectedPosition.column }); return; }
+      }
       setApiError('A colagem deve ser retangular, caber nas linhas carregadas e conter até 2.000 células.');
       return;
     }
