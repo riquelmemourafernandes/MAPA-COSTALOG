@@ -479,6 +479,35 @@ app.get("/api/v1/mapa/validations", async (_req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+// Add N blank spreadsheet rows atomically. No partial result or changes
+// to existing records; each new row receives its own audit entry.
+app.post("/api/v1/mapa/batch-blank",
+  requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.OPERACAO),
+  async (req, res, next) => {
+    try {
+      const parsed = z.object({ count: z.number().int().min(1).max(100) }).strict().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: {
+        code: "INVALID_ROW_COUNT", message: "Informe entre 1 e 100 linhas."
+      } });
+      const items = await prisma.$transaction(async tx => {
+        const created = [];
+        for (let i = 0; i < parsed.data.count; i++) {
+          const item = await tx.mapaRow.create({ data: {
+            data: {}, updatedById: req.authUser!.id
+          } });
+          await tx.auditLog.create({ data: {
+            entityType: "MAPA_ROW", entityId: item.id, mapaRowId: item.id,
+            action: "CREATE", userId: req.authUser!.id, afterValue: {}
+          } });
+          created.push(item);
+        }
+        return created;
+      }, {timeout: 30_000});
+      return res.status(201).json({items,created:items.length});
+    } catch (error) { return next(error); }
+  }
+);
+
 app.post("/api/v1/mapa", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.OPERACAO), async (req, res, next) => {
   try {
     const parsed = createRowSchema.safeParse(req.body);
