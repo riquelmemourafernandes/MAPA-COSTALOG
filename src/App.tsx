@@ -56,7 +56,10 @@ const SHEET_TOP_MENUS = [
     { label: 'Escolher colunas…', action: 'columns' }, { label: 'Mostrar todas as colunas', action: 'showColumns' }, { label: 'Tema escuro / claro', action: 'theme' }
   ]},
   { label: 'Inserir', items: [
-    { label: 'Nova linha', action: 'newRow' }, { label: 'Várias linhas…', action: 'manyRows' }, { label: 'Nova coluna', action: 'newColumn' }
+    { label: 'Caixa de seleção', action: 'insertCheckbox' },
+    { label: 'Remover caixa de seleção', action: 'removeCheckbox' },
+    { label: 'Nova linha', action: 'newRow' }, { label: 'Várias linhas…', action: 'manyRows' },
+    { label: 'Nova coluna', action: 'newColumn' }
   ]},
   { label: 'Formatar', items: [
     { label: 'Negrito', action: 'bold', shortcut: 'Ctrl+B' }, { label: 'Formato: texto', action: 'formatText' },
@@ -79,7 +82,9 @@ type UndoStep =
   | {kind:'style'; label:string; target:'cell'|'row'|'column'; key:string;
       before:CellStyle|null; after:CellStyle|null}
   | {kind:'size'; label:string; target:'row'|'column'; key:string;
-      before:number|null; after:number|null};
+      before:number|null; after:number|null}
+  | {kind:'checkboxes';label:string;keys:string[];
+      before:Record<string,boolean>;after:Record<string,boolean>;edits:UndoRecord[]};
 type AuditEntry = { id: string; action: string; fieldKey?: string | null; beforeValue?: unknown; afterValue?: unknown; createdAt: string; user?: { name?: string; email?: string } | null };
 type UserProfile = { id: string; name: string; email: string; role: string; active: boolean };
 type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string; pendingApproval?: boolean };
@@ -353,6 +358,23 @@ export default function App() {
   const [selectionAnchor, setSelectionAnchor] = useState<{rowId: string; columnKey: string} | null>(null);
   const [pasteBusy, setPasteBusy] = useState(false);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  // Individual checkboxes are anchored to a sheet row/column, not a fixed
+  // data-type column. GitHub Pages stores their configuration locally.
+  const [customCheckboxCells,setCustomCheckboxCells]=useState<Record<string,true>>(()=>{
+    if(!isGitHubPagesPreview)return {};
+    try{
+      const parsed=JSON.parse(localStorage.getItem('mapa-costalog-checkbox-cells-v1')||'{}') as Record<string,unknown>;
+      return Object.fromEntries(Object.entries(parsed).filter(([key,value])=>
+        /^\d+:[A-Z]+$/.test(key)&&value===true)) as Record<string,true>;
+    }catch{return {};}
+  });
+  useEffect(()=>{
+    if(!isGitHubPagesPreview)return;
+    try{localStorage.setItem('mapa-costalog-checkbox-cells-v1',JSON.stringify(customCheckboxCells));}
+    catch{setNotice('Não foi possível salvar as caixas de seleção neste navegador.');}
+  },[customCheckboxCells]);
+  function customCheckboxKey(position:number,columnKey:string){return position+':'+columnKey;}
+
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
   const [columnDropTarget,setColumnDropTarget]=useState<{key:string;side:ColumnDropSide}|null>(null);
   const columnOptionsRef=useRef<HTMLDivElement>(null);
