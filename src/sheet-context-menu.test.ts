@@ -16,6 +16,7 @@ test("coluna e linha mostram operações corretas e atalhos",()=>{
   assert.ok(row.some(item=>item.id==="resize-row"));
   assert.ok(!row.some(item=>item.id==="delete-column"));
   assert.ok(getSheetContextOptions("cell",true).some(item=>item.id==="select-all"));
+  assert.ok(getSheetContextOptions("cell",true).some(item=>item.id==="delete-column" && item.danger));
 });
 test("menu permanece dentro da janela",()=>{
   assert.deepEqual(safeMenuPosition(1450,900,270,420,1500,1000),{left:1222,top:572});
