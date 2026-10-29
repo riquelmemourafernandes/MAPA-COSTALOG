@@ -2486,6 +2486,19 @@ export default function App() {
         <button className="secondary" onClick={()=>setNewRowsOpen(value=>!value)} disabled={creatingRows}
           title="Adicionar várias linhas de uma vez"><Plus size={14}/> Várias linhas</button>
       </>}<button className="secondary" onClick={()=>setColumnMenu(value=>!value)}><Columns3 size={16}/> Escolher colunas ({visibleColumns.length})</button></div></div>
+          <div className="sheet-menu-bar" role="menubar" aria-label="Menus da planilha">
+            {SHEET_TOP_MENUS.map(menu => <div className="sheet-menu-item" key={menu.label}>
+              <button type="button" role="menuitem" aria-haspopup="true" aria-expanded={openTopMenu===menu.label}
+                className={openTopMenu===menu.label?'sheet-menu-trigger is-open':'sheet-menu-trigger'}
+                onClick={()=>setOpenTopMenu(current=>current===menu.label?null:menu.label)}>{menu.label}</button>
+              {openTopMenu===menu.label && <div className="sheet-menu-dropdown" role="menu">
+                {menu.items.map(item => <button type="button" role="menuitem" key={item.action}
+                  onClick={()=>void handleSheetMenuAction(item.action)}>
+                  <span>{item.label}</span>{'shortcut' in item && item.shortcut && <kbd>{item.shortcut}</kbd>}
+                </button>)}
+              </div>}
+            </div>)}
+          </div>
           {newRowsOpen && !sheetCanvas && <div className="sheet-add-many">
             <label>Adicionar linhas <input type="number" min={1} max={100} step={1}
               aria-label="Número de linhas para criar" value={newRowsCount}
@@ -2831,6 +2844,15 @@ export default function App() {
                 Nenhum registro corresponde aos filtros. Limpe os filtros para voltar à grade completa.
               </div>}
           </div>
+          {showFindReplace && <div className="sheet-replace-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowFindReplace(false);}}>
+            <section className="sheet-replace-dialog" role="dialog" aria-modal="true" aria-labelledby="sheet-replace-title">
+              <div className="sheet-replace-heading"><h3 id="sheet-replace-title">Localizar e substituir</h3><button type="button" aria-label="Fechar" onClick={()=>setShowFindReplace(false)}>×</button></div>
+              <label>Localizar <input autoFocus value={replaceSearch} onChange={event=>setReplaceSearch(event.target.value)} onKeyDown={event=>{if(event.key==='Escape')setShowFindReplace(false);if(event.key==='Enter')void replaceInSheet();}} /></label>
+              <label>Substituir por <input value={replaceWith} onChange={event=>setReplaceWith(event.target.value)} onKeyDown={event=>{if(event.key==='Enter')void replaceInSheet();if(event.key==='Escape')setShowFindReplace(false);}} /></label>
+              <label className="sheet-replace-case"><input type="checkbox" checked={replaceMatchCase} onChange={event=>setReplaceMatchCase(event.target.checked)}/> Diferenciar maiúsculas e minúsculas</label>
+              <div className="sheet-replace-actions"><button className="secondary" type="button" onClick={()=>setShowFindReplace(false)}>Cancelar</button><button className="primary" type="button" onClick={()=>void replaceInSheet()}>Substituir tudo</button></div>
+            </section>
+          </div>}
           {sheetContextMenu && userRole==='ADMIN' &&
             <SheetContextMenu kind={sheetContextMenu.kind} x={sheetContextMenu.x}
               y={sheetContextMenu.y} onClose={()=>setSheetContextMenu(null)}
