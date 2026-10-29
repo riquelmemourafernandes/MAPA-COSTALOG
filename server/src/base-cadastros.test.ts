@@ -11,7 +11,7 @@ test("BASE cobre dropdowns reais e evita cadastro de tipos arbitrários", () => 
 test("importação aceita só 55 linhas em sequência e 72 colunas", () => {
  const rows=Array.from({length:55},(_,i)=>({sourceRow:12202+i,values:Array(72).fill(null)}));
  assert.equal(importRowsSchema.safeParse({rows}).success,true);
- rows[2].sourceRow=12204;
+ rows[2].sourceRow=12203;
  assert.equal(importRowsSchema.safeParse({rows}).success,false);
  assert.equal(importSourceKey(12202),"TEST-MAPA-1.0-ORIGEM-12202");
  assert.equal(columnLetter(0),"A"); assert.equal(columnLetter(71),"BT");
