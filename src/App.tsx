@@ -1778,7 +1778,11 @@ export default function App() {
                     onClick={()=>{if(userRole==='ADMIN')selectAllLoadedCells();}}
                     onContextMenu={event=>openSheetContext(event,'all')}>▦</th>
                   {visibleColumns.map((column,ci)=><th key={column.key}
-                    className={'sheet-letter-header '+(selectionMode==='column'&&selectedColumnKey===column.key?'sheet-column-selected':'')}
+                    className={'sheet-letter-header '+
+                      (selectionMode==='column'&&selectedColumnKey===column.key?'sheet-column-selected ':'')+
+                      (selectionMode==='cell' && (selectedCell?.column.key===column.key ||
+                        (placeholderPosition && visibleColumns[placeholderPosition.column]?.key===column.key))
+                        ?'sheet-column-active-header':'')}
                     scope="col" title={'Selecionar coluna '+column.key}
                     onClick={()=>selectEntireColumn(column)}
                     onContextMenu={event=>openSheetContext(event,'column',undefined,ci)}>
