@@ -4,6 +4,7 @@ import { Check, ChevronDown } from "lucide-react";
 import {
   confirmDropdownValue, initialDropdownSearch, searchOptions
 } from "./sheet-dropdown-utils.js";
+import { STATUS_COLORS } from "./sheet-status-rules.js";
 import "./sheet-dropdown.css";
 
 type Props = {
@@ -36,8 +37,12 @@ export default function SheetDropdownEditor({
 
   const options = useMemo(() => {
     const available = backendOptions === null ? fallbackOptions : backendOptions;
-    return searchOptions(available, query).slice(0, 2000);
-  }, [backendOptions, fallbackOptions, query]);
+    // The 16 agreed status templates are always available in the STATUS menu.
+    const withDefaults = columnKey === "C"
+      ? [...STATUS_COLORS.map(rule => rule.status), ...available]
+      : available;
+    return searchOptions(withDefaults, query).slice(0, 2000);
+  }, [backendOptions, fallbackOptions, query, columnKey]);
 
   useEffect(() => {
     setHighlight(query.trim() ? 0 : -1);
