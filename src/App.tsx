@@ -817,9 +817,7 @@ export default function App() {
     if ((!apiBase && !isGitHubPagesPreview) || !token || !column.editable || userRole === 'CONSULTA' || gridMutationBusyRef.current || cellSaveBusyRef.current) return false;
     const previousValue = valueText(row.data?.[column.key]);
     if (value === previousValue) return true;
-    const parsed = LOCKED_COLUMN_FORMAT[column.key]
-      ? parseSheetValue(value,LOCKED_COLUMN_FORMAT[column.key])
-      : parseEditableValue(column.dataType, value);
+    const parsed = parseGridCellValue(column, value);
     if (!parsed.ok) {
       setApiError(parsed.message + ' na coluna ' + column.label + '.');
       return false;
@@ -1394,9 +1392,7 @@ export default function App() {
   async function saveBlankCell(index:number,column:Column,value:string,
     key:'Enter'|'Tab'|null=null,shift=false){
     if(blankSaving||userRole==='CONSULTA'||!token||gridRangeSupported!==true)return;
-    const parsed=LOCKED_COLUMN_FORMAT[column.key]
-      ?parseSheetValue(value,LOCKED_COLUMN_FORMAT[column.key])
-      :parseEditableValue(column.dataType,value);
+    const parsed=parseGridCellValue(column,value);
     if(!parsed.ok){setApiError(parsed.message+' na coluna '+column.label);return;}
     if(parsed.value===null||parsed.value===''){
       setBlankEditing(null);setBlankDraft('');
