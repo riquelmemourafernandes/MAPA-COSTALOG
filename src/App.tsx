@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { matchesColumnFilters, uniqueFilterValues, type ColumnFilterMap } from './column-filter.js';
 import {
   canPasteMatrix, moveGridPosition, parseClipboardGrid,
   parseEditableValue, selectionBounds, serializeSelection, gridKeyboardAction,
@@ -109,7 +110,15 @@ export default function App() {
   const [status, setStatus] = useState('');
   const [filterColumn, setFilterColumn] = useState('');
   const [filterValue, setFilterValue] = useState('');
-  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [columnFilters, setColumnFilters] = useState<ColumnFilterMap>({});
+  const [openFilterKey, setOpenFilterKey] = useState<string | null>(null);
+  const [filterMenuRect, setFilterMenuRect] = useState<{top:number;left:number} | null>(null);
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterDraft, setFilterDraft] = useState<string[]>([]);
+  const [filterAllChosen, setFilterAllChosen] = useState(true);
+  const [filterOptions, setFilterOptions] = useState<string[]>([]);
+  const [filterOptionsNote, setFilterOptionsNote] = useState('');
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkColumn, setBulkColumn] = useState('');
@@ -176,7 +185,7 @@ export default function App() {
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState('CONSULTA');
   const pageSize = 100;
-  useEffect(() => { setSelectedRowIds([]); }, [page, query, status, filterColumn, filterValue]);
+  useEffect(() => { setSelectedRowIds([]); }, [page, query, status, filterColumn, filterValue, columnFilters]);
   const selectedRows = rows.filter(row => selectedRowIds.includes(row.id));
   const editableColumns = columns.filter(column => column.editable);
   const preferenceKey = 'mapa-costalog-columns:' + userKey;
@@ -550,15 +559,14 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [active, userRole, apiBase, token]);
   const visibleColumns = useMemo(() => columns.filter(c => visibleKeys.includes(c.key)).sort((a,b) => visibleKeys.indexOf(a.key)-visibleKeys.indexOf(b.key)), [columns, visibleKeys]);
+  // When backend filtering is available, values are filtered before pagination.
+  // On an older API, the same selection works over the loaded page only.
   const displayedRows = useMemo(() => {
     const filtered = rows.filter(row => {
       const values = Object.values(row.data || {}).map(valueText).join(' ') + ' ' + [row.status,row.clientName,row.container,row.cte].map(valueText).join(' ');
       const matchesGlobal = values.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR'));
       const matchesSelectedColumn = !filterColumn || valueText(row.data?.[filterColumn]).toLocaleLowerCase('pt-BR').includes(filterValue.toLocaleLowerCase('pt-BR'));
-      const matchesEachColumn = visibleColumns.every(column => {
-        const term = (columnFilters[column.key] || '').trim().toLocaleLowerCase('pt-BR');
-        return !term || valueText(row.data?.[column.key]).toLocaleLowerCase('pt-BR').includes(term);
-      });
+      const matchesEachColumn = matchesColumnFilters(row.data || {}, columnFilters);
       return matchesGlobal && matchesSelectedColumn && matchesEachColumn;
     });
     if (!sortConfig) return filtered;
@@ -571,6 +579,92 @@ export default function App() {
     });
   }, [rows, query, filterColumn, filterValue, columnFilters, visibleColumns, sortConfig]);
 
+
+  const localFilterOptions = useMemo(() => {
+    if (!openFilterKey) return [];
+    return uniqueFilterValues(
+      rows.filter(row => matchesColumnFilters(row.data || {}, columnFilters, openFilterKey))
+        .map(row => row.data || {}), openFilterKey, filterSearch
+    );
+  }, [rows, columnFilters, openFilterKey, filterSearch]);
+  const shownFilterOptions = filterOptionsNote.startsWith('Todos os registros')
+    ? filterOptions : localFilterOptions;
+  const filteredFilterOptions = shownFilterOptions.filter(value =>
+    value.toLocaleLowerCase('pt-BR').includes(filterSearch.toLocaleLowerCase('pt-BR')));
+  function showColumnFilter(event: React.MouseEvent<HTMLElement>, column: Column) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setOpenFilterKey(current => current === column.key ? null : column.key);
+    setFilterMenuRect({
+      top: Math.min(window.innerHeight - 420, rect.bottom + 6),
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 305))
+    });
+    setFilterSearch('');
+    setFilterDraft(columnFilters[column.key]?.values || []);
+    setFilterAllChosen(!columnFilters[column.key]);
+    setFilterOptions([]);
+    setFilterOptionsNote('');
+  }
+  function applyColumnFilter() {
+    if (!openFilterKey) return;
+    setColumnFilters(current => {
+      const next = { ...current };
+      if (filterAllChosen) delete next[openFilterKey];
+      else next[openFilterKey] = { values: [...new Set(filterDraft)] };
+      return next;
+    });
+    setPage(1);
+    setOpenFilterKey(null);
+  }
+  function clearColumnFilter(key: string) {
+    setColumnFilters(current => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    setOpenFilterKey(null);
+    setPage(1);
+  }
+  function chooseFilterAllVisible(select: boolean) {
+    if (select) {
+      setFilterDraft(current => [...new Set([...current, ...filteredFilterOptions])]);
+      if (!filterSearch) setFilterAllChosen(true);
+    } else {
+      setFilterDraft(current => current.filter(value => !filteredFilterOptions.includes(value)));
+      setFilterAllChosen(false);
+    }
+  }
+  useEffect(() => {
+    if (!openFilterKey || !apiBase || !token) return;
+    const controller = new AbortController();
+    setFilterOptionsLoading(true);
+    const params = new URLSearchParams({ column: openFilterKey, search: filterSearch });
+    fetch(apiBase + '/api/v1/mapa/filter-values?' + params, {
+      headers: { Authorization: 'Bearer ' + token }, signal: controller.signal
+    }).then(async res => {
+      if (!res.ok) throw new Error('Filtro completo ainda não está publicado na API.');
+      const body = await res.json();
+      if (!Array.isArray(body.items)) throw new Error('Resposta inválida');
+      setFilterOptions(body.items.map((item: unknown) => String(item)));
+      setFilterOptionsNote('Todos os registros · até 250 opções por pesquisa' + (body.truncated ? ' · refine a pesquisa' : ''));
+    }).catch(() => {
+      if (!controller.signal.aborted) {
+        setFilterOptionsNote('Prévia: valores da página carregada; atualização da API pendente.');
+      }
+    }).finally(() => {
+      if (!controller.signal.aborted) setFilterOptionsLoading(false);
+    });
+    return () => controller.abort();
+  }, [openFilterKey, filterSearch, token]);
+  useEffect(() => {
+    if (!openFilterKey) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (!(e.target as HTMLElement)?.closest('.sheet-filter-popover, .sheet-filter-trigger')) {
+        setOpenFilterKey(null);
+      }
+    }
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openFilterKey]);
   // Keyboard/grid operations only inspect the currently loaded page and never
   // request hidden rows, bypass permissions or change operational data in tests.
   const selectedPosition = useMemo(() => {
@@ -922,26 +1016,17 @@ export default function App() {
                   {visibleColumns.map(column => <th key={column.key} className="sheet-column-header" scope="col">
                     <div className="sheet-column-title">
                       <span className="sheet-column-key">{column.key}</span>
-                      <button className="sort-header" title="Ordenar registros por esta coluna" type="button"
-                        onClick={() => setSortConfig(current => current?.key === column.key
-                          ? {key: column.key, direction: current.direction === 'asc' ? 'desc' : 'asc'}
-                          : {key: column.key, direction: 'asc'})}>
-                        {column.label || '(sem título)'}
-                        {sortConfig?.key === column.key ? sortConfig.direction === 'asc' ? ' ↑' : ' ↓' : ' ↕'}
+                      <button className={'sheet-filter-trigger ' + (columnFilters[column.key] ? 'filter-active' : '')}
+                        type="button" title={'Filtrar e ordenar ' + column.label}
+                        aria-label={'Abrir filtro da coluna ' + (column.label || column.key)}
+                        aria-expanded={openFilterKey === column.key}
+                        onClick={event => showColumnFilter(event, column)}>
+                        <span className="sheet-header-name">{column.label || '(sem título)'}</span>
+                        <span aria-hidden="true">{columnFilters[column.key] ? '▼' : '▾'}</span>
                       </button>
                     </div>
                     <span className="sheet-resize-handle" role="separator" aria-label={'Ajustar largura de ' + column.label}
                       title="Arraste para ajustar a largura" onPointerDown={event => beginColumnResize(event, column)} />
-                  </th>)}
-                </tr>
-                <tr className="column-search-row">
-                  <th className="sheet-row-header" aria-hidden="true"></th>
-                  {visibleColumns.map(column => <th key={column.key}>
-                    <input aria-label={'Pesquisar na coluna ' + (column.label || column.key)}
-                      title={'Pesquisar apenas em ' + (column.label || column.key)}
-                      value={columnFilters[column.key] || ''}
-                      onChange={event => {setPage(1); setColumnFilters(previous => ({...previous, [column.key]: event.target.value}));}}
-                      placeholder="Pesquisar..." style={{width: '100%', minWidth: 0, boxSizing: 'border-box'}} />
                   </th>)}
                 </tr>
               </thead>
@@ -1036,6 +1121,51 @@ export default function App() {
                   : 'Nenhuma linha corresponde aos filtros nesta página. Limpe os filtros ou mude de página.'}
               </div>}
           </div>
+          {openFilterKey && filterMenuRect && <div className="sheet-filter-popover"
+            role="dialog" aria-label={'Filtro da coluna ' + (referenceHeader[openFilterKey] || openFilterKey)}
+            style={{position:'fixed', top:Math.max(8,filterMenuRect.top), left:filterMenuRect.left}}>
+            <div className="sheet-filter-heading">
+              <strong>{referenceHeader[openFilterKey] || openFilterKey}</strong>
+              <button className="sheet-filter-x" aria-label="Fechar filtro" onClick={()=>setOpenFilterKey(null)}>×</button>
+            </div>
+            <div className="sheet-filter-order">
+              <button type="button" onClick={() => {setSortConfig({key:openFilterKey,direction:'asc'});setOpenFilterKey(null);}}>↑ Ordenar A → Z</button>
+              <button type="button" onClick={() => {setSortConfig({key:openFilterKey,direction:'desc'});setOpenFilterKey(null);}}>↓ Ordenar Z → A</button>
+            </div>
+            <label className="sheet-filter-find">
+              <span>Filtrar por valores</span>
+              <input aria-label="Pesquisar valores da coluna" autoFocus
+                value={filterSearch} onChange={event => setFilterSearch(event.target.value)}
+                placeholder="Pesquisar..." />
+            </label>
+            <div className="sheet-filter-all">
+              <button type="button" onClick={()=>chooseFilterAllVisible(true)}>Selecionar tudo</button>
+              <button type="button" onClick={()=>chooseFilterAllVisible(false)}>Limpar</button>
+              <small>{filterOptionsLoading ? 'Carregando...' : filteredFilterOptions.length + ' valor(es)'}</small>
+            </div>
+            <div className="sheet-filter-list" role="group" aria-label="Valores disponíveis">
+              {filteredFilterOptions.map(value =>
+                <label key={value} className="sheet-filter-value">
+                  <input type="checkbox" checked={filterAllChosen || filterDraft.includes(value)}
+                    onChange={event => {
+                      if (filterAllChosen) {
+                        setFilterDraft(filteredFilterOptions.filter(item => item !== value));
+                        setFilterAllChosen(false);
+                      } else {
+                        setFilterDraft(previous => event.target.checked
+                          ? [...previous, value] : previous.filter(item => item !== value));
+                      }
+                    }} />
+                  <span title={value || '(Em branco)'}>{value || '(Em branco)'}</span>
+                </label>)}
+              {!filterOptionsLoading && !filteredFilterOptions.length && <p className="sheet-filter-no-values">Nenhum valor encontrado.</p>}
+            </div>
+            <p className="sheet-filter-note">{filterOptionsNote || 'Buscando os valores disponíveis...'}</p>
+            <div className="sheet-filter-actions">
+              <button type="button" className="secondary" onClick={()=>clearColumnFilter(openFilterKey)}>Remover filtro</button>
+              <button type="button" className="primary" onClick={applyColumnFilter}>Aplicar</button>
+            </div>
+          </div>}
           <footer className="table-footer"><span>{apiBase && token ? 'Dados do banco • edição individual com auditoria' : 'Sem dados de demonstração'}</span><span><span className="green-dot"/> {visibleColumns.length} coluna(s) selecionada(s)</span></footer>
           <div className="pagination"><button className="secondary" disabled={page<=1 || loading} onClick={()=>setPage(value=>Math.max(1,value-1))}>Anterior</button><span>Página {page} de {Math.max(1,Math.ceil(total/pageSize))}</span><button className="secondary" disabled={page>=Math.ceil(total/pageSize) || loading} onClick={()=>setPage(value=>value+1)}>Próxima</button></div>
         </section>
