@@ -41,7 +41,7 @@ function tokenize(s: string): Token[] {
     if (/^\s+/.test(r)) { i += r.match(/^\s+/)![0].length; continue; }
     const q = /^"(?:""|[^"])*"/.exec(r);
     if (q) { out.push({ kind: 'string', value: q[0].slice(1, -1).replace(/""/g, '"') }); i += q[0].length; continue; }
-    const n = /^(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[Ee][+-]?\d+)?/.exec(r);
+    const n = /^(?:\d+(?:\.\d*|,\d+)?|[.,]\d+)(?:[Ee][+-]?\d+)?/.exec(r);
     if (n) { out.push({ kind: 'number', value: n[0] }); i += n[0].length; continue; }
     const ref = /^\$?[A-Z]{1,3}\$?[1-9]\d*/i.exec(r);
     if (ref) { out.push({ kind: 'identifier', value: ref[0] }); i += ref[0].length; continue; }
