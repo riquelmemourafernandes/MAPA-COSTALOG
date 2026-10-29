@@ -981,3 +981,33 @@ html.costalog-dark .sheet-cell-options-error{background:#532f30;color:#ffd9d9}
   .auth-theme-toggle{right:14px;top:12px;min-width:auto}
   .auth-theme-toggle span{display:none}
 }
+
+/* MAPA 2.0: high-contrast black cell boundaries, like the source workbook.
+   Borders are independent of the STATUS background and the site theme. */
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table{
+  border-collapse:separate;
+  border-spacing:0;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>th.sheet-row-number{
+  border-right:1px solid #000!important;
+  border-bottom:1px solid #000!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr.sheet-virtual-empty-row>td,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr.sheet-virtual-empty-row>th.sheet-row-number{
+  border-right:1px solid #000!important;
+  border-bottom:1px solid #000!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row>th{
+  border-right:1px solid #000!important;
+  border-bottom:1px solid #000!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row>th{
+  border-right:1px solid #000!important;
+  border-bottom:2px solid #000!important;
+}
+/* Even with dark chrome, the cell grid and its borders remain untinted. */
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td{
+  border-right-color:#000!important;
+  border-bottom-color:#000!important;
+}
