@@ -102,7 +102,7 @@ export default function BasePrototype({userRole,onOpenMapa,importOnly=false}:Pro
         <h2>BASE de cadastros e importação</h2>
         <p>Modelo inspirado na aba BASE do Google Sheets e nas linhas 12202–12256 do MAPA 1.0.</p>
       </div>
-      <button type="button" className="basep-link" onClick={onOpenMapa}>Abrir MAPA 1.0</button>
+      <button type="button" className="basep-link" onClick={onOpenMapa}>Abrir MAPA 2.0</button>
     </div>}
     <div className="basep-banner" role="status">
       <ShieldCheck size={18}/>
@@ -130,7 +130,7 @@ export default function BasePrototype({userRole,onOpenMapa,importOnly=false}:Pro
       <div className="basep-detail">
         <div className="basep-section-head">
           <div><h3>{activeList.label}</h3>
-            <span>BASE!{activeList.base} → MAPA 1.0!{activeList.mapa.join(', ')}</span>
+            <span>BASE!{activeList.base} → MAPA 2.0!{activeList.mapa.join(', ')}</span>
           </div>
           <span className="basep-counter">{items.length} cadastros demonstrativos</span>
         </div>
@@ -180,7 +180,7 @@ export default function BasePrototype({userRole,onOpenMapa,importOnly=false}:Pro
             {!canManage&&<small><LockKeyhole size={12}/> Apenas ADMIN e SUPERVISOR simulam edições.</small>}
           </form>
           <div className="basep-panel">
-            <div className="basep-panel-heading"><Eye size={16}/><strong>Como funciona no MAPA 1.0</strong></div>
+            <div className="basep-panel-heading"><Eye size={16}/><strong>Como funciona no MAPA 2.0</strong></div>
             <p>Na planilha real, a coluna {activeList.mapa.join('/')} usa uma lista de seleção alimentada pela BASE.</p>
             <label>Escolha uma opção (demonstração)
               <select value={selectedDemo} onChange={e=>setSelectedDemo(e.target.value)}>
@@ -199,7 +199,7 @@ export default function BasePrototype({userRole,onOpenMapa,importOnly=false}:Pro
       </div>
     </div> : <div className="basep-import">
       <div className="basep-section-head">
-        <div><h3>Importação controlada: MAPA 1.0</h3>
+        <div><h3>Importação controlada: MAPA 2.0</h3>
           <span>Origem: A12202:BT12256 • 55 linhas • 72 colunas</span>
         </div>
         <span className="basep-counter">Destino: simulação local</span>
