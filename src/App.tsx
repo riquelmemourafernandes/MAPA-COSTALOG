@@ -1071,6 +1071,7 @@ export default function App() {
     const row = displayedRows[rowIndex], column = visibleColumns[columnIndex];
     if (!row || !column) return;
     setSelectionMode('cell'); setSelectedRowId(null); setSelectedColumnKey(null);
+    setSelectedBlankRow(null);
     setPlaceholderPosition(null);
     if (!extend || !selectionAnchor) setSelectionAnchor({ rowId: row.id, columnKey: column.key });
     setSelectedCell({ row, column });
@@ -1090,6 +1091,7 @@ export default function App() {
     if (!row || !firstColumn) return;
     setOpenFilterKey(null);
     setSelectionMode('row'); setSelectedRowId(row.id); setSelectedColumnKey(null);
+    setSelectedBlankRow(null);
     setSelectionAnchor({rowId:row.id,columnKey:firstColumn.key});
     setSelectedCell({row,column:firstColumn});
     setEditingCell(null);
@@ -1098,6 +1100,7 @@ export default function App() {
   function selectEntireColumn(column: Column) {
     setOpenFilterKey(null);
     setSelectionMode('column'); setSelectedColumnKey(column.key); setSelectedRowId(null);
+    setSelectedBlankRow(null);
     const firstRow = displayedRows[0];
     if (firstRow) {
       setSelectionAnchor({rowId:firstRow.id,columnKey:column.key});
@@ -1785,6 +1788,7 @@ export default function App() {
                     style={{height:SHEET_DEFAULT_HEIGHT}}>
                     <th scope="row" className={'sheet-row-number '+(selectedBlankRow===index?'sheet-row-selected':'')}
                       onClick={()=>{setSelectedBlankRow(index);setSelectionMode('row');
+                        setSelectedRowId(null);setSelectedColumnKey(null);setSelectionAnchor(null);
                         setSelectedCell(null);setPlaceholderPosition({row:index,column:0});
                         setBlankEditing(null);gridRef.current?.focus({preventScroll:true});}}
                       title={'Selecionar toda a linha '+(index+2)}>{index+2}</th>
