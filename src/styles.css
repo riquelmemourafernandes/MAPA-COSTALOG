@@ -279,3 +279,24 @@ td:hover .cell-history,.cell-history:focus{opacity:1}
   font-size: 12px;
   line-height: 1.5;
 }
+
+
+/* Interactive spreadsheet headers and Google Sheets-like filter popover */
+.sheet-column-select,.sheet-row-select{border:0;border-radius:4px;padding:4px 7px;font:inherit;font-weight:800;color:#2d603b;background:#e2eddf;cursor:cell}
+.sheet-column-select:hover,.sheet-row-select:hover,.sheet-column-select:focus-visible,.sheet-row-select:focus-visible{color:#163f26;background:#c8e2c6;outline:2px solid #408c49}
+.mapa-grid-panel .sheet-table .sheet-column-header.sheet-column-selected,.mapa-grid-panel .sheet-table .sheet-row-number.sheet-row-selected{background:#cde7c5!important;color:#225d34}
+.mapa-grid-panel .sheet-table td.sheet-range-cell{outline:1px solid #b0cda9;outline-offset:-1px}
+.sheet-header-name{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;text-align:left}
+.sheet-filter-trigger{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;flex:1;border:0;padding:5px 2px;background:transparent;color:#43594a;cursor:pointer;font-size:11px}
+.sheet-filter-trigger:hover,.sheet-filter-trigger.filter-active{color:#1e783c}
+.sheet-filter-popover{z-index:1100;display:flex;flex-direction:column;gap:10px;width:min(295px,calc(100vw - 16px));max-height:min(440px,calc(100vh - 24px));padding:12px;border:1px solid #d0ddd2;border-radius:11px;background:#fff;color:#253b2e;box-shadow:0 16px 45px #263d342e;font-size:12px}
+.sheet-filter-heading{display:flex;align-items:center;justify-content:space-between}
+.sheet-filter-x{border:0;background:transparent;font-size:20px;color:#68806d}
+.sheet-filter-order{display:flex;gap:5px}.sheet-filter-order button{background:#eef6ec;border:1px solid #e0e9dd;border-radius:6px;padding:7px 8px;font-size:11px;flex:1}
+.sheet-filter-find{display:flex;flex-direction:column;gap:5px;font-weight:650}.sheet-filter-find input{min-height:34px;border-radius:6px;border:1px solid #b9caba;padding:7px 9px;width:100%;font-size:12px}
+.sheet-filter-all{display:flex;align-items:center;gap:10px}.sheet-filter-all button{border:0;background:transparent;color:#257d42;padding:0;font-size:11px}.sheet-filter-all small{color:#738475;margin-left:auto}
+.sheet-filter-list{display:flex;flex-direction:column;gap:4px;overflow:auto;min-height:75px;max-height:190px;padding:5px;border:1px solid #e5ece3;border-radius:7px}
+.sheet-filter-value{display:flex;align-items:center;gap:7px;font-size:12px;padding:4px 6px;cursor:pointer;border-radius:4px;min-width:0}.sheet-filter-value:hover{background:#edf6ea}.sheet-filter-value input{accent-color:#358447}.sheet-filter-value span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sheet-filter-note{color:#7a8b7e;font-size:10px;margin:0;line-height:1.5}
+.sheet-filter-actions{display:flex;justify-content:flex-end;gap:7px}.sheet-filter-actions button{font-size:11px;padding:8px 10px}
+.sheet-filter-no-values{color:#788778;font-size:11px;padding:10px}
