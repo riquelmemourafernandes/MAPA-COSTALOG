@@ -1087,13 +1087,16 @@ export default function App() {
     const filtered = rows.filter(row => {
       const values = columns.map(column => valueText(displayedCellValue(row, column))).join(' ') + ' ' + [row.status,row.clientName,row.container,row.cte].map(valueText).join(' ');
       const matchesGlobal = values.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR'));
-      const selectedFilterColumn = columns.find(column => column.key === filterColumn);\n      const matchesSelectedColumn = !filterColumn || valueText(selectedFilterColumn ? displayedCellValue(row, selectedFilterColumn) : row.data?.[filterColumn]).toLocaleLowerCase('pt-BR').includes(filterValue.toLocaleLowerCase('pt-BR'));
-      const calculatedData = Object.fromEntries(columns.map(column => [column.key, displayedCellValue(row, column)]));\n      const matchesEachColumn = matchesColumnFilters(calculatedData, columnFilters);
+      const selectedFilterColumn = columns.find(column => column.key === filterColumn);
+      const matchesSelectedColumn = !filterColumn || valueText(selectedFilterColumn ? displayedCellValue(row, selectedFilterColumn) : row.data?.[filterColumn]).toLocaleLowerCase('pt-BR').includes(filterValue.toLocaleLowerCase('pt-BR'));
+      const calculatedData = Object.fromEntries(columns.map(column => [column.key, displayedCellValue(row, column)]));
+      const matchesEachColumn = matchesColumnFilters(calculatedData, columnFilters);
       return matchesGlobal && matchesSelectedColumn && matchesEachColumn;
     });
     if (!sortConfig) return filtered;
     return [...filtered].sort((a,b) => {
-      const sortColumn = columns.find(column => column.key === sortConfig.key);\n      const av = valueText(sortColumn ? displayedCellValue(a, sortColumn) : a.data?.[sortConfig.key]).trim(); const bv = valueText(sortColumn ? displayedCellValue(b, sortColumn) : b.data?.[sortConfig.key]).trim();
+      const sortColumn = columns.find(column => column.key === sortConfig.key);
+      const av = valueText(sortColumn ? displayedCellValue(a, sortColumn) : a.data?.[sortConfig.key]).trim(); const bv = valueText(sortColumn ? displayedCellValue(b, sortColumn) : b.data?.[sortConfig.key]).trim();
       const an = Number(av.replace(/\\./g,'').replace(',','.')); const bn = Number(bv.replace(/\\./g,'').replace(',','.'));
       const bothNumeric = av !== '' && bv !== '' && Number.isFinite(an) && Number.isFinite(bn);
       const compared = bothNumeric ? an-bn : av.localeCompare(bv,'pt-BR',{numeric:true,sensitivity:'base'});
