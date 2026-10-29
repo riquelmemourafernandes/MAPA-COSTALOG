@@ -2,9 +2,25 @@
 export const SCROLL_BATCH_SIZE = 100;
 export const MAX_CREATE_ROWS = 100;
 export const EMPTY_GRID_ROWS = 35;
+// Sizes may deliberately hide text, exactly as in Excel/Google Sheets.
+export const MIN_ROW_HEIGHT = 12;
+export const MAX_ROW_HEIGHT = 2000;
+export const MIN_COLUMN_WIDTH = 24;
+export const MAX_COLUMN_WIDTH = 2400;
+export const DEFAULT_COLUMN_WIDTH = 180;
+export const ROW_NUMBER_COLUMN_WIDTH = 65;
 
 export function normalizeRowHeight(value: number): number {
-  return Math.max(32, Math.min(800, Math.round(Number.isFinite(value) ? value : 35)));
+  return Math.max(MIN_ROW_HEIGHT, Math.min(MAX_ROW_HEIGHT,
+    Math.round(Number.isFinite(value) ? value : 35)));
+}
+export function normalizeColumnWidth(value:number):number{
+  return Math.max(MIN_COLUMN_WIDTH,Math.min(MAX_COLUMN_WIDTH,
+    Math.round(Number.isFinite(value)?value:DEFAULT_COLUMN_WIDTH)));
+}
+export function totalSheetWidth(keys:readonly string[],sizes:Record<string,number>):number{
+  return ROW_NUMBER_COLUMN_WIDTH + keys.reduce((total,key)=>
+    total+normalizeColumnWidth(sizes[key]??DEFAULT_COLUMN_WIDTH),0);
 }
 export function normalizeCreateCount(value: number): number | null {
   return Number.isInteger(value) && value >= 1 && value <= MAX_CREATE_ROWS ? value : null;
