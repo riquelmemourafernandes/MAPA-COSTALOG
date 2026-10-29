@@ -537,12 +537,6 @@ export default function App() {
           target?.focus({ preventScroll: true });
           target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         });
-      } else {
-        window.requestAnimationFrame(() => {
-          const target = gridRef.current?.querySelector<HTMLElement>(
-            '[data-cell-id="' + row.id + ':' + column.key + '"]');
-          target?.focus({ preventScroll: true });
-        });
       }
     } else {
       editorRef.current?.focus();
@@ -868,7 +862,7 @@ export default function App() {
                         color: cellStyles[styleKey(row, column)]?.color,
                         backgroundColor: cellStyles[styleKey(row, column)]?.background}}
                       onClick={event => {
-                        if (!editingCell) selectGridCell(ri, ci, event.shiftKey, true);
+                        selectGridCell(ri, ci, event.shiftKey, true);
                       }}
                       onDoubleClick={() => beginCellEdit(ri, ci)}>
                       <div className="cell-content">
@@ -902,9 +896,7 @@ export default function App() {
                             role="gridcell" aria-readonly={!editable}
                             aria-label={column.key + row.sequence + ': ' + (column.label || column.key)}
                             title={editable ? 'Clique para selecionar. Enter ou duplo clique para editar.' : 'Somente leitura'}
-                            onFocus={() => {
-                              if (!selected || !selectionAnchor) selectGridCell(ri, ci, false);
-                            }}>
+>
                             {valueText(row.data?.[column.key])}
                           </span>
                         )}
