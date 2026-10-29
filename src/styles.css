@@ -174,7 +174,7 @@ td:hover .cell-history,.cell-history:focus{opacity:1}
 .sheet-resize-handle{position:absolute;right:0;top:0;bottom:0;width:8px;cursor:col-resize;touch-action:none;border-right:2px solid transparent}
 .sheet-resize-handle:hover{border-right-color:#65a15e;background:#cde2c83d}
 .mapa-grid-panel .sheet-table .sheet-row-header{position:sticky;left:0;z-index:6;background:#e9f0e8;min-width:65px;padding:7px 5px}
-.sheet-row-header{display:flex;align-items:center;justify-content:center;gap:4px;height:45px}
+.sheet-row-header{text-align:center;vertical-align:middle;white-space:nowrap;height:45px}
 .mapa-grid-panel .sheet-table .sheet-row-number{position:sticky;left:0;z-index:2;background:#f3f7f2;text-align:center;padding:6px 5px;font-variant-numeric:tabular-nums;color:#587261;font-weight:700;box-shadow:1px 0 0 #dae5db;white-space:nowrap}
 .sheet-row-number input,.sheet-row-header input{width:13px;height:13px;accent-color:#4d8655;cursor:pointer;margin:0}
 .sheet-row-number span{font-size:10px}
