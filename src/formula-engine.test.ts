@@ -27,7 +27,7 @@ test('evaluates ranges and common English functions', () => {
   assert.equal(evaluateFormula('=AVERAGE(A2:A4)', resolve), 3);
   assert.equal(evaluateFormula('=COUNT(A2:D2)', resolve), 2);
   assert.equal(evaluateFormula('=IF(A2=2,"yes","no")', resolve), 'yes');
-  assert.equal(evaluateFormula('=IFERROR(1/0,99)', resolve), 99);
+  assert.equal(evaluateFormula('=IFERROR(1/0;99)', resolve), 99);
 });
 
 test('accepts Brazilian Portuguese function names and semicolon separators', () => {
