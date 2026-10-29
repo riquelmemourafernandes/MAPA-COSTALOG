@@ -28,3 +28,13 @@
 .bc-hint{font-size:11px;color:#839086}.bc-empty{padding:22px!important;color:#778978!important;text-align:center}
 @media(max-width:950px){.bc-layout{grid-template-columns:1fr}.bc-lists{flex-direction:row;flex-wrap:wrap}.bc-lists strong{flex-basis:100%}}
 @media(max-width:580px){.bc-head{align-items:flex-start;flex-direction:column}.bc-sheet{padding:10px}.bc-lists button{font-size:10px}}
+
+/* Explicit offline preview — never imply that simulated entries were saved. */
+.bc-offline-demo{display:flex;flex-direction:column;gap:12px}
+.bc-offline-notice{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;
+  border:1px solid #decfae;border-radius:8px;background:#fffbf0;color:#755b30;
+  padding:12px 14px;font-size:12px;line-height:1.5}
+.bc-offline-notice strong{flex-basis:100%;font-size:13px}
+.bc-offline-notice span{flex:1;min-width:240px}
+.bc-offline-notice button{align-self:center}
+.bc-offline-demo .basep-page{padding-top:0}
