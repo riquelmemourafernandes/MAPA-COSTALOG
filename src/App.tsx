@@ -22,6 +22,78 @@ type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string; pen
 const apiBase = typeof window !== 'undefined' && /(?:^|\.)vercel\.app$/.test(window.location.hostname)
   ? window.location.origin
   : (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+// Cabeçalho conferido na linha 1 de MAPA IMPORTAÇÃO > MAPA 1.0 (A:BT).
+// As posições BL:BP não têm título; não deslocar os valores adjacentes.
+const referenceHeader: Record<string, string> = {
+  "A":"DATA",
+  "B":"ATENDENTE",
+  "C":"STATUS",
+  "D":"CTE",
+  "E":"MODALIDADE",
+  "F":"DI / DTA",
+  "G":"ARM",
+  "H":"DEM",
+  "I":"PROC.",
+  "J":"PROG.",
+  "K":"ID PROG.",
+  "L":"CLIENTE",
+  "M":"ISCA",
+  "N":"REFERENCIA",
+  "O":"BL",
+  "P":"NAVIO",
+  "Q":"VALORES",
+  "R":"QTD",
+  "S":"PESO",
+  "T":"CONTAINER",
+  "U":"TIPO",
+  "V":"IMO",
+  "W":"CAVALO",
+  "X":"CARRETA",
+  "Y":"MOTORISTA",
+  "Z":"CONTATO",
+  "AA":"OK?",
+  "AB":"2º VIAGEM",
+  "AC":"FRETE",
+  "AD":"RV",
+  "AE":"CIOT",
+  "AF":"MDF",
+  "AG":"CATEGORIA",
+  "AH":"SM/AE",
+  "AI":"TRAVA GR",
+  "AJ":"TERMINAL COLETA",
+  "AK":"CIDADE",
+  "AL":"DATA / HORA - COLETA",
+  "AM":"Nº AGEND.",
+  "AN":"ENTREGA - 1",
+  "AO":"KM",
+  "AP":"DATA / HORA - ENTREGA - 1",
+  "AQ":"ENDERECO - ENTREGA - 1",
+  "AR":"ENTREGA - 2",
+  "AS":"DATA / HORA - ENTREGA - 2",
+  "AT":"ENDERECO - ENTREGA - 2",
+  "AU":"CHEGADA NO TERMINAL / EADI",
+  "AV":"SAÍDA DO TERMINAL / EADI",
+  "AW":"CHEGADA NO CLIENTE",
+  "AX":"SAÍDA DO CLIENTE",
+  "AY":"STATUS",
+  "AZ":"ARMADOR",
+  "BA":"OBS",
+  "BB":"STATUS UNIDADE VAZIA",
+  "BC":"MINUTA/AG",
+  "BD":"TERMINAL DE VAZIO",
+  "BE":"CIDADE - DEPOT",
+  "BF":"DATA / HORA - DEPOT",
+  "BG":"P.S.",
+  "BH":"DATA ENTREGA VAZIO",
+  "BI":"P.S. DEVIDO?",
+  "BJ":"EIR ENVIADO",
+  "BK":"📷",
+  "BQ":"CRÍTICO?",
+  "BR":"ENVIADO P/ FATURAMENTO",
+  "BS":"PROG.ENCERRADA",
+  "BT":"PROC. ENCERRADO"
+};
+const referenceColumnKeys = new Set(Object.keys(referenceHeader).concat(['BL','BM','BN','BO','BP']));
 const nav = [
   { name: 'Visão geral', icon: LayoutDashboard }, { name: 'MAPA 1.0', icon: Table2 },
   { name: 'Status operacional', icon: Activity }, { name: 'Cadastros', icon: Users }, { name: 'Minha conta', icon: UserRound }, { name: 'Usuários', icon: Users }, { name: 'Integrações', icon: Waypoints }
@@ -132,10 +204,16 @@ export default function App() {
       if (!rowsResponse.ok) throw new Error(rowsBody?.error?.message || 'Falha ao carregar os registros.');
       if (cancelled) return;
       const nextColumns = Array.isArray(columnsBody.items) ? columnsBody.items as Column[] : [];
-      setColumns(nextColumns);
+      // Labels follow the source Sheet 1:1, without altering database config.
+      const referenceColumns = nextColumns
+        .filter(column => referenceColumnKeys.has(column.key))
+        .map(column => ({ ...column, label: referenceHeader[column.key] || '' }));
+      setColumns(referenceColumns);
       const saved = localStorage.getItem(preferenceKey);
       const savedKeys = saved ? JSON.parse(saved) as string[] : null;
-      setVisibleKeys(savedKeys ? savedKeys.filter(key => nextColumns.some(c => c.key === key)) : nextColumns.filter(c => c.visible).map(c => c.key));
+      setVisibleKeys(savedKeys
+        ? savedKeys.filter(key => referenceColumns.some(c => c.key === key))
+        : referenceColumns.map(c => c.key));
       setRows(Array.isArray(rowsBody.items) ? rowsBody.items as RecordRow[] : []);
       setTotal(Number(rowsBody.total || 0));
       setNotice('Dados carregados do banco de dados. As colunas visíveis são personalizadas por usuário.');
