@@ -37,7 +37,9 @@ function tokenize(s: string): Token[] {
     if (id) { out.push({ kind: 'identifier', value: id[0] }); i += id[0].length; continue; }
     const op = /^(?:<=|>=|<>|!=|==|[+\-*/^&%=<>():;,])/.exec(r);
     if (op) { out.push({ kind: 'operator', value: op[0] }); i += op[0].length; continue; }
-    const formulaError = /^#(?:REF!|DIV\/0!|VALUE!|NAME\?|NUM!|N\/A|ERROR!)/i.exec(r);\n    if (formulaError) { out.push({ kind: 'identifier', value: formulaError[0] }); i += formulaError[0].length; continue; }\n    return [{ kind: 'identifier', value: '#ERROR!' }, { kind: 'eof', value: '' }];
+    const formulaError = /^#(?:REF!|DIV\/0!|VALUE!|NAME\?|NUM!|N\/A|ERROR!)/i.exec(r);
+    if (formulaError) { out.push({ kind: 'identifier', value: formulaError[0] }); i += formulaError[0].length; continue; }
+    return [{ kind: 'identifier', value: '#ERROR!' }, { kind: 'eof', value: '' }];
   }
   out.push({ kind: 'eof', value: '' }); return out;
 }
