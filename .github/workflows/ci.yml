@@ -33,6 +33,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mapa_test
       - run: npm run test
       - run: npx tsx --test ../src/sheet-grid.test.ts
+      - run: npx tsx --test ../src/formula-engine.test.ts
       - run: npx tsx --test ../src/column-filter.test.ts ../src/base-prototype-data.test.ts
       - run: npx tsx --test ../src/sheet-color-utils.test.ts ../src/sheet-dropdown-utils.test.ts
       - run: npx tsx --test ../src/sheet-formats.test.ts
