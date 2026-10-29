@@ -40,6 +40,38 @@ type AppointmentAlert = { id: string; sequence: number; kind: 'Coleta' | 'Entreg
 type AppointmentAlertSummary = { generatedAt: string; total: number; filteredTotal?: number; byKind: { collection: number; delivery: number }; attendants?: string[]; items: AppointmentAlert[] };
 type RecordRow = { id: string; sequence: number; sheetRowNumber?: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
 type SavedView = { name: string; visibleKeys: string[]; query: string; status: string };
+const SHEET_TOP_MENUS = [
+  { label: 'Arquivo', items: [
+    { label: 'Importar CSV…', action: 'import' }, { label: 'Exportar CSV', action: 'export' }, { label: 'Imprimir…', action: 'print' }
+  ]},
+  { label: 'Editar', items: [
+    { label: 'Desfazer', action: 'undo', shortcut: 'Ctrl+Z' }, { label: 'Refazer', action: 'redo', shortcut: 'Ctrl+Y' },
+    { label: 'Recortar', action: 'cut', shortcut: 'Ctrl+X' }, { label: 'Copiar', action: 'copy', shortcut: 'Ctrl+C' },
+    { label: 'Colar', action: 'paste', shortcut: 'Ctrl+V' }, { label: 'Limpar conteúdo', action: 'clear', shortcut: 'Delete' },
+    { label: 'Localizar e substituir…', action: 'replace', shortcut: 'Ctrl+H' },
+    { label: 'Preencher abaixo', action: 'fillDown', shortcut: 'Ctrl+D' }, { label: 'Preencher à direita', action: 'fillRight', shortcut: 'Ctrl+R' }
+  ]},
+  { label: 'Ver', items: [
+    { label: 'Escolher colunas…', action: 'columns' }, { label: 'Mostrar todas as colunas', action: 'showColumns' }, { label: 'Tema escuro / claro', action: 'theme' }
+  ]},
+  { label: 'Inserir', items: [
+    { label: 'Nova linha', action: 'newRow' }, { label: 'Várias linhas…', action: 'manyRows' }, { label: 'Nova coluna', action: 'newColumn' }
+  ]},
+  { label: 'Formatar', items: [
+    { label: 'Negrito', action: 'bold', shortcut: 'Ctrl+B' }, { label: 'Formato: texto', action: 'formatText' },
+    { label: 'Formato: número', action: 'formatNumber' }, { label: 'Formato: moeda (R$)', action: 'formatCurrency' },
+    { label: 'Formato: data', action: 'formatDate' }, { label: 'Limpar formatação', action: 'clearFormat' }
+  ]},
+  { label: 'Dados', items: [
+    { label: 'Classificar A → Z', action: 'sortAsc' }, { label: 'Classificar Z → A', action: 'sortDesc' },
+    { label: 'Limpar filtros e ordenação', action: 'clearFilters' }, { label: 'Editar selecionados', action: 'bulk' }
+  ]},
+  { label: 'Ferramentas', items: [
+    { label: 'Funções e fórmulas', action: 'formulas' }, { label: 'Atalhos de teclado', action: 'shortcuts' }
+  ]},
+  { label: 'Ajuda', items: [{ label: 'Sobre esta demonstração', action: 'about' }]
+  }
+] as const;
 type CellStyle = { bold?: boolean; color?: string; background?: string; format?: SheetNumberFormat; align?: 'left'|'center'|'right' };
 type UndoStep =
   | {kind:'cells'; label:string; edits:UndoRecord[]}
@@ -300,6 +332,11 @@ export default function App() {
   const [viewName, setViewName] = useState('');
   const [showViewTools, setShowViewTools] = useState(false);
   const [showStatusColors, setShowStatusColors] = useState(false);
+  const [openTopMenu, setOpenTopMenu] = useState<string | null>(null);
+  const [showFindReplace, setShowFindReplace] = useState(false);
+  const [replaceSearch, setReplaceSearch] = useState('');
+  const [replaceWith, setReplaceWith] = useState('');
+  const [replaceMatchCase, setReplaceMatchCase] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{row: RecordRow; column: Column} | null>(null);
   const [selectionMode, setSelectionMode] = useState<'cell'|'row'|'column'>('cell');
   const [sheetContextMenu, setSheetContextMenu] = useState<{
