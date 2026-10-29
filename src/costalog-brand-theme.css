@@ -486,3 +486,88 @@ html.costalog-dark .sheet-cell-option:hover,html.costalog-dark .sheet-cell-optio
 @media(prefers-reduced-motion:reduce){
   .app-shell .nav-item,.app-shell .primary{transition:none}
 }
+
+/* Force the dark brand palette to supersede pre-existing dark-green styling.
+   The original stylesheet has equally specific !important declarations. */
+.app-shell.structural-dark .sidebar{
+  background:var(--brand-sidebar)!important;
+  border-right-color:var(--brand-border)!important;
+}
+.app-shell.structural-dark .topbar{
+  background:var(--brand-header)!important;
+  border-bottom-color:var(--brand-border)!important;
+}
+.app-shell.structural-dark .main,
+.app-shell.structural-dark .content,
+.app-shell.structural-dark .content:not(.map-content){
+  background:var(--brand-bg)!important;
+}
+.app-shell.structural-dark .mapa-grid-panel,
+.app-shell.structural-dark .panel:not(.mapa-grid-panel),
+.app-shell.structural-dark :is(.metric-card,.overview-card,.status-card,.next-step,.feature-row,.quick-panel,.empty-state,.column-picker){
+  background:var(--brand-panel)!important;
+  color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell.structural-dark .mapa-grid-panel .toolbar,
+.app-shell.structural-dark .mapa-grid-panel .sheet-action-strip,
+.app-shell.structural-dark .mapa-grid-panel .sheet-scroll-status,
+.app-shell.structural-dark .mapa-grid-panel .compact-map-heading{
+  background:var(--brand-panel)!important;
+  border-color:var(--brand-border)!important;
+  color:var(--brand-ink)!important;
+}
+.app-shell.structural-dark :is(.brand-mark,.primary,.bc-primary,.basep-primary){
+  background:linear-gradient(105deg,#ef143a,#b50025)!important;
+  color:#fff!important;
+}
+.app-shell.structural-dark .nav-item.active{
+  background:linear-gradient(105deg,#ef143a,#b50025)!important;
+  color:#fff!important;
+}
+.app-shell.structural-dark :is(.workspace,.sidebar-bottom .user){
+  background:var(--brand-raised)!important;color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell.structural-dark .brand strong,
+.app-shell.structural-dark :is(.page-heading h1,.section-intro h2,.panel:not(.mapa-grid-panel) h2,.panel:not(.mapa-grid-panel) h3){
+  color:var(--brand-ink)!important;
+}
+.app-shell.structural-dark :is(.next-icon,.feature-icon){
+  background:var(--brand-raised)!important;
+  color:var(--costalog-red)!important;
+}
+.app-shell.structural-dark .structural-theme-toggle{
+  background:var(--brand-raised)!important;
+  color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell.structural-dark .content:not(.map-content) table:not(.sheet-table) th{
+  background:var(--brand-raised)!important;color:var(--brand-soft-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell.structural-dark .content:not(.map-content) table:not(.sheet-table) td{
+  background:var(--brand-panel)!important;color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell.structural-dark :is(.bc-lists,.bc-sheet,.bc-add,.basep-list-nav,.basep-detail,.basep-import,.basep-panel){
+  background:var(--brand-panel)!important;color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell.structural-dark :is(.bc-table th,.basep-table th){
+  background:var(--brand-raised)!important;color:var(--brand-ink)!important;
+}
+.app-shell.structural-dark :is(.bc-table td,.basep-table td,.bc-table td:first-child,.basep-table tbody tr:nth-child(even) td){
+  background:var(--brand-panel)!important;color:var(--brand-soft-ink)!important;
+}
+.app-shell.structural-dark :is(.bc-lists button.active,.bc-tabs button.active,.basep-tabs button.active,.basep-list-nav button.active){
+  background:rgba(230,0,40,.15)!important;color:#ff607c!important;
+  border-color:var(--costalog-red)!important;
+}
+.app-shell.structural-dark :is(.auth-error,.api-error,.bc-error){
+  background:#411f29!important;color:#ffdbe2!important;border-color:#8b4256!important;
+}
+/* Keep editable sheet cells and all 16 conditional status colors untouched. */
+.app-shell.structural-dark .mapa-grid-panel .sheet-table tbody td{
+  filter:none!important;
+}
