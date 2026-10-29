@@ -130,7 +130,7 @@ ALTER TABLE "lookup_values" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "formula_rules" ENABLE ROW LEVEL SECURITY;
 
-DO $
+DO $migration$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
         EXECUTE 'REVOKE ALL PRIVILEGES ON TABLE "users", "mapa_rows", "mapa_columns", "lookup_values", "audit_logs", "formula_rules" FROM anon';
@@ -138,4 +138,4 @@ BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
         EXECUTE 'REVOKE ALL PRIVILEGES ON TABLE "users", "mapa_rows", "mapa_columns", "lookup_values", "audit_logs", "formula_rules" FROM authenticated';
     END IF;
-END $;
+END $migration$;
