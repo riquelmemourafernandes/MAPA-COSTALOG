@@ -388,3 +388,55 @@ td:hover .cell-history,.cell-history:focus{opacity:1}
  .mapa-grid-panel .compact-map-heading{flex-wrap:wrap}
  .mapa-grid-panel .toolbar{max-height:142px;overflow:auto}
 }
+
+/* Excel-like sheet header: the first numbered row is the permanent header. */
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr:first-child th.sheet-column-header{
+  background:#0c1916!important;color:#f5fff7!important;height:49px!important;
+  border-right:1px solid #394a40!important;border-bottom:2px solid #2d9051!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr:first-child th.sheet-row-header{
+  background:#152d22!important;color:#c9f3d0!important;
+  border-bottom:2px solid #2d9051!important;font-weight:800;cursor:pointer;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table .sheet-column-key{
+  background:#bfeec8!important;color:#175734!important;font-size:11px;border-radius:3px;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table .sheet-filter-trigger{
+  color:#eafef0!important;font-size:11px;font-weight:700;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table .sheet-filter-trigger span[aria-hidden]{
+  color:#8fbea0;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table th.sheet-column-selected{
+  background:#1d6947!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table th.sheet-column-selected .sheet-column-key{
+  background:#effff1!important;
+}
+.mapa-grid-panel .sheet-table tr.sheet-virtual-empty-row{height:35px}
+.mapa-grid-panel .sheet-table tr.sheet-virtual-empty-row>th.sheet-row-number{
+  cursor:pointer;font-variant-numeric:tabular-nums;
+}
+.mapa-grid-panel .sheet-table tr.sheet-virtual-empty-row>th.sheet-row-number:hover{
+  background:#e4f0e5!important;
+}
+.mapa-grid-panel .sheet-table tr.sheet-virtual-empty-row>td{
+  padding:0 5px;border-bottom:1px solid #e1e8e1!important;
+  border-right:1px solid #e1e8e1!important;
+  height:35px;background:#fff;
+}
+.mapa-grid-panel .sheet-table tr.sheet-virtual-empty-row>td.sheet-range-cell,
+.mapa-grid-panel .sheet-table tr.sheet-virtual-row-selected>td{
+  background:#e2f1e4!important;box-shadow:inset 0 0 0 1px #8bb99b;
+}
+.mapa-grid-panel .sheet-table tr.sheet-virtual-empty-row>td.selected-cell{
+  background:#fff!important;box-shadow:inset 0 0 0 2px #2d9953!important;
+}
+.mapa-grid-panel .sheet-table tr.sheet-virtual-empty-row td>span[role=gridcell]{
+  display:block;height:33px;min-height:33px;line-height:33px;
+  outline:0;cursor:cell;
+}
+.mapa-grid-panel .sheet-table .sheet-blank-editor{
+  height:32px;width:100%;padding:2px 5px;border:1px solid #298449;
+  background:white;color:#1a3021;box-shadow:none;
+}
