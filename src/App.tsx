@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import BaseCatalogSheet from './BaseCatalogSheet.js';
+import { SCROLL_BATCH_SIZE, EMPTY_GRID_ROWS, normalizeCreateCount,
+  normalizeRowHeight, mergeLoadedRows, shouldLoadNextBatch, virtualRowWindow } from './sheet-layout.js';
 import SheetColorPicker from './SheetColorPicker.js';
 import SheetDropdownEditor from './SheetDropdownEditor.js';
 import { BASE_COLUMN_LIST } from './sheet-dropdown-utils.js';
@@ -166,6 +168,15 @@ export default function App() {
   const [alertKindFilter, setAlertKindFilter] = useState<'Todos' | 'Coleta' | 'Entrega'>('Todos');
   const [alertAttendantFilter, setAlertAttendantFilter] = useState('Todos');
   const [page, setPage] = useState(1);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    localStorage.getItem('mapa-costalog-sidebar-collapsed') === 'yes');
+  const [newRowsCount, setNewRowsCount] = useState(10);
+  const [newRowsOpen, setNewRowsOpen] = useState(false);
+  const [creatingRows, setCreatingRows] = useState(false);
+  const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
+  const [gridViewport, setGridViewport] = useState({scrollTop:0,height:560});
+  const selectionDragRef = useRef(false);
+  const [retryRowsKey, setRetryRowsKey] = useState(0);
   const [total, setTotal] = useState(0);
   const [columnMenu, setColumnMenu] = useState(false);
   const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
@@ -210,7 +221,27 @@ export default function App() {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState('CONSULTA');
-  const pageSize = 100;
+  const pageSize = SCROLL_BATCH_SIZE;
+  const rowHeightStorageKey = 'mapa-costalog-row-heights:' + userKey;
+  useEffect(() => {
+    try {
+      const data = JSON.parse(localStorage.getItem(rowHeightStorageKey) || '{}') as Record<string,unknown>;
+      setRowHeights(Object.fromEntries(Object.entries(data)
+        .filter((entry): entry is [string, number] => typeof entry[1] === 'number' &&
+          Number.isFinite(entry[1]) && entry[1] >= 32 && entry[1] <= 800)));
+    } catch { setRowHeights({}); }
+  }, [rowHeightStorageKey]);
+  useEffect(() => {
+    if (active !== 'MAPA 1.0' || !token) return;
+    const node = gridRef.current;
+    if (!node) return;
+    const observer = new ResizeObserver(() => {
+      setGridViewport({scrollTop:node.scrollTop,height:node.clientHeight});
+    });
+    observer.observe(node);
+    setGridViewport({scrollTop:node.scrollTop,height:node.clientHeight});
+    return () => observer.disconnect();
+  }, [active, token]);
   useEffect(() => { setSelectedRowIds([]); }, [page, query, status, filterColumn, filterValue, columnFilters]);
   const selectedRows = rows.filter(row => selectedRowIds.includes(row.id));
   const editableColumns = columns.filter(column => column.editable);
@@ -249,7 +280,8 @@ export default function App() {
       setVisibleKeys(savedKeys
         ? savedKeys.filter(key => referenceColumns.some(c => c.key === key))
         : referenceColumns.map(c => c.key));
-      setRows(Array.isArray(rowsBody.items) ? rowsBody.items as RecordRow[] : []);
+      const incoming = Array.isArray(rowsBody.items) ? rowsBody.items as RecordRow[] : [];
+      setRows(previous => page === 1 ? incoming : mergeLoadedRows(previous, incoming));
       setTotal(Number(rowsBody.total || 0));
       setNotice('Dados carregados do banco de dados. As colunas visíveis são personalizadas por usuário.');
     }).catch(error => {
@@ -259,7 +291,7 @@ export default function App() {
       if (/sessão|token|login/i.test(message)) { sessionStorage.removeItem('mapa-costalog-token'); setToken(''); }
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [token, page, query, status, filterColumn, filterValue, preferenceKey]);
+  }, [token, page, query, status, filterColumn, filterValue, preferenceKey, retryRowsKey]);
 
   useEffect(() => {
     if (!apiBase || !token) { setDashboardSummary(null); return; }
@@ -657,6 +689,58 @@ export default function App() {
     });
   }, [rows, query, filterColumn, filterValue, columnFilters, visibleColumns, sortConfig]);
 
+
+  const windowed = useMemo(() => virtualRowWindow(
+    displayedRows.map(row => rowHeights[row.id] || 35),
+    gridViewport.scrollTop,
+    gridViewport.height
+  ), [displayedRows, rowHeights, gridViewport.scrollTop, gridViewport.height]);
+  const visibleRenderedRows = displayedRows.slice(windowed.start,windowed.end);
+  function handleGridScroll(event: React.UIEvent<HTMLDivElement>) {
+    const node=event.currentTarget;
+    setGridViewport({scrollTop:node.scrollTop,height:node.clientHeight});
+    if(shouldLoadNextBatch({
+      scrollTop:node.scrollTop,scrollHeight:node.scrollHeight,clientHeight:node.clientHeight,
+      loadedCount:rows.length,total,busy:loading||creatingRows
+    })) setPage(value=>value+1);
+  }
+  function toggleSidebar() {
+    setSidebarCollapsed(previous=>{
+      localStorage.setItem('mapa-costalog-sidebar-collapsed',previous?'no':'yes');
+      return !previous;
+    });
+  }
+  function beginRowResize(event: React.PointerEvent<HTMLSpanElement>, row: RecordRow) {
+    if(event.button!==0)return;
+    event.preventDefault();event.stopPropagation();
+    const currentHeight=event.currentTarget.closest('tr')?.getBoundingClientRect().height ||
+      rowHeights[row.id] || 35;
+    const startY=event.clientY;
+    const move=(ev:PointerEvent)=>{
+      const height=normalizeRowHeight(currentHeight+ev.clientY-startY);
+      setRowHeights(previous=>({...previous,[row.id]:height}));
+    };
+    const end=()=>{
+      window.removeEventListener('pointermove',move);
+      window.removeEventListener('pointerup',end);
+      // The persisted state is only a per-user visual preference.
+      setRowHeights(previous=>{localStorage.setItem(rowHeightStorageKey,JSON.stringify(previous));return previous;});
+    };
+    window.addEventListener('pointermove',move);
+    window.addEventListener('pointerup',end,{once:true});
+  }
+  function beginRangeDrag(event:React.PointerEvent<HTMLTableCellElement>,ri:number,ci:number) {
+    if(event.button!==0 || editingCell ||
+      (event.target as HTMLElement).closest('input,select,button,textarea,[data-cell-editor]'))return;
+    selectionDragRef.current=true;
+    selectGridCell(ri,ci,event.shiftKey,false);
+    const stop=()=>{selectionDragRef.current=false;window.removeEventListener('pointerup',stop);window.removeEventListener('pointercancel',stop);};
+    window.addEventListener('pointerup',stop,{once:true});
+    window.addEventListener('pointercancel',stop,{once:true});
+  }
+  function extendRangeDrag(ri:number,ci:number) {
+    if(selectionDragRef.current)selectGridCell(ri,ci,true,false);
+  }
 
   const localFilterOptions = useMemo(() => {
     if (!openFilterKey) return [];
