@@ -480,7 +480,7 @@ app.post("/api/v1/mapa", requireRole(UserRole.ADMIN, UserRole.SUPERVISOR, UserRo
       const type = allowed.get(key)!.dataType;
       const valid = value === null || (key === "Q" ? typeof value === "number" :
         key === "A" ? typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value))
-        : (type === "number" || type === "currency") ? typeof value === "number" : type === "boolean" ? typeof value === "boolean" : typeof value === "string"));
+        : (type === "number" || type === "currency") ? typeof value === "number" : type === "boolean" ? typeof value === "boolean" : typeof value === "string");
       if (!valid) return res.status(400).json({ error: { code: "INVALID_FIELD_TYPE", message: `Valor inválido para a coluna ${key}.` } });
     }
     const data = parsed.data.data as Prisma.InputJsonObject;
