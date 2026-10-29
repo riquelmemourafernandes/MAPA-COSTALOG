@@ -161,6 +161,9 @@ export default function App() {
   const [viewName, setViewName] = useState('');
   const [showViewTools, setShowViewTools] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{row: RecordRow; column: Column} | null>(null);
+  const [selectionMode, setSelectionMode] = useState<'cell'|'row'|'column'>('cell');
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [selectedColumnKey, setSelectedColumnKey] = useState<string | null>(null);
   const [editingCell, setEditingCell] = useState<{rowId: string; columnKey: string} | null>(null);
   const [editValue, setEditValue] = useState('');
   const [placeholderPosition, setPlaceholderPosition] = useState<GridPosition | null>(null);
@@ -171,6 +174,16 @@ export default function App() {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<{key:string; direction:'asc'|'desc'} | null>(null);
   const [cellStyles, setCellStyles] = useState<Record<string, CellStyle>>({});
+  const [rowStyles, setRowStyles] = useState<Record<string, CellStyle>>({});
+  const [columnStyles, setColumnStyles] = useState<Record<string, CellStyle>>({});
+  const styleStorageKey = 'mapa-costalog-sheet-styles:' + userKey;
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(styleStorageKey) || '{}');
+      setRowStyles(saved?.rowStyles && typeof saved.rowStyles === 'object' ? saved.rowStyles : {});
+      setColumnStyles(saved?.columnStyles && typeof saved.columnStyles === 'object' ? saved.columnStyles : {});
+    } catch { setRowStyles({}); setColumnStyles({}); }
+  }, [styleStorageKey]);
   const [historyTarget, setHistoryTarget] = useState<{row: RecordRow; column: Column} | null>(null);
   const [historyItems, setHistoryItems] = useState<AuditEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -304,6 +317,8 @@ export default function App() {
       if (Array.isArray(preferences.visibleKeys)) { setVisibleKeys(preferences.visibleKeys); localStorage.setItem(preferenceKey, JSON.stringify(preferences.visibleKeys)); }
       if (Array.isArray(preferences.savedViews)) setSavedViews(preferences.savedViews);
       if (preferences.cellStyles && typeof preferences.cellStyles === 'object') setCellStyles(preferences.cellStyles as Record<string, CellStyle>);
+      if (preferences.rowStyles && typeof preferences.rowStyles === 'object') setRowStyles(preferences.rowStyles as Record<string, CellStyle>);
+      if (preferences.columnStyles && typeof preferences.columnStyles === 'object') setColumnStyles(preferences.columnStyles as Record<string, CellStyle>);
       if (profileBody.user) { setProfile(profileBody.user); setProfileName(profileBody.user.name); setProfileEmail(profileBody.user.email); }
     }).catch(() => {});
     if (userRole === 'ADMIN') fetch(apiBase + '/api/v1/users', { headers: { Authorization: 'Bearer ' + token } }).then(async response => {
@@ -321,17 +336,52 @@ export default function App() {
     });
   }
   function styleKey(row: RecordRow, column: Column) { return row.id + ':' + column.key; }
+  function effectiveCellStyle(row: RecordRow, column: Column): CellStyle {
+    // Cell > row > column, so specific formatting takes precedence.
+    return { ...(columnStyles[column.key] || {}), ...(rowStyles[row.id] || {}),
+      ...(cellStyles[styleKey(row, column)] || {}) };
+  }
+  const selectedStyle = selectionMode === 'row' && selectedRowId ? rowStyles[selectedRowId] || {} :
+    selectionMode === 'column' && selectedColumnKey ? columnStyles[selectedColumnKey] || {} :
+    selectedCell ? effectiveCellStyle(selectedCell.row, selectedCell.column) : {} ;
+  const canFormatSelection = Boolean(token && userRole !== 'CONSULTA' &&
+    (selectedCell || (selectionMode === 'column' && selectedColumnKey)));
   function updateSelectedStyle(change: CellStyle) {
-    if (!selectedCell) return;
-    const key = styleKey(selectedCell.row, selectedCell.column);
-    const next = { ...cellStyles, [key]: { ...(cellStyles[key] || {}), ...change } };
-    setCellStyles(next);
+    if (!canFormatSelection) return;
+    let nextCellStyles = cellStyles, nextRowStyles = rowStyles, nextColumnStyles = columnStyles;
+    let scope = 'célula';
+    if (selectionMode === 'column' && selectedColumnKey) {
+      nextColumnStyles = { ...columnStyles,
+        [selectedColumnKey]: { ...(columnStyles[selectedColumnKey] || {}), ...change } };
+      setColumnStyles(nextColumnStyles);
+      scope = 'coluna';
+    } else if (selectionMode === 'row' && selectedRowId) {
+      nextRowStyles = { ...rowStyles,
+        [selectedRowId]: { ...(rowStyles[selectedRowId] || {}), ...change } };
+      setRowStyles(nextRowStyles);
+      scope = 'linha';
+    } else if (selectedCell) {
+      const key = styleKey(selectedCell.row, selectedCell.column);
+      nextCellStyles = { ...cellStyles, [key]: { ...(cellStyles[key] || {}), ...change } };
+      setCellStyles(nextCellStyles);
+    }
+    localStorage.setItem(styleStorageKey, JSON.stringify({
+      rowStyles: nextRowStyles, columnStyles: nextColumnStyles
+    }));
+    // Preferences are UI formatting, never modifications of operational rows.
     void (async () => {
       try {
-        const response = await fetch(apiBase + '/api/v1/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ visibleKeys, columnOrder: visibleKeys, savedViews, cellStyles: next }) });
-        const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar a formatação.');
-        setNotice('Formatação da célula salva na sua conta.');
-      } catch (error) { setApiError(error instanceof Error ? error.message : 'Falha ao salvar formatação.'); }
+        const response = await fetch(apiBase + '/api/v1/preferences', {
+          method: 'PUT', headers: {'Content-Type':'application/json',Authorization:'Bearer '+token},
+          body: JSON.stringify({ visibleKeys, columnOrder: visibleKeys, savedViews,
+            cellStyles: nextCellStyles, rowStyles: nextRowStyles, columnStyles: nextColumnStyles })
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body?.error?.message || 'Ainda não é possível sincronizar a formatação.');
+        setNotice('Formatação da ' + scope + ' salva na sua conta.');
+      } catch {
+        setNotice('Formatação aplicada à ' + scope + ' neste navegador. A sincronização depende da atualização da API.');
+      }
     })();
   }
   async function saveCurrentView() {
@@ -675,6 +725,15 @@ export default function App() {
   }, [displayedRows, visibleColumns, selectedCell]);
   useEffect(() => { if (displayedRows.length > 0) setPlaceholderPosition(null); }, [displayedRows.length]);
   const selectedBounds = useMemo(() => {
+    if (!displayedRows.length || !visibleColumns.length) return null;
+    if (selectionMode === 'column' && selectedColumnKey) {
+      const column = visibleColumns.findIndex(item => item.key === selectedColumnKey);
+      return column < 0 ? null : {top:0,bottom:displayedRows.length-1,left:column,right:column};
+    }
+    if (selectionMode === 'row' && selectedRowId) {
+      const row = displayedRows.findIndex(item => item.id === selectedRowId);
+      return row < 0 ? null : {top:row,bottom:row,left:0,right:visibleColumns.length-1};
+    }
     if (!selectedPosition) return null;
     const anchorRow = selectionAnchor ? displayedRows.findIndex(item => item.id === selectionAnchor.rowId) : -1;
     const anchorColumn = selectionAnchor ? visibleColumns.findIndex(item => item.key === selectionAnchor.columnKey) : -1;
@@ -682,12 +741,16 @@ export default function App() {
       anchorRow >= 0 && anchorColumn >= 0 ? { row: anchorRow, column: anchorColumn } : selectedPosition,
       selectedPosition
     );
-  }, [selectedPosition, selectionAnchor, displayedRows, visibleColumns]);
+  }, [selectedPosition, selectionAnchor, displayedRows, visibleColumns,
+      selectionMode, selectedRowId, selectedColumnKey]);
 
   function beginCellEdit(rowIndex: number, columnIndex: number, replacement?: string) {
     const row = displayedRows[rowIndex], column = visibleColumns[columnIndex];
     if (!row || !column || !token || userRole === 'CONSULTA' || !column.editable || editingBusyRef.current) return;
     setSelectionAnchor({ rowId: row.id, columnKey: column.key });
+    setSelectionMode('cell');
+    setSelectedRowId(null);
+    setSelectedColumnKey(null);
     setSelectedCell({ row, column });
     setEditValue(replacement === undefined ? valueText(row.data?.[column.key]) : replacement);
     setEditingCell({ rowId: row.id, columnKey: column.key });
@@ -720,6 +783,7 @@ export default function App() {
   function selectGridCell(rowIndex: number, columnIndex: number, extend = false, moveFocus = false) {
     const row = displayedRows[rowIndex], column = visibleColumns[columnIndex];
     if (!row || !column) return;
+    setSelectionMode('cell'); setSelectedRowId(null); setSelectedColumnKey(null);
     setPlaceholderPosition(null);
     if (!extend || !selectionAnchor) setSelectionAnchor({ rowId: row.id, columnKey: column.key });
     setSelectedCell({ row, column });
@@ -730,6 +794,27 @@ export default function App() {
       target?.focus({ preventScroll: true });
       target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
+  }
+  function selectEntireRow(rowIndex: number) {
+    const row = displayedRows[rowIndex], firstColumn = visibleColumns[0];
+    if (!row || !firstColumn) return;
+    setOpenFilterKey(null);
+    setSelectionMode('row'); setSelectedRowId(row.id); setSelectedColumnKey(null);
+    setSelectionAnchor({rowId:row.id,columnKey:firstColumn.key});
+    setSelectedCell({row,column:firstColumn});
+    setEditingCell(null);
+    gridRef.current?.focus({preventScroll:true});
+  }
+  function selectEntireColumn(column: Column) {
+    setOpenFilterKey(null);
+    setSelectionMode('column'); setSelectedColumnKey(column.key); setSelectedRowId(null);
+    const firstRow = displayedRows[0];
+    if (firstRow) {
+      setSelectionAnchor({rowId:firstRow.id,columnKey:column.key});
+      setSelectedCell({row:firstRow,column});
+    } else { setSelectedCell(null); }
+    setEditingCell(null);
+    gridRef.current?.focus({preventScroll:true});
   }
   function onGridKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const element = event.target as HTMLElement;
