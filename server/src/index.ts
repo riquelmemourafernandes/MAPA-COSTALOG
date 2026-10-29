@@ -305,7 +305,11 @@ app.get("/api/v1/base/options", async (req, res, next) => {
       where: {listName,active:false},select:{label:true},take:2000
     });
     const inactiveNames = new Set(excluded.map(item=>normalizeBaseLabel(item.label)));
-    if (column !== "B") oldValues.forEach(item => {
+    // Until the separate BASE has been populated, show attendants already
+    // present across the MAPA. As soon as BASE contains active attendants,
+    // it becomes authoritative. Explicitly disabled items stay excluded.
+    const useLegacyValues = column !== "B" || found.length === 0;
+    if (useLegacyValues) oldValues.forEach(item => {
       if (item.label && !inactiveNames.has(normalizeBaseLabel(item.label))) suggestions.add(item.label);
     });
     const items = [...suggestions]
