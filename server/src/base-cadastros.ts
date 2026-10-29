@@ -6,6 +6,7 @@ export const BASE_LISTS = [
   { key: "MODALIDADE", label: "Modalidades", sheetColumn: "B", mapaColumns: ["E"] },
   { key: "CLIENTE", label: "Clientes", sheetColumn: "C", mapaColumns: ["L"] },
   { key: "COLETA", label: "Terminais de coleta", sheetColumn: "D", mapaColumns: ["AJ"] },
+  { key: "CIDADE_COLETA", label: "Cidades de coleta", sheetColumn: "E", mapaColumns: ["AK"] },
   { key: "ENTREGA", label: "Cidades de entrega", sheetColumn: "F", mapaColumns: ["AN", "AR"] },
   { key: "DEPOT", label: "Terminais de vazio / Depot", sheetColumn: "H", mapaColumns: ["BD"] },
   { key: "CIDADE_DEPOT", label: "Cidades de depot", sheetColumn: "I", mapaColumns: ["BE"] },
@@ -15,6 +16,12 @@ export const BASE_LISTS = [
   { key: "TIPO_CC", label: "Tipos de contêiner", sheetColumn: "U", mapaColumns: ["U"] }
 ] as const;
 
+// Matches the source sheet's native dropdown rules on MAPA 1.0.
+export const BASE_COLUMN_LIST: Record<string,string> = {
+  B: "ATENDENTE", C: "STATUS", E: "MODALIDADE", L: "CLIENTE",
+  U: "TIPO_CC", AB: "STATUS_PROG", AJ: "COLETA", AK: "CIDADE_COLETA",
+  AN: "ENTREGA", AR: "ENTREGA", AZ: "ARMADOR", BD: "DEPOT", BE: "CIDADE_DEPOT"
+};
 export const BASE_LIST_KEYS = new Set<string>(BASE_LISTS.map(list => list.key));
 export function normalizeBaseLabel(input: string) {
   return input.trim().replace(/\s+/g, " ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
