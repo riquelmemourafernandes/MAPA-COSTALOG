@@ -32,9 +32,11 @@ export default function SheetDropdownEditor({
   const [highlight,setHighlight]=useState(0);
   const [rect,setRect]=useState<{top:number;left:number;width:number}|null>(null);
   const [expanded,setExpanded]=useState(true);
+  // Once BASE responds, it is authoritative. Local row values are only a
+  // compatibility fallback when an older backend lacks the BASE endpoint.
   const options=useMemo(()=>
-    searchOptions([...fallbackOptions,...(backendOptions||[]),currentValue].filter(Boolean),query).slice(0,150),
-    [fallbackOptions,backendOptions,currentValue,query]);
+    searchOptions(backendOptions===null ? fallbackOptions : backendOptions,query).slice(0,150),
+    [fallbackOptions,backendOptions,query]);
   useEffect(()=>{setHighlight(0);setHasError(false);},[query]);
   useEffect(()=>{
     if(!apiBase || !token) return;
