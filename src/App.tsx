@@ -1905,9 +1905,7 @@ export default function App() {
       for(let j=0;j<matrix[i].length;j++){
         const column=visibleColumns[start.column+j];
         if(!column?.editable){setApiError('Coluna protegida. Nada foi colado.');return;}
-        const parsed=LOCKED_COLUMN_FORMAT[column.key]
-          ?parseSheetValue(matrix[i][j],LOCKED_COLUMN_FORMAT[column.key])
-          :parseEditableValue(column.dataType,matrix[i][j]);
+        const parsed=parseGridCellValue(column,matrix[i][j]);
         if(!parsed.ok){setApiError('Valor inválido em '+column.label+'. Nada foi colado.');return;}
         changes[column.key]=parsed.value;
       }
@@ -2032,9 +2030,7 @@ export default function App() {
       for(let j=0;j<matrix[i].length;j++){
         const column=visibleColumns[selectedPosition.column+j];
         if(!column?.editable){setApiError('Coluna protegida. Nenhuma célula foi alterada.');return;}
-        const parsed=LOCKED_COLUMN_FORMAT[column.key]
-          ?parseSheetValue(matrix[i][j],LOCKED_COLUMN_FORMAT[column.key])
-          :parseEditableValue(column.dataType,matrix[i][j]);
+        const parsed=parseGridCellValue(column,matrix[i][j]);
         if(!parsed.ok){setApiError('Valor inválido em '+column.label+'. Nenhuma célula foi alterada.');return;}
         if(row.data?.[column.key]!==parsed.value)changes[column.key]=parsed.value;
       }
