@@ -393,7 +393,10 @@ export default function LocalDemoApp({ headers }: { headers: Record<string, stri
         targetColumns.forEach(column => { data[column.id] = ''; });
         line.forEach((value, index) => {
           const header = (sourceHeaders[index] || '').trim().toLocaleLowerCase('pt-BR');
-          const target = header ? (existingByLabel.get(header) || targetColumns[index]) : targetColumns[index];
+          const positional = targetColumns[index];
+          const positionalHeader = positional ? (positional.label || positional.key).trim().toLocaleLowerCase('pt-BR') : '';
+          const target = positional && (!header || positionalHeader === header)
+            ? positional : (header ? existingByLabel.get(header) || positional : positional);
           if (target) data[target.id] = value;
         });
         return { id: 'import-row-' + Date.now().toString(36) + '-' + rowIndex + '-' + Math.random().toString(36).slice(2, 5), data };
