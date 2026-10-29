@@ -24,8 +24,15 @@ import {
 } from './sheet-grid.js';
 import { Activity, Bell, Bold, GripVertical, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Menu, Moon, Sun, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound, ShieldCheck, Undo2, Redo2 } from 'lucide-react';
 import { buildUndoRecord, matchesUndoState, undoShortcut, type UndoRecord } from './sheet-undo.js';
+import { evaluateFormula, type FormulaValue } from './formula-engine.js';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean; required?: boolean };
+function parseGridCellValue(column: Column, value: string) {
+  if (value.trim().startsWith('=')) return { ok: true as const, value: value.trim() };
+  return LOCKED_COLUMN_FORMAT[column.key]
+    ? parseSheetValue(value, LOCKED_COLUMN_FORMAT[column.key])
+    : parseEditableValue(column.dataType, value);
+}
 type ValidationItem = { key: string; label: string; dataType: string; total: number; missing: number };
 type ValidationSummary = { checkedAt: string; totalRows: number; requiredFields: number; items: ValidationItem[] };
 type DashboardSummary = { generatedAt: string; activeRecords: number; recentlyUpdated: number; statuses: { status: string; count: number }[] };
@@ -303,6 +310,7 @@ export default function App() {
   const [selectedColumnKey, setSelectedColumnKey] = useState<string | null>(null);
   const [editingCell, setEditingCell] = useState<{rowId: string; columnKey: string} | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [formulaDraft, setFormulaDraft] = useState('');
   const [placeholderPosition, setPlaceholderPosition] = useState<GridPosition | null>(null);
   const [selectionAnchor, setSelectionAnchor] = useState<{rowId: string; columnKey: string} | null>(null);
   const [pasteBusy, setPasteBusy] = useState(false);
@@ -1030,6 +1038,53 @@ export default function App() {
   const visibleColumns = useMemo(() => columns.filter(c => c.visible !== false && visibleKeys.includes(c.key)).sort((a,b) => visibleKeys.indexOf(a.key)-visibleKeys.indexOf(b.key)), [columns, visibleKeys]);
   // When backend filtering is available, values are filtered before pagination.
   // On an older API, the same selection works over the loaded page only.
+  const formulaValues = useMemo(() => {
+    const byPosition = new Map<number, RecordRow>();
+    rows.forEach((row, index) => byPosition.set(Number(row.sheetRowNumber ?? row.sequence + 1), row));
+    const resolveCell = (rowNumber: number, columnKey: string, stack: Set<string> = new Set()): FormulaValue => {
+      if (rowNumber === 1) return referenceHeader[columnKey] ?? '';
+      const record = byPosition.get(rowNumber);
+      if (!record) return null;
+      const raw = record.data?.[columnKey];
+      if (typeof raw === 'string' && raw.trim().startsWith('=')) {
+        return evaluateFormula(raw, resolveCell, stack);
+      }
+      return raw === undefined ? null : raw as FormulaValue;
+    };
+    const result = new Map<string, FormulaValue>();
+    for (const row of rows) {
+      const rowNumber = Number(row.sheetRowNumber ?? row.sequence + 1);
+      for (const column of columns) {
+        const raw = row.data?.[column.key];
+        if (typeof raw === 'string' && raw.trim().startsWith('=')) {
+          const address = column.key + rowNumber;
+          result.set(address, evaluateFormula(raw, resolveCell, new Set([address])));
+        }
+      }
+    }
+    return result;
+  }, [rows, columns]);
+  function displayedCellValue(row: RecordRow, column: Column): unknown {
+    const raw = row.data?.[column.key];
+    if (typeof raw !== 'string' || !raw.trim().startsWith('=')) return raw;
+    return formulaValues.get(column.key + Number(row.sheetRowNumber ?? row.sequence + 1)) ?? '#ERROR!';
+  }
+  useEffect(() => {
+    if (!selectedCell) { setFormulaDraft(''); return; }
+    const current = rows.find(row => row.id === selectedCell.row.id);
+    setFormulaDraft(valueText(current?.data?.[selectedCell.column.key]));
+  }, [selectedCell?.row.id, selectedCell?.column.key, rows]);
+  async function commitFormulaBar() {
+    if (!selectedCell) return;
+    const row = rows.find(item => item.id === selectedCell.row.id);
+    if (!row) return;
+    const saved = await saveCell(row, selectedCell.column, formulaDraft);
+    if (saved) {
+      setSelectedCell({ row: { ...row, data: { ...row.data, [selectedCell.column.key]: formulaDraft } }, column: selectedCell.column });
+      gridRef.current?.focus({ preventScroll: true });
+    }
+  }
+
   const displayedRows = useMemo(() => {
     const filtered = rows.filter(row => {
       const values = Object.values(row.data || {}).map(valueText).join(' ') + ' ' + [row.status,row.clientName,row.container,row.cte].map(valueText).join(' ');
@@ -2293,6 +2348,22 @@ export default function App() {
   disabled={!canFormatSelection} onClick={()=>updateSelectedStyle({
     bold:false,color:'#47584E',background:'#FFFFFF',align:'left',format:'text'
   })}>Limpar formato</button>{token && userRole!=='CONSULTA' && <><button className="secondary" onClick={()=>setSelectedRowIds(previous=>Array.from(new Set([...previous,...displayedRows.map(row=>row.id)])))} disabled={!displayedRows.length}>Selecionar página</button><button className="secondary" onClick={()=>setSelectedRowIds([])} disabled={!selectedRowIds.length}>Limpar seleção ({selectedRowIds.length})</button><button className="primary" onClick={()=>setBulkOpen(true)} disabled={!selectedRowIds.length}><Save size={14}/> Editar selecionados</button></>}<span className="rows-count">{total} registros</span></div>
+          <div className="sheet-formula-bar" role="group" aria-label="Barra de fórmulas">
+            <span className="sheet-formula-address" aria-label="Endereço da célula">
+              {selectedCell ? selectedCell.column.key + Number(selectedCell.row.sheetRowNumber ?? selectedCell.row.sequence + 1) : '—'}
+            </span>
+            <span className="sheet-formula-fx" aria-hidden="true">fx</span>
+            <input className="sheet-formula-input" aria-label="Conteúdo ou fórmula da célula"
+              value={formulaDraft} disabled={!selectedCell || userRole==='CONSULTA'}
+              placeholder="Digite um valor ou fórmula, por exemplo =SUM(Q2:Q10)"
+              onChange={event=>setFormulaDraft(event.target.value)}
+              onKeyDown={event=>{
+                if(event.key==='Enter'){event.preventDefault();void commitFormulaBar();}
+                if(event.key==='Escape'){event.preventDefault();const row=selectedCell&&rows.find(item=>item.id===selectedCell.row.id);setFormulaDraft(valueText(row?.data?.[selectedCell?.column.key||'']));gridRef.current?.focus({preventScroll:true});}
+              }}/>
+            <button className="secondary sheet-formula-apply" type="button" disabled={!selectedCell || userRole==='CONSULTA'}
+              title="Aplicar fórmula ou valor (Enter)" onClick={()=>void commitFormulaBar()}>✓</button>
+          </div>
           <div className="sheet-action-strip">
             <span className="sheet-address">{selectionMode === 'column' && selectedColumnKey ? 'Coluna ' + selectedColumnKey :
               selectionMode === 'row' && selectedCell ? 'Linha ' + selectedCell.row.sequence :
@@ -2574,7 +2645,7 @@ export default function App() {
                               : 'Clique para selecionar; Enter ou duplo clique edita. Delete limpa.'
                               : 'Somente leitura'}
 >
-                            {formatSheetValue(row.data?.[column.key],displayFormat)}
+                            {formatSheetValue(displayedCellValue(row,column),displayFormat)}
                           </span>
                         )}
                       </div>
