@@ -1400,6 +1400,77 @@ export default function App() {
       .map(row=>({row,changes:changesById.get(row.id)!}));
     if(edits.length)await updateGridRows(edits,'Limpeza');
   }
+  async function pasteVirtualRange(plainText:string,start:GridPosition){
+    if(gridRangeSupported!==true||!token||userRole==='CONSULTA'){
+      setApiError('A colagem em linhas virtuais requer a API de homologação atualizada.');
+      return;
+    }
+    const matrix=parseClipboardGrid(plainText);
+    if(!matrix.length||matrix.length>100 || matrix.length*matrix[0].length>2000 ||
+      matrix.some(row=>row.length!==matrix[0].length)||
+      start.row+matrix.length>SHEET_MAX_ROW-1 ||
+      start.column+matrix[0].length>visibleColumns.length){
+      setApiError('Cole até 100 linhas e 2.000 células em um intervalo válido.');
+      return;
+    }
+    const requested:{position:number;changes:Record<string,string|number|boolean|null>}[]=[];
+    for(let i=0;i<matrix.length;i++){
+      const changes:Record<string,string|number|boolean|null>={};
+      for(let j=0;j<matrix[i].length;j++){
+        const column=visibleColumns[start.column+j];
+        if(!column?.editable){setApiError('Coluna protegida. Nada foi colado.');return;}
+        const parsed=LOCKED_COLUMN_FORMAT[column.key]
+          ?parseSheetValue(matrix[i][j],LOCKED_COLUMN_FORMAT[column.key])
+          :parseEditableValue(column.dataType,matrix[i][j]);
+        if(!parsed.ok){setApiError('Valor inválido em '+column.label+'. Nada foi colado.');return;}
+        changes[column.key]=parsed.value;
+      }
+      requested.push({position:start.row+i+2,changes});
+    }
+    gridMutationBusyRef.current=true;setPasteBusy(true);setApiError('');
+    let saved=0,created=0;
+    try{
+      const response=await fetch(apiBase+'/api/v1/mapa/grid?'+new URLSearchParams({
+        start:String(start.row+2),count:String(matrix.length)
+      }),{headers:{Authorization:'Bearer '+token}});
+      if(!response.ok)throw new Error('Não foi possível conferir as linhas antes da colagem.');
+      const body=await response.json();
+      const current=new Map<number,RecordRow>(
+        (body.items as RecordRow[]).map(item=>[Number(item.sheetRowNumber),item]));
+      for(const item of requested){
+        const old=current.get(item.position);
+        const changes=Object.fromEntries(Object.entries(item.changes).filter(
+          ([key,value])=>old?old.data?.[key]!==value:value!==null && value!==''));
+        if(!Object.keys(changes).length)continue;
+        const res=await fetch(old
+          ?apiBase+'/api/v1/mapa/'+encodeURIComponent(old.id)
+          :apiBase+'/api/v1/mapa',{
+          method:old?'PATCH':'POST',
+          headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+          body:JSON.stringify(old
+            ?{changes,expectedUpdatedAt:old.updatedAt}
+            :{sheetRowNumber:item.position,data:changes})
+        });
+        const savedBody=await res.json().catch(()=>({}));
+        if(!res.ok)throw new Error(savedBody?.error?.message||
+          'Erro ao salvar a linha '+item.position);
+        setRows(previous=>mergeLoadedRows(previous,[savedBody.item as RecordRow])
+          .map(row=>row.id===savedBody.item.id?savedBody.item as RecordRow:row));
+        if(!old)created++;
+        saved++;
+      }
+      if(created)setTotal(previous=>previous+created);
+      setMaxSheetRowNumber(previous=>Math.max(previous,...requested.map(item=>item.position)));
+      setNotice('Colagem direta: '+saved+' linha(s) atualizada(s); '+
+        created+' criada(s) automaticamente.');
+    }catch(error){
+      setApiError('Colagem interrompida após '+saved+' linhas. '+
+        (error instanceof Error?error.message:'Falha de rede')+
+        '. Linhas já confirmadas foram preservadas.');
+      if(created)setTotal(previous=>previous+created);
+    }finally{gridMutationBusyRef.current=false;setPasteBusy(false);}
+  }
+
   function onGridPaste(event: React.ClipboardEvent<HTMLDivElement>) {
     const element=event.target as HTMLElement;
     if(['INPUT','TEXTAREA','SELECT'].includes(element.tagName))return;
@@ -1410,7 +1481,11 @@ export default function App() {
     if(userRole==='CONSULTA'){setApiError('Seu perfil permite apenas consultar a planilha.');return;}
     if(pasteBusy||gridMutationBusyRef.current)return;
     if(!selectedPosition){
-      setApiError(placeholderPosition?'A linha ainda é visual. Crie registros antes de colar.':'Selecione uma célula para colar.');
+      if(placeholderPosition && sheetCanvas){
+        void pasteVirtualRange(plainText,placeholderPosition);
+        return;
+      }
+      setApiError('Selecione uma célula para colar.');
       return;
     }
     const matrix=parseClipboardGrid(plainText);
