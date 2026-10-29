@@ -186,3 +186,31 @@ export function evaluateFormula(formula: string, resolveCell: FormulaCellResolve
   try { const result = evalNode(new Parser(tokenize(source)).parse(), { resolveCell, stack }); if (Array.isArray(result)) return '#VALUE!'; if (typeof result === 'number' && !Number.isFinite(result)) return '#NUM!'; return result; }
   catch { return '#ERROR!'; }
 }
+
+
+/** Copies a formula while shifting only relative A1 references. Text literals stay untouched. */
+export function translateFormulaReferences(formula: string, rowOffset: number, columnOffset: number): string {
+  let output = '', i = 0, quoted = false;
+  while (i < formula.length) {
+    const char = formula[i];
+    if (char === '"') {
+      output += char;
+      if (quoted && formula[i + 1] === '"') { output += '"'; i += 2; continue; }
+      quoted = !quoted; i++; continue;
+    }
+    if (!quoted && (/[A-Z_$]/i.test(char)) &&
+        (i === 0 || !/[A-Z0-9_.]/i.test(formula[i - 1]))) {
+      const match = /^(\$?)([A-Z]{1,3})(\$?)([1-9]\d*)/i.exec(formula.slice(i));
+      if (match && formula[i + match[0].length] !== '(') {
+        const originalColumn = columnKeyToIndex(match[2]);
+        const nextColumn = originalColumn + (match[1] ? 0 : columnOffset);
+        const nextRow = Number(match[4]) + (match[3] ? 0 : rowOffset);
+        if (nextColumn < 0 || nextColumn >= 18278 || nextRow < 1 || nextRow > 1000000) output += '#REF!';
+        else output += match[1] + columnIndexToKey(nextColumn) + match[3] + nextRow;
+        i += match[0].length; continue;
+      }
+    }
+    output += char; i++;
+  }
+  return output;
+}
