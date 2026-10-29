@@ -30,7 +30,7 @@ export default function BaseCatalogSheet({apiBase,token,userRole,onOpenMapa}:Pro
   const category=LISTS.find(x=>x.id===listName)||LISTS[0];
   const fetchList=useCallback(async()=>{
     if(!token||!apiBase)return;
-    setLoading(true);setError("");
+    setLoading(true);setReady(false);setError("");
     try{
       const response=await fetch(apiBase+"/api/v1/base/catalog?"+new URLSearchParams({listName}),{
         headers:{Authorization:"Bearer "+token},cache:"no-store"
