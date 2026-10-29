@@ -9,6 +9,7 @@ import { isCollectionCompleted, isDeliveryCompleted, parseAppointment, shouldAle
 import { z } from "zod";
 import { submitAccessRequest } from "./access-requests.js";
 import { isAllowedFrontendOrigin } from "./frontend-origins.js";
+import { BASE_COLUMN_LIST } from "./base-cadastros.js";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -174,6 +175,41 @@ app.use("/api/v1", requireAuth);
 
 app.get("/api/v1/auth/me", (req, res) => {
   res.json({ user: req.authUser });
+});
+
+// Dropdown values are read-only and require an authenticated user.
+// Prefer the standalone BASE catalog. Existing operational values are used
+// as a compatibility fallback until BASE is populated in homologation.
+app.get("/api/v1/base/options", async (req, res, next) => {
+  try {
+    const column = String(req.query.column || "").trim().toUpperCase().slice(0, 4);
+    const listName = BASE_COLUMN_LIST[column];
+    if (!listName) return res.status(400).json({
+      error: { code: "NOT_A_LOOKUP_COLUMN", message: "Esta coluna não possui lista suspensa vinculada à BASE." }
+    });
+    const q = String(req.query.q || "").trim().slice(0, 120);
+    const found = await prisma.lookupValue.findMany({
+      where: { listName, active: true, ...(q ? { label: { contains: q, mode: "insensitive" } } : {}) },
+      orderBy: { label: "asc" }, take: 150, select: { label: true }
+    });
+    const suggestions = new Set(found.map(item => item.label));
+    // Values already used in the MAPA stay selectable for legacy rows;
+    // never leak values from unrelated columns or unauthenticated requests.
+    const like = "%" + q + "%";
+    const oldValues = await prisma.$queryRaw<Array<{ label: string }>>`
+      SELECT DISTINCT BTRIM(data ->> ${column}) AS label
+      FROM mapa_rows
+      WHERE archived_at IS NULL
+        AND NULLIF(BTRIM(data ->> ${column}), '') IS NOT NULL
+        AND (${q} = '' OR data ->> ${column} ILIKE ${like})
+      ORDER BY label ASC LIMIT 150
+    `;
+    oldValues.forEach(item => { if (item.label) suggestions.add(item.label); });
+    const items = [...suggestions]
+      .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base", numeric: true }))
+      .slice(0, 150);
+    return res.json({ column, listName, items, truncated: found.length >= 150 || oldValues.length >= 150 });
+  } catch (error) { return next(error); }
 });
 
 app.get("/api/v1/config/columns", async (_req, res, next) => {
