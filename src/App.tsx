@@ -3,6 +3,7 @@ import BaseCatalogSheet from './BaseCatalogSheet.js';
 import SheetColorPicker from './SheetColorPicker.js';
 import SheetDropdownEditor from './SheetDropdownEditor.js';
 import { BASE_COLUMN_LIST } from './sheet-dropdown-utils.js';
+import {LOCKED_COLUMN_FORMAT,formatSheetValue,parseSheetValue,toDateInput,type SheetNumberFormat} from './sheet-formats.js';
 import { matchesColumnFilters, uniqueFilterValues, type ColumnFilterMap } from './column-filter.js';
 import {
   canPasteMatrix, moveGridPosition, parseClipboardGrid,
@@ -19,7 +20,7 @@ type AppointmentAlert = { id: string; sequence: number; kind: 'Coleta' | 'Entreg
 type AppointmentAlertSummary = { generatedAt: string; total: number; filteredTotal?: number; byKind: { collection: number; delivery: number }; attendants?: string[]; items: AppointmentAlert[] };
 type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
 type SavedView = { name: string; visibleKeys: string[]; query: string; status: string };
-type CellStyle = { bold?: boolean; color?: string; background?: string };
+type CellStyle = { bold?: boolean; color?: string; background?: string; format?: SheetNumberFormat; align?: 'left'|'center'|'right' };
 type AuditEntry = { id: string; action: string; fieldKey?: string | null; beforeValue?: unknown; afterValue?: unknown; createdAt: string; user?: { name?: string; email?: string } | null };
 type UserProfile = { id: string; name: string; email: string; role: string; active: boolean };
 type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string; pendingApproval?: boolean };
@@ -574,7 +575,9 @@ export default function App() {
     if (!apiBase || !token || !column.editable || userRole === 'CONSULTA') return false;
     const previousValue = valueText(row.data?.[column.key]);
     if (value === previousValue) return true;
-    const parsed = parseEditableValue(column.dataType, value);
+    const parsed = LOCKED_COLUMN_FORMAT[column.key]
+      ? parseSheetValue(value,LOCKED_COLUMN_FORMAT[column.key])
+      : parseEditableValue(column.dataType, value);
     if (!parsed.ok) {
       setApiError(parsed.message + ' na coluna ' + column.label + '.');
       return false;
@@ -756,7 +759,9 @@ export default function App() {
     setSelectedRowId(null);
     setSelectedColumnKey(null);
     setSelectedCell({ row, column });
-    setEditValue(replacement === undefined ? valueText(row.data?.[column.key]) : replacement);
+    setEditValue(replacement === undefined
+      ? (column.key === 'A' ? toDateInput(row.data?.[column.key]) : valueText(row.data?.[column.key]))
+      : replacement);
     setEditingCell({ rowId: row.id, columnKey: column.key });
   }
 
@@ -1083,7 +1088,24 @@ export default function App() {
           {columnMenu && <div className="column-picker"><div className="column-picker-actions"><b>Colunas exibidas e sequência</b><button className="secondary" onClick={()=>{const all=columns.map(c=>c.key);setVisibleKeys(all);localStorage.setItem(preferenceKey,JSON.stringify(all));void persistPreferences({visibleKeys:all});}}>Mostrar todas</button><button className="secondary" onClick={()=>{const defaults=columns.filter(c=>c.visible).map(c=>c.key);setVisibleKeys(defaults);localStorage.setItem(preferenceKey,JSON.stringify(defaults));void persistPreferences({visibleKeys:defaults});}}>Restaurar padrão</button></div><div className="column-options">{[...columns].sort((a,b)=>{const ai=visibleKeys.indexOf(a.key),bi=visibleKeys.indexOf(b.key);return ai<0?(bi<0?a.position-b.position:1):bi<0?-1:ai-bi}).map(column=><div className={"column-option "+(draggedColumn===column.key?"dragging":"")} key={column.key} draggable onDragStart={()=>setDraggedColumn(column.key)} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();if(draggedColumn)reorderColumn(draggedColumn,column.key);setDraggedColumn(null)}} onDragEnd={()=>setDraggedColumn(null)}><GripVertical size={15} className="drag-handle"/><input type="checkbox" checked={visibleKeys.includes(column.key)} onChange={()=>toggleColumn(column.key)}/><span>{column.label || '(coluna sem título)'}</span></div>)}</div><div className="saved-view-tools"><button className="secondary" onClick={()=>setShowViewTools(value=>!value)}><Filter size={14}/> Filtros personalizados</button>{showViewTools&&<div className="saved-view-editor"><div className="saved-view-save"><input value={viewName} onChange={event=>setViewName(event.target.value)} placeholder="Nome da configuração"/><button className="primary" onClick={()=>void saveCurrentView()}><Save size={14}/> Salvar filtro</button></div>{savedViews.map(view=><div className="saved-view-item" key={view.name}><button onClick={()=>applyView(view)}>{view.name}</button><small>{view.visibleKeys.length} colunas · {view.status||'Todos os status'}{view.query?' · busca: '+view.query:''}</small><button title="Excluir filtro" onClick={()=>{const next=savedViews.filter(item=>item.name!==view.name);setSavedViews(next);void persistPreferences({savedViews:next});}}><X size={14}/></button></div>)}</div>}</div></div>}<div className="toolbar"><div className="searchbox"><Search size={16}/><input ref={searchInputRef} value={query} onChange={e=>{setPage(1);setQuery(e.target.value)}} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="">Todos os status</option>{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><option key={value} value={value}>{value}</option>)}</select></div><div className="select-wrap"><Columns3 size={16}/><select aria-label="Filtrar por coluna" value={filterColumn} onChange={e=>{setPage(1);setFilterColumn(e.target.value)}}><option value="">Todas as colunas</option>{columns.map(column=><option key={column.key} value={column.key}>{column.label || column.key}</option>)}</select></div><input aria-label="Valor do filtro de coluna" className="column-filter-input" value={filterValue} onChange={e=>{setPage(1);setFilterValue(e.target.value)}} placeholder="Valor da coluna..."/><button className="secondary" onClick={()=>{setFilterColumn('');setFilterValue('');setColumnFilters({});setPage(1)}} disabled={!filterColumn&&!filterValue&&!Object.keys(columnFilters).length}>Limpar filtro</button><button className="secondary" disabled={!selectedCell} onClick={()=>selectedCell&&void openHistory(selectedCell.row,selectedCell.column)}><History size={14}/> Histórico da célula selecionada</button><button className="secondary" disabled={!canFormatSelection} title="Negrito na célula, linha ou coluna selecionada" onClick={()=>updateSelectedStyle({bold:!selectedStyle.bold})}><Bold size={14}/> Negrito</button><SheetColorPicker kind="text" value={selectedStyle.color||'#47584E'} disabled={!canFormatSelection}
   onSelect={color=>updateSelectedStyle({color})}/>
 <SheetColorPicker kind="background" value={selectedStyle.background||'#FFFFFF'} disabled={!canFormatSelection}
-  onSelect={background=>updateSelectedStyle({background})}/>{token && userRole!=='CONSULTA' && <><button className="secondary" onClick={()=>setSelectedRowIds(previous=>Array.from(new Set([...previous,...displayedRows.map(row=>row.id)])))} disabled={!displayedRows.length}>Selecionar página</button><button className="secondary" onClick={()=>setSelectedRowIds([])} disabled={!selectedRowIds.length}>Limpar seleção ({selectedRowIds.length})</button><button className="primary" onClick={()=>setBulkOpen(true)} disabled={!selectedRowIds.length}><Save size={14}/> Editar selecionados</button></>}<span className="rows-count">{total} registros</span></div>
+  onSelect={background=>updateSelectedStyle({background})}/>
+<select className="sheet-format-select" aria-label="Formato da seleção" title="Formatar célula, linha ou coluna"
+  value={selectedCell?.column.key === 'A' ? 'date' :
+    selectedCell?.column.key === 'Q' ? 'currency' : (selectedStyle.format||'text')}
+  disabled={!canFormatSelection || (selectionMode === 'cell' && (selectedCell?.column.key==='A'||selectedCell?.column.key==='Q'))}
+  onChange={event=>updateSelectedStyle({format:event.target.value as SheetNumberFormat})}>
+  <option value="text">Texto</option><option value="number">Número</option>
+  <option value="currency">Moeda (R$)</option><option value="date">Data</option>
+</select>
+<select className="sheet-format-select" aria-label="Alinhamento da seleção" title="Alinhar texto"
+  value={selectedStyle.align||'left'} disabled={!canFormatSelection}
+  onChange={event=>updateSelectedStyle({align:event.target.value as 'left'|'center'|'right'})}>
+  <option value="left">Esquerda</option><option value="center">Centro</option><option value="right">Direita</option>
+</select>
+<button className="secondary" type="button" title="Limpar formatação da seleção"
+  disabled={!canFormatSelection} onClick={()=>updateSelectedStyle({
+    bold:false,color:'#47584E',background:'#FFFFFF',align:'left',format:'text'
+  })}>Limpar formato</button>{token && userRole!=='CONSULTA' && <><button className="secondary" onClick={()=>setSelectedRowIds(previous=>Array.from(new Set([...previous,...displayedRows.map(row=>row.id)])))} disabled={!displayedRows.length}>Selecionar página</button><button className="secondary" onClick={()=>setSelectedRowIds([])} disabled={!selectedRowIds.length}>Limpar seleção ({selectedRowIds.length})</button><button className="primary" onClick={()=>setBulkOpen(true)} disabled={!selectedRowIds.length}><Save size={14}/> Editar selecionados</button></>}<span className="rows-count">{total} registros</span></div>
           <div className="sheet-action-strip">
             <span className="sheet-address">{selectionMode === 'column' && selectedColumnKey ? 'Coluna ' + selectedColumnKey :
               selectionMode === 'row' && selectedCell ? 'Linha ' + selectedCell.row.sequence :
@@ -1149,11 +1171,16 @@ export default function App() {
                       ci >= selectedBounds.left && ci <= selectedBounds.right);
                     const editable = Boolean(token && userRole !== 'CONSULTA' && column.editable);
                     const lookup = Boolean(BASE_COLUMN_LIST[column.key]);
+                    const style = effectiveCellStyle(row,column);
+                    const displayFormat = LOCKED_COLUMN_FORMAT[column.key] ||
+                      style.format || (column.dataType === 'currency' ? 'currency' :
+                      column.dataType === 'date' ? 'date' : column.dataType === 'number' ? 'number' : 'text');
                     return <td key={column.key} aria-selected={inRange}
                       className={(editable ? 'editable-cell ' : '') + (lookup ? 'sheet-lookup-cell ' : '') + (inRange ? 'sheet-range-cell ' : '') + (selected ? 'selected-cell ' : '')}
-                      style={{fontWeight: effectiveCellStyle(row, column).bold ? 'bold' : 'normal',
-                        color: effectiveCellStyle(row, column).color,
-                        backgroundColor: effectiveCellStyle(row, column).background}}
+                      style={{fontWeight: style.bold ? 'bold' : 'normal',
+                        color: style.color,
+                        textAlign: style.align || 'left',
+                        backgroundColor: style.background}}
                       onClick={event => {
                         selectGridCell(ri, ci, event.shiftKey, !lookup);
                         if (lookup && editable && !event.shiftKey) beginCellEdit(ri, ci);
@@ -1173,6 +1200,8 @@ export default function App() {
                             }}
                             onCancel={()=>{setEditingCell(null);setEditValue('');}}
                           /> : <input ref={editorRef} autoFocus className="sheet-cell-editor"
+                            type={column.key === 'A' ? 'date' : 'text'}
+                            inputMode={column.key === 'Q' ? 'decimal' : undefined}
                             data-cell-editor="true" aria-label={'Editar ' + column.key + row.sequence}
                             value={editValue} onChange={event => setEditValue(event.target.value)}
                             onClick={event => event.stopPropagation()}
@@ -1205,7 +1234,7 @@ export default function App() {
                               : 'Clique para selecionar. Enter confirma e desce; Tab confirma e vai à direita; F2 ou duplo clique edita.'
                               : 'Somente leitura'}
 >
-                            {valueText(row.data?.[column.key])}
+                            {formatSheetValue(row.data?.[column.key],displayFormat)}
                           </span>
                         )}
                       </div>
