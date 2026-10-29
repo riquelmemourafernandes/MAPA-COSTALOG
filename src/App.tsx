@@ -784,10 +784,148 @@ export default function App() {
     }
   }
 
+  // Spreadsheet undo/redo replays confirmed edits through the audited API.
+  // It does not overwrite a value changed since the recorded edit; HTTP 409
+  // also prevents stale writes if a collaborator edits during the request.
+  async function replayEdit(direction:'undo'|'redo'){
+    if(active!=='MAPA 2.0'||userRole==='CONSULTA'||!token||!apiBase||
+       undoBusyRef.current||gridMutationBusyRef.current||editingBusyRef.current||
+       blankSaving||pasteBusy||adminSheetBusy||bulkBusy||creatingRows)return;
+    const stacks=undoStacksRef.current;
+    const source=stacks[direction],target=stacks[direction==='undo'?'redo':'undo'];
+    const entry=source[source.length-1];
+    if(!entry){setNotice(direction==='undo'?'Nada para desfazer.':'Nada para refazer.');return;}
+    undoBusyRef.current=true;
+    setApiError('');
+    try{
+      if(entry.kind==='cells'){
+        // Verify all currently loaded values before applying any request.
+        for(const edit of entry.edits){
+          const current=rowsRef.current.find(row=>row.id===edit.rowId);
+          if(!matchesUndoState(current,edit,direction)){
+            throw new Error('A linha desta alteração não está carregada ou foi modificada desde então. '+
+              'Não sobrescrevi dados de outro usuário. Atualize a grade para conferir.');
+          }
+        }
+        gridMutationBusyRef.current=true;setPasteBusy(true);
+        const completed:UndoRecord[]=[];
+        let failed:Error|null=null;
+        for(const edit of (direction==='undo'?[...entry.edits].reverse():entry.edits)){
+          const current=rowsRef.current.find(row=>row.id===edit.rowId);
+          if(!current||!matchesUndoState(current,edit,direction)){
+            failed=new Error('Os valores da linha mudaram durante a operação.');break;
+          }
+          try{
+            const response=await fetch(apiBase+'/api/v1/mapa/'+encodeURIComponent(edit.rowId),{
+              method:'PATCH',
+              headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+              body:JSON.stringify({
+                changes:direction==='undo'?edit.before:edit.after,
+                expectedUpdatedAt:current.updatedAt
+              })
+            });
+            const body=await response.json().catch(()=>({}));
+            if(!response.ok)throw new Error(body?.error?.message||
+              (response.status===409?'Conflito de edição: recarregue a grade.':
+                'Não foi possível gravar a reversão.'));
+            const updated=body.item as RecordRow;
+            rowsRef.current=rowsRef.current.map(row=>row.id===updated.id?updated:row);
+            setRows(previous=>previous.map(row=>row.id===updated.id?updated:row));
+            completed.push(edit);
+          }catch(error){
+            failed=error instanceof Error?error:new Error('Falha ao salvar.');break;
+          }
+        }
+        if(completed.length){
+          if(completed.length===entry.edits.length)source.pop();
+          else source[source.length-1]={...entry,edits:entry.edits.filter(edit=>!completed.includes(edit))};
+          target.push({...entry,edits:completed});
+          if(target.length>60)target.shift();
+          syncUndoCounts();
+          setNotice((direction==='undo'?'Desfeito: ':'Refeito: ')+entry.label+
+            ' ('+completed.length+' linha(s)). Alteração registrada na auditoria.');
+        }
+        if(failed)throw new Error(failed.message+
+          (completed.length?' '+completed.length+' linha(s) já confirmada(s) foram mantidas.':''));
+      }else if(entry.kind==='style'){
+        const existing=entry.target==='cell'?cellStyles:
+          entry.target==='row'?rowStyles:columnStyles;
+        const expected=direction==='undo'?entry.after:entry.before;
+        const desired=direction==='undo'?entry.before:entry.after;
+        if(JSON.stringify(existing[entry.key]??null)!==JSON.stringify(expected))
+          throw new Error('Essa formatação mudou desde a operação. Nada foi substituído.');
+        const next={...existing};
+        if(desired)next[entry.key]={...desired};
+        else delete next[entry.key];
+        const nextCells=entry.target==='cell'?next:cellStyles;
+        const nextRows=entry.target==='row'?next:rowStyles;
+        const nextColumns=entry.target==='column'?next:columnStyles;
+        if(entry.target==='cell')setCellStyles(nextCells);
+        else if(entry.target==='row')setRowStyles(nextRows);
+        else setColumnStyles(nextColumns);
+        localStorage.setItem(styleStorageKey,JSON.stringify({
+          cellStyles:nextCells,rowStyles:nextRows,columnStyles:nextColumns
+        }));
+        source.pop();target.push(entry);
+        if(target.length>60)target.shift();
+        syncUndoCounts();
+        try{
+          const response=await fetch(apiBase+'/api/v1/preferences',{
+            method:'PUT',
+            headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+            body:JSON.stringify({visibleKeys,columnOrder:visibleKeys,savedViews,
+              cellStyles:nextCells,rowStyles:nextRows,columnStyles:nextColumns})
+          });
+          if(!response.ok)throw new Error('A sincronização com a API falhou.');
+          setNotice((direction==='undo'?'Desfeita: ':'Refeita: ')+entry.label+'.');
+        }catch{
+          setNotice('Formatação '+(direction==='undo'?'desfeita':'refeita')+
+            ' neste navegador; sincronização com o servidor pendente.');
+        }
+      }else{
+        const current=entry.target==='row'?rowHeights:columnWidths;
+        const expected=direction==='undo'?entry.after:entry.before;
+        const desired=direction==='undo'?entry.before:entry.after;
+        if((current[entry.key]??null)!==expected)
+          throw new Error('O tamanho da linha ou coluna mudou desde então.');
+        const next={...current};
+        if(desired===null)delete next[entry.key];
+        else next[entry.key]=desired;
+        if(entry.target==='row'){
+          setRowHeights(next);
+          localStorage.setItem(rowHeightStorageKey,JSON.stringify(next));
+        }else{
+          setColumnWidths(next);
+          localStorage.setItem(widthKey,JSON.stringify(next));
+        }
+        source.pop();target.push(entry);
+        if(target.length>60)target.shift();
+        syncUndoCounts();
+        setNotice((direction==='undo'?'Desfeito: ':'Refeito: ')+entry.label+'.');
+      }
+    }catch(error){
+      setApiError('Ctrl+'+(direction==='undo'?'Z':'Y')+': '+
+        (error instanceof Error?error.message:'Não foi possível concluir a operação.'));
+    }finally{
+      gridMutationBusyRef.current=false;
+      setPasteBusy(false);
+      undoBusyRef.current=false;
+    }
+  }
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      const typing = Boolean(target && (target.isContentEditable || ['INPUT','TEXTAREA','SELECT'].includes(target.tagName)));
+      const typing = Boolean(target && (target.isContentEditable ||
+        ['INPUT','TEXTAREA','SELECT'].includes(target.tagName) &&
+        !(target instanceof HTMLInputElement && target.type==='checkbox')));
+      const shortcut=undoShortcut(event);
+      if(shortcut && active==='MAPA 2.0' && userRole!=='CONSULTA' && !typing){
+        event.preventDefault();
+        event.stopPropagation();
+        void replayEdit(shortcut);
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault(); searchInputRef.current?.focus(); searchInputRef.current?.select();
       } else if (event.key === 'Escape' && !typing) {
@@ -798,7 +936,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [active, userRole, apiBase, token]);
+  }, [active, userRole, apiBase, token, rows, cellStyles, rowStyles, columnStyles, rowHeights, columnWidths, visibleKeys, savedViews, blankSaving, pasteBusy, adminSheetBusy, bulkBusy, creatingRows]);
   const visibleColumns = useMemo(() => columns.filter(c => c.visible !== false && visibleKeys.includes(c.key)).sort((a,b) => visibleKeys.indexOf(a.key)-visibleKeys.indexOf(b.key)), [columns, visibleKeys]);
   // When backend filtering is available, values are filtered before pagination.
   // On an older API, the same selection works over the loaded page only.
@@ -1919,6 +2057,12 @@ export default function App() {
                 ? visibleColumns[placeholderPosition.column].key + (placeholderPosition.row + 1) + ' (visual)'
                 : 'Selecione uma célula'}</span>
             <span className="sheet-guide" aria-hidden="true"></span>
+            <button className="secondary" type="button" disabled={!undoCounts.undo||undoBusyRef.current||pasteBusy||editingCell!==null||userRole==='CONSULTA'}
+              title="Desfazer a última alteração (Ctrl+Z)" aria-label="Desfazer"
+              onClick={()=>void replayEdit('undo')}><Undo2 size={14}/> Desfazer</button>
+            <button className="secondary" type="button" disabled={!undoCounts.redo||undoBusyRef.current||pasteBusy||editingCell!==null||userRole==='CONSULTA'}
+              title="Refazer alteração (Ctrl+Y / Ctrl+Shift+Z)" aria-label="Refazer"
+              onClick={()=>void replayEdit('redo')}><Redo2 size={14}/> Refazer</button>
             <button className="secondary" type="button" disabled={!selectedBounds} onClick={() => void copyGridSelection()}>Copiar seleção</button>
             <div className="sheet-status-guide">
               <button className="secondary" type="button" aria-expanded={showStatusColors}
