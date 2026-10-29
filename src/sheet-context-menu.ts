@@ -48,7 +48,9 @@ export function getSheetContextOptions(kind: SheetContextKind, admin: boolean): 
     {id:"sort-desc",label:"Classificar coluna Z → A"},
     {id:"filter",label:"Filtro da coluna"},
     {id:"conditional",label:"Cores condicionais por status"},
-    {id:"dropdown",label:"Menu suspenso / BASE"}
+    {id:"dropdown",label:"Menu suspenso / BASE"},
+    {id:"hide-column",label:"Ocultar coluna",separator:true},
+    {id:"delete-column",label:"Excluir coluna desta célula",danger:true}
   ];
 }
 export function safeMenuPosition(x:number,y:number,width:number,height:number,viewportWidth:number,viewportHeight:number){
