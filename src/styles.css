@@ -646,3 +646,338 @@ td:hover .cell-history,.cell-history:focus{opacity:1}
   .structural-theme-toggle{min-width:32px;padding:5px 7px}
   .structural-theme-toggle span{display:none}
 }
+
+
+/* =========================================================
+   SITE-WIDE DARK MODE
+   The MAPA 1.0 spreadsheet body is deliberately excluded:
+   user-entered cell fills and conditional STATUS colors remain exact.
+   ========================================================= */
+.app-shell.structural-dark{
+  --site-bg:#111922;--site-panel:#1d2832;--site-raised:#283641;
+  --site-border:#3e525e;--site-text:#e6eef2;--site-muted:#adbdc6;
+  background:var(--site-bg);color:var(--site-text);
+}
+html.costalog-dark, html.costalog-dark body, html.costalog-dark #root{
+  background:#111922;color:#e6eef2;
+}
+.app-shell.structural-dark .main,
+.app-shell.structural-dark .content,
+.app-shell.structural-dark .content:not(.map-content){
+  background:#111922!important;color:#e6eef2;
+}
+.app-shell.structural-dark .page-heading h1,
+.app-shell.structural-dark .section-intro h2,
+.app-shell.structural-dark .panel:not(.mapa-grid-panel) h2,
+.app-shell.structural-dark .panel:not(.mapa-grid-panel) h3,
+.app-shell.structural-dark .quick-panel h3,
+.app-shell.structural-dark .next-step b,
+.app-shell.structural-dark .feature-row b,
+.app-shell.structural-dark .password-section h3,
+.app-shell.structural-dark .profile-role strong,
+.app-shell.structural-dark .column-picker-actions b{
+  color:#eef6f9!important;
+}
+.app-shell.structural-dark .page-heading p,
+.app-shell.structural-dark .page-heading .eyebrow,
+.app-shell.structural-dark .section-intro p,
+.app-shell.structural-dark .section-intro .eyebrow,
+.app-shell.structural-dark .panel:not(.mapa-grid-panel) .panel-heading p,
+.app-shell.structural-dark .quick-panel p,
+.app-shell.structural-dark .next-step p,
+.app-shell.structural-dark .feature-row p,
+.app-shell.structural-dark .validation-footnote,
+.app-shell.structural-dark .profile-role small,
+.app-shell.structural-dark .app-footer{
+  color:var(--site-muted)!important;
+}
+/* Surfaces and cards outside the operational cells. */
+.app-shell.structural-dark .panel:not(.mapa-grid-panel),
+.app-shell.structural-dark .overview-card,
+.app-shell.structural-dark .metric-card,
+.app-shell.structural-dark .status-card,
+.app-shell.structural-dark .next-step,
+.app-shell.structural-dark .feature-row,
+.app-shell.structural-dark .quick-panel,
+.app-shell.structural-dark .empty-state,
+.app-shell.structural-dark .column-picker{
+  background:var(--site-panel)!important;
+  border-color:var(--site-border)!important;color:var(--site-text)!important;
+}
+.app-shell.structural-dark .overview-card strong,
+.app-shell.structural-dark .metric-card strong{
+  color:#f4fafc!important;
+}
+.app-shell.structural-dark .overview-card span,
+.app-shell.structural-dark .overview-card small,
+.app-shell.structural-dark .metric-top,
+.app-shell.structural-dark .metric-card small,
+.app-shell.structural-dark .status-card small,
+.app-shell.structural-dark .column-options label{
+  color:var(--site-muted)!important;
+}
+.app-shell.structural-dark .status-card b{color:#e9f2f5}
+.app-shell.structural-dark .status-card:hover{background:#2d3d45!important}
+.app-shell.structural-dark .feature-icon,
+.app-shell.structural-dark .next-icon{
+  background:#32483c!important;color:#b4e8bf!important;
+}
+.app-shell.structural-dark .feature-state{
+  background:#3d392e;color:#f3dba1;
+}
+.app-shell.structural-dark .feature-state.connected,
+.app-shell.structural-dark .validation-ok{
+  background:#264637!important;color:#b7eec5!important;
+}
+.app-shell.structural-dark .validation-warning{
+  background:#453421!important;color:#ffe1a7!important;
+}
+.app-shell.structural-dark .validation-row{
+  border-bottom-color:var(--site-border);
+}
+.app-shell.structural-dark .validation-field small,
+.app-shell.structural-dark .validation-row>span{color:var(--site-muted)}
+.app-shell.structural-dark .profile-form label,
+.app-shell.structural-dark .create-user-form label,
+.app-shell.structural-dark .profile-role{color:#d4e4eb}
+.app-shell.structural-dark .profile-role,
+.app-shell.structural-dark .password-section{border-color:var(--site-border)}
+.app-shell.structural-dark .notice:not(.api-error){
+  border-color:#536a51;background:#26372c!important;color:#d9edd8!important;
+}
+.app-shell.structural-dark .notice button{color:#c5dfce}
+.app-shell.structural-dark .api-error{
+  background:#402a2b!important;color:#ffd5d5!important;border:1px solid #7e494c!important;
+}
+.app-shell.structural-dark .primary:not(:disabled){
+  background:#316d4c;color:#fff;border-color:#316d4c;
+}
+.app-shell.structural-dark .secondary,
+.app-shell.structural-dark .column-picker .secondary,
+.app-shell.structural-dark .panel:not(.mapa-grid-panel) button:not(.primary):not(.status-card),
+.app-shell.structural-dark .column-picker-actions button{
+  background:#293944;color:#ecf3f5;border-color:#4c626d;
+}
+.app-shell.structural-dark .secondary:hover,
+.app-shell.structural-dark .panel:not(.mapa-grid-panel) button:not(.primary):hover{
+  background:#374d59;
+}
+.app-shell.structural-dark .content:not(.map-content) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
+.app-shell.structural-dark .modal-backdrop :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
+.app-shell.structural-dark .column-picker input:not([type="checkbox"]){
+  color:#eaf2f5!important;background:#273640!important;border-color:#506775!important;
+  color-scheme:dark;
+}
+.app-shell.structural-dark input::placeholder,
+.app-shell.structural-dark textarea::placeholder{
+  color:#a4bbc5!important;
+}
+.app-shell.structural-dark :is(input,select,textarea,button):focus-visible{
+  outline:2px solid #77ade5;outline-offset:1px;
+}
+/* All non-operational data tables, including users and validation. */
+.app-shell.structural-dark .content:not(.map-content) table:not(.sheet-table){
+  background:#1d2832;color:#e8f1f5;
+}
+.app-shell.structural-dark .content:not(.map-content) table:not(.sheet-table) th{
+  background:#2a3b48!important;color:#e0ecf2!important;
+  border-color:#465c69!important;
+}
+.app-shell.structural-dark .content:not(.map-content) table:not(.sheet-table) td{
+  background:#1d2832;color:#e7eff2;border-color:#3d525e!important;
+}
+.app-shell.structural-dark .content:not(.map-content) table:not(.sheet-table) tbody tr:hover td{
+  background:#293b46!important;
+}
+.app-shell.structural-dark .content:not(.map-content) .table-wrap,
+.app-shell.structural-dark .content:not(.map-content) .table-footer{
+  border-color:#405460;color:#acbdc7;
+}
+/* Settings, history, pickers, confirmation windows and sheet chrome. */
+.app-shell.structural-dark .history-modal,
+.app-shell.structural-dark .modal:not(.sheet-paste-modal),
+.app-shell.structural-dark .sheet-filter-popover,
+.app-shell.structural-dark .sheet-context-menu,
+.app-shell.structural-dark .sheet-picker-popover{
+  background:#222f3a!important;color:#edf5f8!important;
+  border-color:#516571!important;
+}
+.app-shell.structural-dark .history-modal h2,
+.app-shell.structural-dark .history-modal header p,
+.app-shell.structural-dark .history-list article,
+.app-shell.structural-dark .history-list article p,
+.app-shell.structural-dark .history-meta time{
+  color:#e1edf2!important;border-color:#415967!important;
+}
+.app-shell.structural-dark .history-modal>header,
+.app-shell.structural-dark .history-list article{border-color:#415967}
+.app-shell.structural-dark .sheet-filter-popover :is(button,input,select),
+.app-shell.structural-dark .sheet-context-menu button,
+.app-shell.structural-dark .sheet-picker-popover button:not(.sheet-picker-swatch){
+  color:#edf5f8;background:#30414d;border-color:#526873;
+}
+.app-shell.structural-dark .sheet-context-menu button:hover,
+.app-shell.structural-dark .sheet-filter-popover button:hover{
+  background:#415663;
+}
+.app-shell.structural-dark .sheet-context-menu button.danger{color:#ffc2bd}
+.app-shell.structural-dark .sheet-filter-popover .sheet-filter-x{background:transparent}
+.app-shell.structural-dark .sheet-context-caption,
+.app-shell.structural-dark .sheet-filter-popover small{color:#aebec8}
+.app-shell.structural-dark .column-picker,
+.app-shell.structural-dark .column-options,
+.app-shell.structural-dark .saved-view-item{
+  background:#222f3a!important;color:#e6eff3!important;border-color:#435864!important;
+}
+.app-shell.structural-dark .column-options label,
+.app-shell.structural-dark .saved-view-item span{color:#d9e6ea!important}
+/* BASE de cadastros, from the connected server or the safe local prototype. */
+.app-shell.structural-dark .bc-page,
+.app-shell.structural-dark .bc-head h2,
+.app-shell.structural-dark .bc-sheet-head h3,
+.app-shell.structural-dark .bc-add label{color:#e7f1f4!important}
+.app-shell.structural-dark .bc-head>div>span,
+.app-shell.structural-dark .bc-sheet-head p,
+.app-shell.structural-dark .bc-hint,
+.app-shell.structural-dark .bc-lists strong{color:#b4c5cb!important}
+.app-shell.structural-dark :is(.bc-lists,.bc-sheet,.bc-add,.bc-offline-demo){
+  background:#1d2b35!important;border-color:#405966!important;color:#e7f2f5!important;
+}
+.app-shell.structural-dark .bc-lists button,
+.app-shell.structural-dark .bc-tabs button{color:#c4d5df}
+.app-shell.structural-dark .bc-lists button:hover{background:#344853}
+.app-shell.structural-dark .bc-lists button.active,
+.app-shell.structural-dark .bc-tabs button.active{
+  background:#2a4d44!important;color:#c6f5d3!important;
+}
+.app-shell.structural-dark .bc-sheet-head>span,
+.app-shell.structural-dark .bc-status.is-active{
+  background:#284536;color:#bceccc;
+}
+.app-shell.structural-dark .bc-search,
+.app-shell.structural-dark .bc-table-wrap,
+.app-shell.structural-dark .bc-inline-edit input,
+.app-shell.structural-dark .bc-add-fields input{
+  background:#273944!important;border-color:#46606e!important;color:#e5f1f5!important;
+}
+.app-shell.structural-dark .bc-search input{background:transparent!important;color:#eaf3f6}
+.app-shell.structural-dark .bc-table th{background:#30434e!important;color:#eaf2f5!important}
+.app-shell.structural-dark .bc-table td,
+.app-shell.structural-dark .bc-table td:first-child{
+  background:#1c2a34!important;color:#deeaf0!important;border-color:#405662!important;
+}
+.app-shell.structural-dark .bc-table tr.inactive td{background:#252e36!important;color:#b3bcc4!important}
+.app-shell.structural-dark .bc-commands button,
+.app-shell.structural-dark .bc-outline,
+.app-shell.structural-dark .bc-inline-edit button{
+  background:#314752!important;color:#e6f3f5!important;border-color:#52707a!important;
+}
+.app-shell.structural-dark .bc-info,
+.app-shell.structural-dark .bc-notice{
+  background:#274238!important;border-color:#3f6a51!important;color:#cef2d6!important;
+}
+.app-shell.structural-dark .bc-error,
+.app-shell.structural-dark .bc-offline-notice{
+  background:#48352d!important;border-color:#896b3c!important;color:#ffe6b5!important;
+}
+/* BASE/import simulator uses its own stylesheet but shares the same theme. */
+.app-shell.structural-dark .basep-page,
+.app-shell.structural-dark .basep-head h2,
+.app-shell.structural-dark .basep-section-head h3{color:#e7f3f6!important}
+.app-shell.structural-dark .basep-head p,
+.app-shell.structural-dark .basep-section-head span{color:#b6c7d0!important}
+.app-shell.structural-dark :is(.basep-list-nav,.basep-detail,.basep-import,.basep-panel){
+  background:#1d2b35!important;color:#e3eff3!important;border-color:#435864!important;
+}
+.app-shell.structural-dark .basep-list-nav button{color:#c3d7df!important}
+.app-shell.structural-dark .basep-list-nav button.active{
+  background:#2a4d44!important;color:#c3f2d3!important;
+}
+.app-shell.structural-dark .basep-list-nav button:hover:not(.active){background:#2d3e49!important}
+.app-shell.structural-dark .basep-list-nav small,
+.app-shell.structural-dark .basep-section-head .basep-counter{
+  background:#2f4b44!important;color:#d1f6dd!important;
+}
+.app-shell.structural-dark .basep-banner,
+.app-shell.structural-dark .basep-safety,
+.app-shell.structural-dark .basep-linked{
+  background:#283f34!important;color:#d5f1db!important;border-color:#3e6751!important;
+}
+.app-shell.structural-dark .basep-banner span,
+.app-shell.structural-dark .basep-muted{color:#b4c7bf!important}
+.app-shell.structural-dark .basep-tabs{border-color:#425864}
+.app-shell.structural-dark .basep-tabs button{color:#b9cdd4}
+.app-shell.structural-dark .basep-tabs button.active{color:#9ee8b5}
+.app-shell.structural-dark .basep-table-wrap,
+.app-shell.structural-dark .basep-search,
+.app-shell.structural-dark .basep-panel,
+.app-shell.structural-dark .basep-paste{
+  background:#243540!important;color:#e3f0f4!important;border-color:#496370!important;
+}
+.app-shell.structural-dark .basep-table,
+.app-shell.structural-dark .basep-table td{background:#202f39!important;color:#e5f0f5!important;border-color:#445966!important}
+.app-shell.structural-dark .basep-table th{background:#30434f!important;color:#edf6fa!important}
+.app-shell.structural-dark .basep-table tbody tr:nth-child(even) td{background:#283944!important}
+.app-shell.structural-dark .basep-table-actions button,
+.app-shell.structural-dark .basep-actions button:not(.basep-primary){
+  background:#2b414e!important;color:#e4f2f6!important;border-color:#506c79!important;
+}
+/* Signed-out access & request forms, independent from the app-shell. */
+.auth-layout.structural-dark{background:#121a23;color:#e7f0f4}
+.auth-layout.structural-dark .auth-intro{
+  background:linear-gradient(145deg,#091b18 0%,#102e29 70%,#1b352d 100%);
+}
+.auth-layout.structural-dark .auth-content{background:#121a23}
+.auth-layout.structural-dark .auth-card{
+  background:#1e2b35;border-color:#47606c;color:#e7f2f5;
+  box-shadow:0 20px 65px rgb(0 0 0 / 25%);
+}
+.auth-layout.structural-dark .auth-card-heading h2{color:#f2f8fa}
+.auth-layout.structural-dark .auth-card-heading p,
+.auth-layout.structural-dark .auth-copyright{color:#b4c5ce}
+.auth-layout.structural-dark .auth-tabs{background:#293944}
+.auth-layout.structural-dark .auth-tabs button{color:#b8cbd4}
+.auth-layout.structural-dark .auth-tabs button.selected{
+  background:#39515c;color:#f3fafc;box-shadow:none;
+}
+.auth-layout.structural-dark .auth-form label{color:#dcebf1}
+.auth-layout.structural-dark .auth-form input{
+  background:#263943;color:#edf6f9;border-color:#56707c;color-scheme:dark;
+}
+.auth-layout.structural-dark .auth-form input::placeholder{color:#a4b9c4}
+.auth-layout.structural-dark .auth-note,
+.auth-layout.structural-dark .auth-diagnostics p{color:#bdcfd7}
+.auth-layout.structural-dark .auth-diagnostics{border-color:#405663}
+.auth-layout.structural-dark .auth-diagnostic-button,
+.auth-layout.structural-dark .auth-diagnostics a{color:#a7d6c3}
+.auth-layout.structural-dark .auth-success{
+  background:#284535;color:#d7f7dc;border-color:#447653;
+}
+.auth-layout.structural-dark .auth-error{
+  background:#4b2e32;color:#ffd1d1;border-color:#91525a;
+}
+.auth-layout{position:relative}
+.auth-theme-toggle{
+  position:absolute;top:20px;right:20px;z-index:3;min-width:112px;
+}
+.auth-layout.structural-dark .auth-theme-toggle{
+  background:#314650;color:#e7f4f8;border-color:#5b737e;
+}
+/* Dropdown editors are portaled to body, so the root class styles them too. */
+html.costalog-dark .sheet-cell-options{
+  background:#25343e;color:#e7f2f6;border-color:#546a76;
+}
+html.costalog-dark .sheet-cell-option{
+  background:#25343e;color:#edf6f9;
+}
+html.costalog-dark .sheet-cell-option:hover,
+html.costalog-dark .sheet-cell-option.highlighted{
+  background:#385467;
+}
+html.costalog-dark .sheet-cell-no-options,
+html.costalog-dark .sheet-cell-option-clear{color:#bbcad4}
+html.costalog-dark .sheet-cell-options-error{background:#532f30;color:#ffd9d9}
+@media(max-width:700px){
+  .auth-theme-toggle{right:14px;top:12px;min-width:auto}
+  .auth-theme-toggle span{display:none}
+}
