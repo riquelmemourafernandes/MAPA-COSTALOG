@@ -1061,8 +1061,12 @@ export default function App() {
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault(); searchInputRef.current?.focus(); searchInputRef.current?.select();
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'h' && active === 'MAPA 2.0') {
+        event.preventDefault(); setShowFindReplace(true);
       } else if (event.key === 'Escape' && !typing) {
-        setQuery(''); setFilterColumn(''); setFilterValue(''); setStatus(''); setPage(1);
+        setOpenTopMenu(null);
+        if (showFindReplace) setShowFindReplace(false);
+        else { setQuery(''); setFilterColumn(''); setFilterValue(''); setStatus(''); setPage(1); }
       } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'n' && active === 'MAPA 2.0' && userRole !== 'CONSULTA') {
         event.preventDefault(); void createRow();
       }
