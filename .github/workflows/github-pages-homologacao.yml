@@ -1,4 +1,4 @@
-name: MAPA 2.0 - GitHub Pages Homologacao
+name: MAPA Costalog - GitHub Pages (demonstração local)
 
 on:
   push:
@@ -6,6 +6,8 @@ on:
       - feat/roadmap-phase1-filters
     paths:
       - 'src/**'
+      - 'docs/**'
+      - 'README.md'
       - 'public/**'
       - 'index.html'
       - 'package.json'
@@ -19,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: mapa-costalog-pages-homologacao
+  group: mapa-costalog-pages-public
   cancel-in-progress: true
 
 jobs:
@@ -27,7 +29,7 @@ jobs:
     if: github.ref == 'refs/heads/feat/roadmap-phase1-filters'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout homologation branch
+      - name: Checkout project branch
         uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -41,10 +43,8 @@ jobs:
       - name: Install frontend dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Build Pages preview against staging API only
+      - name: Build static Pages demo without external API
         run: npm run build -- --mode github-pages
-        env:
-          VITE_HOMOLOG_API_URL: https://mapa-costalog-api-homologacao.onrender.com
 
       - name: Verify Pages base path and compiled output
         shell: bash
@@ -69,12 +69,11 @@ jobs:
       contents: read
       pages: write
       id-token: write
-    # Use a separate environment so the homologation branch is not blocked
-    # by branch restrictions on the default github-pages environment.
+    # This is only the GitHub Pages deployment environment; the app has no backend.
     environment:
-      name: github-pages-homologacao
+      name: github-pages-public
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy homologation website to GitHub Pages
+      - name: Deploy public local demo to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
