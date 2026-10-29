@@ -2105,6 +2105,13 @@ export default function App() {
       return;
     }
     if (!selectedPosition && placeholderPosition && sheetCanvas) {
+      const column=visibleColumns[placeholderPosition.column];
+      if(event.key===' '&&column&&
+        customCheckboxCells[customCheckboxKey(placeholderPosition.row+2,column.key)]){
+        event.preventDefault();
+        toggleCustomCheckbox(placeholderPosition.row+2,column,true);
+        return;
+      }
       const action=gridKeyboardAction(event.key,false);
       if(action==='move'){
         event.preventDefault();
@@ -2127,14 +2134,18 @@ export default function App() {
     if (!selectedPosition) return;
     const keyboardColumn = visibleColumns[selectedPosition.column];
     const keyboardRow = displayedRows[selectedPosition.row];
-    if (event.key === ' ' && keyboardColumn && keyboardRow &&
-        isCheckboxColumn(keyboardColumn.key, keyboardColumn.dataType)) {
-      event.preventDefault();
-      if (keyboardColumn.editable && userRole !== 'CONSULTA') {
-        void saveCell(keyboardRow, keyboardColumn,
-          checkboxSaveText(!checkboxChecked(keyboardRow.data?.[keyboardColumn.key])));
+    if (event.key === ' ' && keyboardColumn && keyboardRow) {
+      const pos=Number(keyboardRow.sheetRowNumber??keyboardRow.sequence+1);
+      const custom=Boolean(customCheckboxCells[customCheckboxKey(pos,keyboardColumn.key)]);
+      if(custom||isCheckboxColumn(keyboardColumn.key,keyboardColumn.dataType)){
+        event.preventDefault();
+        if(keyboardColumn.editable&&userRole!=='CONSULTA'){
+          const next=!checkboxChecked(keyboardRow.data?.[keyboardColumn.key]);
+          if(custom)toggleCustomCheckbox(pos,keyboardColumn,next);
+          else void saveCell(keyboardRow,keyboardColumn,checkboxSaveText(next));
+        }
+        return;
       }
-      return;
     }
     if(event.key==='Delete'||event.key==='Backspace'){
       event.preventDefault();void clearGridSelection();return;
@@ -2947,16 +2958,20 @@ export default function App() {
                       const chosen=placeholderPosition?.row===index&&placeholderPosition.column===ci;
                       const selectedColumn=selectionMode==='column'&&selectedColumnKey===column.key;
                       const editing=blankEditing?.index===index&&blankEditing.columnKey===column.key;
+                      const customCheckbox=Boolean(customCheckboxCells[customCheckboxKey(index+2,column.key)]);
                       const loaded=loadedGridChunksRef.current.has(Math.floor(index/100));
                       const ready=gridRangeSupported===true&&loaded&&column.editable&&userRole!=='CONSULTA';
                       return <td key={column.key}
                         className={'sheet-placeholder-cell '+(chosen?'selected-cell ':'')+
+                          (customCheckbox?'sheet-boolean-cell ':'')+
                           (selectedColumn||selectedBlankRow===index?'sheet-range-cell ':'')+
                           (ready?'editable-cell ':'')}
                         aria-selected={chosen||selectedColumn||selectedBlankRow===index}
-                        onClick={()=>selectBlankCell(index,ci,Boolean(BASE_COLUMN_LIST[column.key]))}
-                        onDoubleClick={()=>selectBlankCell(index,ci,true)}
-                        title={ready?'Clique, digite ou pressione Enter para preencher.':'Aguardando carregamento da grade'}>
+                        onClick={()=>selectBlankCell(index,ci,!customCheckbox&&Boolean(BASE_COLUMN_LIST[column.key]))}
+                        onDoubleClick={()=>{if(!customCheckbox)selectBlankCell(index,ci,true);}}
+                        onContextMenu={event=>{selectBlankCell(index,ci);openSheetContext(event,'cell',undefined,ci);}}
+                        title={customCheckbox?'Marque ou desmarque a caixa de seleção':
+                          ready?'Clique, digite ou pressione Enter para preencher.':'Aguardando carregamento da grade'}>
                         {editing ? BASE_COLUMN_LIST[column.key] ?
                           <SheetDropdownEditor columnKey={column.key}
                             rowLabel={column.label+' linha '+(index+2)}
@@ -2980,6 +2995,19 @@ export default function App() {
                                     event.key,event.shiftKey);
                                 }
                               }}/>
+                          : customCheckbox ? <span data-grid-empty-row={index}
+                              data-grid-empty-column={ci} tabIndex={chosen?0:-1}
+                              className="sheet-boolean-wrapper" role="gridcell"
+                              aria-label={'Caixa de seleção '+column.key+(index+2)}>
+                              <input type="checkbox" className="sheet-value-checkbox"
+                                aria-label={'Marcar '+column.key+(index+2)}
+                                checked={false} disabled={userRole==='CONSULTA'}
+                                onClick={event=>event.stopPropagation()}
+                                onChange={event=>{
+                                  selectBlankCell(index,ci);
+                                  toggleCustomCheckbox(index+2,column,event.target.checked);
+                                }}/>
+                            </span>
                           : <span data-grid-empty-row={index} data-grid-empty-column={ci}
                               tabIndex={chosen?0:-1} role="gridcell"
                               aria-label={column.key+(index+2)+' vazio'}
@@ -3025,7 +3053,9 @@ export default function App() {
                       ci >= selectedBounds.left && ci <= selectedBounds.right);
                     const editable = Boolean(token && userRole !== 'CONSULTA' && column.editable);
                     const lookup = Boolean(BASE_COLUMN_LIST[column.key]);
-                    const checkbox = isCheckboxColumn(column.key, column.dataType);
+                    const position=Number(row.sheetRowNumber??row.sequence+1);
+                    const customCheckbox=Boolean(customCheckboxCells[customCheckboxKey(position,column.key)]);
+                    const checkbox = customCheckbox||isCheckboxColumn(column.key, column.dataType);
                     const style = effectiveCellStyle(row,column);
                     const displayFormat = LOCKED_COLUMN_FORMAT[column.key] ||
                       style.format || (column.dataType === 'currency' ? 'currency' :
@@ -3065,7 +3095,8 @@ export default function App() {
                               onClick={event => event.stopPropagation()}
                               onChange={event => {
                                 selectGridCell(ri, ci, false);
-                                void saveCell(row, column, checkboxSaveText(event.target.checked));
+                                if(customCheckbox)toggleCustomCheckbox(position,column,event.target.checked);
+                                else void saveCell(row, column, checkboxSaveText(event.target.checked));
                               }}/>
                           </span>
                         ) : editingCell?.rowId === row.id && editingCell.columnKey === column.key ? (
