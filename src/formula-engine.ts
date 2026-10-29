@@ -20,7 +20,7 @@ const FORMULA_ALIASES: Record<string, string> = {
   'EXT.TEXTO': 'MID', 'NÚM.CARACT': 'LEN', MAIÚSCULA: 'UPPER', MINÚSCULA: 'LOWER',
   ARRUMAR: 'TRIM', VALOR: 'VALUE', 'ÉCÉL.VAZIA': 'ISBLANK', 'ÉNÚM': 'ISNUMBER',
   'ÉTEXTO': 'ISTEXT', 'ÉERROS': 'ISERROR', SUBSTITUIR: 'SUBSTITUTE',
-  LOCALIZAR: 'FIND', PROCURAR: 'SEARCH'
+  LOCALIZAR: 'FIND', PROCURAR: 'SEARCH', PROCV: 'VLOOKUP', PROCH: 'HLOOKUP', 'ÍNDICE': 'INDEX', CORRESP: 'MATCH'
 };
 export function columnKeyToIndex(key: string): number {
   let n = 0; for (const char of key.toUpperCase()) { const c = char.charCodeAt(0); if (c < 65 || c > 90) return -1; n = n * 26 + c - 64; } return n - 1;
@@ -74,7 +74,7 @@ class Parser {
   private postfix(): Node { let n = this.primary(); while (this.accept('%')) n = { kind: 'postfix', operator: '%', child: n }; return n; }
   private primary(): Node {
     const t = this.take();
-    if (t.kind === 'number') return { kind: 'literal', value: Number(t.value) };
+    if (t.kind === 'number') return { kind: 'literal', value: Number(t.value.replace(',', '.')) };
     if (t.kind === 'string') return { kind: 'literal', value: t.value };
     if (t.value === '(') { const n = this.compare(); if (!this.accept(')')) throw Error('Expected )'); return n; }
     if (t.kind === 'identifier') {
@@ -183,6 +183,60 @@ function evalNode(n: Node, ctx: Context): FormulaValue | FormulaValue[] {
       case 'YEAR': case 'MONTH': case 'DAY': { const s = str(scalar(0)), date = new Date(s.length === 10 ? s + 'T00:00:00Z' : s); if (Number.isNaN(date.getTime())) return '#VALUE!'; return n.name === 'YEAR' ? date.getUTCFullYear() : n.name === 'MONTH' ? date.getUTCMonth() + 1 : date.getUTCDate(); }
       case 'TODAY': return new Date().toISOString().slice(0, 10);
       case 'NOW': return new Date().toISOString();
+      case 'INDEX': {
+        const source = n.args[0];
+        if (!source) return '#REF!';
+        if (source.kind === 'cell') return scalar(0);
+        if (source.kind !== 'range') return '#VALUE!';
+        const values = flatten(args[0]);
+        const width = Math.abs(columnKeyToIndex(source.end.column) - columnKeyToIndex(source.start.column)) + 1;
+        const height = Math.abs(source.end.row - source.start.row) + 1;
+        const row = Math.trunc(num(scalar(1))), col = Math.trunc(num(scalar(2) ?? 1));
+        if (row < 1 || col < 1 || row > height || col > width) return '#REF!';
+        return values[(row - 1) * width + col - 1] ?? null;
+      }
+      case 'MATCH': {
+        const source = n.args[1];
+        if (!source) return '#N/A';
+        const values = flatten(args[1]), target = scalar(0), mode = Math.trunc(num(scalar(2) ?? 0));
+        const equal = (a: FormulaValue, b: FormulaValue) => typeof a === 'number' && typeof b === 'number'
+          ? a === b : str(a).toLocaleLowerCase('pt-BR') === str(b).toLocaleLowerCase('pt-BR');
+        const exact = values.findIndex(value => equal(value, target));
+        if (exact >= 0) return exact + 1;
+        if (mode === 0) return '#N/A';
+        let candidate = -1;
+        values.forEach((value, index) => {
+          const a = num(value), b = num(target);
+          if (Number.isFinite(a) && Number.isFinite(b) && (mode > 0 ? a <= b : a >= b)) candidate = index;
+        });
+        return candidate >= 0 ? candidate + 1 : '#N/A';
+      }
+      case 'VLOOKUP': case 'HLOOKUP': {
+        const source = n.args[1];
+        if (!source || (source.kind !== 'range' && source.kind !== 'cell')) return '#VALUE!';
+        const values = flatten(args[1]);
+        const rowStart = source.kind === 'cell' ? source.row : Math.min(source.start.row, source.end.row);
+        const rowEnd = source.kind === 'cell' ? source.row : Math.max(source.start.row, source.end.row);
+        const colStart = source.kind === 'cell' ? columnKeyToIndex(source.column) : Math.min(columnKeyToIndex(source.start.column), columnKeyToIndex(source.end.column));
+        const colEnd = source.kind === 'cell' ? colStart : Math.max(columnKeyToIndex(source.start.column), columnKeyToIndex(source.end.column));
+        const width = colEnd - colStart + 1, height = rowEnd - rowStart + 1;
+        const index = Math.trunc(num(scalar(2))), approximate = scalar(3) === null ? false : num(scalar(3)) !== 0;
+        if (index < 1 || (n.name === 'VLOOKUP' ? index > width : index > height)) return '#REF!';
+        const target = scalar(0);
+        const equal = (a: FormulaValue, b: FormulaValue) => typeof a === 'number' && typeof b === 'number'
+          ? a === b : str(a).toLocaleLowerCase('pt-BR') === str(b).toLocaleLowerCase('pt-BR');
+        const count = n.name === 'VLOOKUP' ? height : width;
+        let found = -1, approximateFound = -1;
+        for (let item = 0; item < count; item++) {
+          const candidate = n.name === 'VLOOKUP' ? values[item * width] : values[item];
+          if (equal(candidate ?? null, target)) { found = item; break; }
+          if (approximate && num(candidate ?? null) <= num(target)) approximateFound = item;
+        }
+        if (found < 0) found = approximateFound;
+        if (found < 0) return '#N/A';
+        const offset = n.name === 'VLOOKUP' ? found * width + index - 1 : (index - 1) * width + found;
+        return values[offset] ?? null;
+      }
       case 'COUNTIF': case 'SUMIF': { const range = args[0] ? flatten(args[0]) : [], criteria = str(scalar(1)); const matching = range.map((v, i) => ({ v, i })).filter(({ v }) => matchesCriteria(v, criteria)); if (n.name === 'COUNTIF') return matching.length; const sumRange = args[2] ? flatten(args[2]) : range; return matching.reduce((sum, item) => sum + num(sumRange[item.i] ?? 0), 0); }
       default: return '#NAME?';
     }
