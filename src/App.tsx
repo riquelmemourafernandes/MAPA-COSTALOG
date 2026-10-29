@@ -82,6 +82,7 @@ export default function App() {
   const [selectedCell, setSelectedCell] = useState<{row: RecordRow; column: Column} | null>(null);
   const [editingCell, setEditingCell] = useState<{rowId: string; columnKey: string} | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [placeholderPosition, setPlaceholderPosition] = useState<GridPosition | null>(null);
   const [selectionAnchor, setSelectionAnchor] = useState<{rowId: string; columnKey: string} | null>(null);
   const [pastePreview, setPastePreview] = useState<{matrix: string[][]; start: GridPosition} | null>(null);
   const [pasteBusy, setPasteBusy] = useState(false);
@@ -500,6 +501,7 @@ export default function App() {
     const column = visibleColumns.findIndex(item => item.key === selectedCell.column.key);
     return row >= 0 && column >= 0 ? { row, column } : null;
   }, [displayedRows, visibleColumns, selectedCell]);
+  useEffect(() => { if (displayedRows.length > 0) setPlaceholderPosition(null); }, [displayedRows.length]);
   const selectedBounds = useMemo(() => {
     if (!selectedPosition) return null;
     const anchorRow = selectionAnchor ? displayedRows.findIndex(item => item.id === selectionAnchor.rowId) : -1;
@@ -546,6 +548,7 @@ export default function App() {
   function selectGridCell(rowIndex: number, columnIndex: number, extend = false, moveFocus = false) {
     const row = displayedRows[rowIndex], column = visibleColumns[columnIndex];
     if (!row || !column) return;
+    setPlaceholderPosition(null);
     if (!extend || !selectionAnchor) setSelectionAnchor({ rowId: row.id, columnKey: column.key });
     setSelectedCell({ row, column });
     if (moveFocus) {
@@ -559,7 +562,24 @@ export default function App() {
   function onGridKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const element = event.target as HTMLElement;
     if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(element.tagName) ||
-      !selectedPosition || pasteBusy || editingCell) return;
+      pasteBusy || editingCell) return;
+    if (!selectedPosition && placeholderPosition && displayedRows.length === 0) {
+      const action = gridKeyboardAction(event.key, false);
+      if (action === 'move') {
+        event.preventDefault();
+        const next = moveGridPosition(placeholderPosition, event.key, 12, visibleColumns.length, event.shiftKey);
+        setPlaceholderPosition(next);
+        const target = gridRef.current?.querySelector<HTMLElement>(
+          '[data-grid-empty-row="' + next.row + '"][data-grid-empty-column="' + next.column + '"]');
+        target?.focus({ preventScroll: true });
+        target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      } else if (action === 'edit' || (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.length === 1)) {
+        event.preventDefault();
+        setNotice('Esta linha é apenas visual. Clique em “Novo registro” para criar uma linha operacional antes de editar.');
+      }
+      return;
+    }
+    if (!selectedPosition) return;
     if (gridKeyboardAction(event.key, false) === 'edit') {
       event.preventDefault();
       beginCellEdit(selectedPosition.row, selectedPosition.column);
@@ -597,7 +617,10 @@ export default function App() {
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)) return;
     event.preventDefault();
     if (userRole === 'CONSULTA') { setApiError('Seu perfil permite apenas consultar a planilha.'); return; }
-    if (!selectedPosition || pasteBusy) return;
+    if (!selectedPosition || pasteBusy) {
+      if (placeholderPosition) setApiError('A linha selecionada é apenas visual. Crie um registro antes de colar.');
+      return;
+    }
     const matrix = parseClipboardGrid(event.clipboardData.getData('text/plain'));
     if (!canPasteMatrix(matrix, selectedPosition, displayedRows.length, visibleColumns.length, 200) ||
         matrix[0].length > 40) {
@@ -795,7 +818,10 @@ export default function App() {
           <div className="panel-heading compact-map-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>Planilha operacional · edite as células autorizadas diretamente na grade.</p></div><div className="panel-actions">{token && userRole !== 'CONSULTA' && <button className="primary" disabled={loading} onClick={()=>void createRow()}><Plus size={16}/> Novo registro</button>}<button className="secondary" onClick={()=>setColumnMenu(value=>!value)}><Columns3 size={16}/> Escolher colunas ({visibleColumns.length})</button></div></div>
           {columnMenu && <div className="column-picker"><div className="column-picker-actions"><b>Colunas exibidas e sequência</b><button className="secondary" onClick={()=>{const all=columns.map(c=>c.key);setVisibleKeys(all);localStorage.setItem(preferenceKey,JSON.stringify(all));void persistPreferences({visibleKeys:all});}}>Mostrar todas</button><button className="secondary" onClick={()=>{const defaults=columns.filter(c=>c.visible).map(c=>c.key);setVisibleKeys(defaults);localStorage.setItem(preferenceKey,JSON.stringify(defaults));void persistPreferences({visibleKeys:defaults});}}>Restaurar padrão</button></div><div className="column-options">{[...columns].sort((a,b)=>{const ai=visibleKeys.indexOf(a.key),bi=visibleKeys.indexOf(b.key);return ai<0?(bi<0?a.position-b.position:1):bi<0?-1:ai-bi}).map(column=><div className={"column-option "+(draggedColumn===column.key?"dragging":"")} key={column.key} draggable onDragStart={()=>setDraggedColumn(column.key)} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();if(draggedColumn)reorderColumn(draggedColumn,column.key);setDraggedColumn(null)}} onDragEnd={()=>setDraggedColumn(null)}><GripVertical size={15} className="drag-handle"/><input type="checkbox" checked={visibleKeys.includes(column.key)} onChange={()=>toggleColumn(column.key)}/><span>{column.label || '(coluna sem título)'}</span></div>)}</div><div className="saved-view-tools"><button className="secondary" onClick={()=>setShowViewTools(value=>!value)}><Filter size={14}/> Filtros personalizados</button>{showViewTools&&<div className="saved-view-editor"><div className="saved-view-save"><input value={viewName} onChange={event=>setViewName(event.target.value)} placeholder="Nome da configuração"/><button className="primary" onClick={()=>void saveCurrentView()}><Save size={14}/> Salvar filtro</button></div>{savedViews.map(view=><div className="saved-view-item" key={view.name}><button onClick={()=>applyView(view)}>{view.name}</button><small>{view.visibleKeys.length} colunas · {view.status||'Todos os status'}{view.query?' · busca: '+view.query:''}</small><button title="Excluir filtro" onClick={()=>{const next=savedViews.filter(item=>item.name!==view.name);setSavedViews(next);void persistPreferences({savedViews:next});}}><X size={14}/></button></div>)}</div>}</div></div>}<div className="toolbar"><div className="searchbox"><Search size={16}/><input ref={searchInputRef} value={query} onChange={e=>{setPage(1);setQuery(e.target.value)}} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="">Todos os status</option>{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><option key={value} value={value}>{value}</option>)}</select></div><div className="select-wrap"><Columns3 size={16}/><select aria-label="Filtrar por coluna" value={filterColumn} onChange={e=>{setPage(1);setFilterColumn(e.target.value)}}><option value="">Todas as colunas</option>{columns.map(column=><option key={column.key} value={column.key}>{column.label || column.key}</option>)}</select></div><input aria-label="Valor do filtro de coluna" className="column-filter-input" value={filterValue} onChange={e=>{setPage(1);setFilterValue(e.target.value)}} placeholder="Valor da coluna..."/><button className="secondary" onClick={()=>{setFilterColumn('');setFilterValue('');setColumnFilters({});setPage(1)}} disabled={!filterColumn&&!filterValue&&!Object.values(columnFilters).some(value=>value.trim())}>Limpar filtro</button><button className="secondary" disabled={!selectedCell} onClick={()=>selectedCell&&void openHistory(selectedCell.row,selectedCell.column)}><History size={14}/> Histórico da célula selecionada</button><button className="secondary" disabled={!selectedCell||userRole==='CONSULTA'} onClick={()=>updateSelectedStyle({bold:!cellStyles[selectedCell?styleKey(selectedCell.row,selectedCell.column):'']?.bold})}><Bold size={14}/> Negrito</button><label className="format-color" title="Cor do texto"><Palette size={14}/><input type="color" aria-label="Cor do texto" disabled={!selectedCell||userRole==='CONSULTA'} value={selectedCell?(cellStyles[styleKey(selectedCell.row,selectedCell.column)]?.color||'#47584e'):'#47584e'} onChange={event=>updateSelectedStyle({color:event.target.value})}/></label><label className="format-color" title="Cor de fundo"><PaintBucket size={14}/><input type="color" aria-label="Cor de fundo" disabled={!selectedCell||userRole==='CONSULTA'} value={selectedCell?(cellStyles[styleKey(selectedCell.row,selectedCell.column)]?.background||'#ffffff'):'#ffffff'} onChange={event=>updateSelectedStyle({background:event.target.value})}/></label>{token && userRole!=='CONSULTA' && <><button className="secondary" onClick={()=>setSelectedRowIds(previous=>Array.from(new Set([...previous,...displayedRows.map(row=>row.id)])))} disabled={!displayedRows.length}>Selecionar página</button><button className="secondary" onClick={()=>setSelectedRowIds([])} disabled={!selectedRowIds.length}>Limpar seleção ({selectedRowIds.length})</button><button className="primary" onClick={()=>setBulkOpen(true)} disabled={!selectedRowIds.length}><Save size={14}/> Editar selecionados</button></>}<span className="rows-count">{total} registros</span></div>
           <div className="sheet-action-strip">
-            <span className="sheet-address">{selectedPosition ? visibleColumns[selectedPosition.column].key + displayedRows[selectedPosition.row].sequence : 'Selecione uma célula'}</span>
+            <span className="sheet-address">{selectedPosition ? visibleColumns[selectedPosition.column].key + displayedRows[selectedPosition.row].sequence :
+              placeholderPosition && visibleColumns[placeholderPosition.column]
+                ? visibleColumns[placeholderPosition.column].key + (placeholderPosition.row + 1) + ' (visual)'
+                : 'Selecione uma célula'}</span>
             <span className="sheet-guide">Um clique seleciona · Enter desce · F2 ou duplo clique edita · Digitar substitui · Enter salva e desce</span>
             <button className="secondary" type="button" disabled={!selectedBounds} onClick={() => void copyGridSelection()}>Copiar seleção</button>
           </div>
@@ -907,9 +933,22 @@ export default function App() {
                 {!loading && displayedRows.length === 0 && Array.from({length: 12}, (_, index) =>
                   <tr className="sheet-placeholder-row" key={'placeholder-' + index} aria-label="Linha visual vazia, sem registro salvo">
                     <th scope="row" className="sheet-row-number">{index + 1}</th>
-                    {visibleColumns.map(column => <td key={column.key} className="sheet-placeholder-cell" aria-disabled="true">
-                      <span aria-hidden="true">&nbsp;</span>
-                    </td>)}
+                    {visibleColumns.map((column, ci) => {
+                      const chosen = placeholderPosition?.row === index && placeholderPosition.column === ci;
+                      return <td key={column.key} className={'sheet-placeholder-cell ' + (chosen ? 'selected-cell' : '')}
+                        aria-selected={chosen}
+                        onClick={() => {
+                          setSelectedCell(null);
+                          setPlaceholderPosition({row:index,column:ci});
+                          const element = gridRef.current?.querySelector<HTMLElement>(
+                            '[data-grid-empty-row="' + index + '"][data-grid-empty-column="' + ci + '"]');
+                          element?.focus({preventScroll:true});
+                        }}>
+                        <span data-grid-empty-row={index} data-grid-empty-column={ci} tabIndex={chosen ? 0 : -1}
+                          role="gridcell" aria-disabled="true"
+                          title="Linha visual ainda não salva; use Novo registro para cadastrar.">&nbsp;</span>
+                      </td>;
+                    })}
                   </tr>)}
               </tbody>
             </table>
