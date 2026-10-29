@@ -5,7 +5,9 @@ import SheetContextMenu from './SheetContextMenu.js';
 import {type SheetContextKind,type SheetContextAction} from './sheet-context-menu.js';
 import { SCROLL_BATCH_SIZE, normalizeCreateCount,
   normalizeRowHeight, mergeLoadedRows, shouldLoadNextBatch, virtualRowWindow,
-  sparseSheetWindow, SHEET_MAX_ROW, SHEET_DEFAULT_HEIGHT } from './sheet-layout.js';
+  sparseSheetWindow, SHEET_MAX_ROW, SHEET_DEFAULT_HEIGHT,
+  normalizeColumnWidth, totalSheetWidth, MIN_ROW_HEIGHT, MAX_ROW_HEIGHT,
+  MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH, DEFAULT_COLUMN_WIDTH, ROW_NUMBER_COLUMN_WIDTH } from './sheet-layout.js';
 import SheetColorPicker from './SheetColorPicker.js';
 import SheetDropdownEditor from './SheetDropdownEditor.js';
 import { BASE_COLUMN_LIST } from './sheet-dropdown-utils.js';
@@ -265,7 +267,7 @@ export default function App() {
       const data = JSON.parse(localStorage.getItem(rowHeightStorageKey) || '{}') as Record<string,unknown>;
       setRowHeights(Object.fromEntries(Object.entries(data)
         .filter((entry): entry is [string, number] => typeof entry[1] === 'number' &&
-          Number.isFinite(entry[1]) && entry[1] >= 32 && entry[1] <= 800)));
+          Number.isFinite(entry[1]) && entry[1] >= MIN_ROW_HEIGHT && entry[1] <= MAX_ROW_HEIGHT)));
     } catch { setRowHeights({}); }
   }, [rowHeightStorageKey]);
   useEffect(() => {
@@ -294,7 +296,8 @@ export default function App() {
     try {
       const saved = JSON.parse(localStorage.getItem(widthKey) || '{}') as Record<string, unknown>;
       setColumnWidths(Object.fromEntries(Object.entries(saved)
-        .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] >= 90 && entry[1] <= 520)));
+        .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]) &&
+          entry[1] >= MIN_COLUMN_WIDTH && entry[1] <= MAX_COLUMN_WIDTH)));
     } catch { setColumnWidths({}); }
   }, [widthKey]);
 
@@ -782,12 +785,20 @@ export default function App() {
     new Map(displayedRows.map((row,index)=>[row.id,index])),[displayedRows]);
   const sheetHeightOverrides = useMemo(()=>{
     const result:Record<number,number>={};
+    for(const [key,height] of Object.entries(rowHeights)){
+      if(!key.startsWith('slot:'))continue;
+      const position=Number(key.slice(5));
+      if(Number.isInteger(position)&&position>=2&&position<=SHEET_MAX_ROW)
+        result[position]=height;
+    }
     for(const [position,row] of sheetRecordsByRow){
-      const height=rowHeights[row.id];
-      if(height)result[position]=height;
+      if(result[position]===undefined && rowHeights[row.id]!==undefined)
+        result[position]=rowHeights[row.id];
     }
     return result;
   },[sheetRecordsByRow,rowHeights]);
+  const rowHeightAt=(position:number,row?:RecordRow):number =>
+    normalizeRowHeight(rowHeights['slot:'+position]??(row?rowHeights[row.id]:undefined)??SHEET_DEFAULT_HEIGHT);
   const windowed = useMemo(() => sheetCanvas
     ? sparseSheetWindow(gridViewport.scrollTop,gridViewport.height,sheetHeightOverrides)
     : virtualRowWindow(displayedRows.map(row=>rowHeights[row.id]||SHEET_DEFAULT_HEIGHT),
@@ -855,21 +866,23 @@ export default function App() {
       return !previous;
     });
   }
-  function beginRowResize(event: React.PointerEvent<HTMLSpanElement>, row: RecordRow) {
+  function beginRowResize(event: React.PointerEvent<HTMLSpanElement>, position:number, row?:RecordRow) {
     if(event.button!==0)return;
     event.preventDefault();event.stopPropagation();
-    const currentHeight=event.currentTarget.closest('tr')?.getBoundingClientRect().height ||
-      rowHeights[row.id] || 35;
+    const storageKey='slot:'+position;
+    const currentHeight=rowHeightAt(position,row);
     const startY=event.clientY;
     const move=(ev:PointerEvent)=>{
       const height=normalizeRowHeight(currentHeight+ev.clientY-startY);
-      setRowHeights(previous=>({...previous,[row.id]:height}));
+      setRowHeights(previous=>({...previous,[storageKey]:height}));
     };
     const end=()=>{
       window.removeEventListener('pointermove',move);
       window.removeEventListener('pointerup',end);
-      // The persisted state is only a per-user visual preference.
-      setRowHeights(previous=>{localStorage.setItem(rowHeightStorageKey,JSON.stringify(previous));return previous;});
+      setRowHeights(previous=>{
+        localStorage.setItem(rowHeightStorageKey,JSON.stringify(previous));
+        return previous;
+      });
     };
     window.addEventListener('pointermove',move);
     window.addEventListener('pointerup',end,{once:true});
@@ -1259,24 +1272,29 @@ export default function App() {
       return;
     }
     if(action==='resize-row' && currentRow){
-      const answer=window.prompt('Altura da linha em pixels (32 a 800):',
-        String(rowHeights[currentRow.id]||35));
+      const position=Number(currentRow.sheetRowNumber??currentRow.sequence+1);
+      const answer=window.prompt('Altura da linha em pixels (12 a 2000):',
+        String(rowHeightAt(position,currentRow)));
       if(answer===null)return;
       const n=Number(answer);
-      if(!Number.isInteger(n)||n<32||n>800){setApiError('Informe uma altura de 32 a 800 pixels.');return;}
+      if(!Number.isInteger(n)||n<MIN_ROW_HEIGHT||n>MAX_ROW_HEIGHT){
+        setApiError('Informe uma altura de '+MIN_ROW_HEIGHT+' a '+MAX_ROW_HEIGHT+' pixels.');return;
+      }
       setRowHeights(previous=>{
-        const next={...previous,[currentRow.id]:n};
+        const next={...previous,['slot:'+position]:n};
         localStorage.setItem(rowHeightStorageKey,JSON.stringify(next));
         return next;
       });
       return;
     }
     if(action==='resize-column' && currentColumn){
-      const answer=window.prompt('Largura da coluna em pixels (90 a 520):',
-        String(columnWidths[currentColumn.key]||180));
+      const answer=window.prompt('Largura da coluna em pixels (24 a 2400):',
+        String(columnWidths[currentColumn.key]??DEFAULT_COLUMN_WIDTH));
       if(answer===null)return;
       const n=Number(answer);
-      if(!Number.isInteger(n)||n<90||n>520){setApiError('Informe uma largura de 90 a 520 pixels.');return;}
+      if(!Number.isInteger(n)||n<MIN_COLUMN_WIDTH||n>MAX_COLUMN_WIDTH){
+        setApiError('Informe uma largura de '+MIN_COLUMN_WIDTH+' a '+MAX_COLUMN_WIDTH+' pixels.');return;
+      }
       setColumnWidths(previous=>{
         const next={...previous,[currentColumn.key]:n};
         localStorage.setItem(widthKey,JSON.stringify(next));
@@ -1605,7 +1623,7 @@ export default function App() {
     const startWidth = th?.getBoundingClientRect().width || 180;
     const startX = event.clientX;
     const onMove = (move: PointerEvent) => {
-      const width = Math.max(90, Math.min(520, Math.round(startWidth + move.clientX - startX)));
+      const width = normalizeColumnWidth(startWidth + move.clientX - startX);
       setColumnWidths(previous => ({ ...previous, [column.key]: width }));
     };
     const onUp = () => {
@@ -1839,10 +1857,12 @@ export default function App() {
           </div>
           <div className="table-wrap sheet-grid-wrap" ref={gridRef} tabIndex={0} onKeyDown={onGridKeyDown} onCopy={onGridCopy} onPaste={onGridPaste}
             onScroll={handleGridScroll}>
-            <table className="sheet-table" role="grid" aria-label="MAPA 2.0 - planilha operacional">
+            <table className="sheet-table" role="grid" aria-label="MAPA 2.0 - planilha operacional"
+              style={{width:totalSheetWidth(visibleColumns.map(col=>col.key),columnWidths)}}>
               <colgroup>
-                <col style={{width: 65}} />
-                {visibleColumns.map(column => <col key={column.key} style={{width: columnWidths[column.key] || 180}} />)}
+                <col style={{width:ROW_NUMBER_COLUMN_WIDTH}} />
+                {visibleColumns.map(column => <col key={column.key}
+                  style={{width:normalizeColumnWidth(columnWidths[column.key]??DEFAULT_COLUMN_WIDTH)}} />)}
               </colgroup>
               <thead>
                 <tr className="sheet-letters-row">
@@ -1894,7 +1914,7 @@ export default function App() {
                     className={'sheet-virtual-empty-row '+
                       (selectedBlankRow===index?'sheet-virtual-row-selected ':'')+
                       (selectionMode==='cell' && placeholderPosition?.row===index?'sheet-row-active ':'')}
-                    style={{height:SHEET_DEFAULT_HEIGHT}}>
+                    style={{height:rowHeightAt(index+2)}}>
                     <th scope="row" className={'sheet-row-number '+
                       (selectedBlankRow===index?'sheet-row-selected ':'')+
                       (selectionMode==='cell'&&placeholderPosition?.row===index?'sheet-row-active-header':'')}
@@ -1902,7 +1922,12 @@ export default function App() {
                         setSelectedRowId(null);setSelectedColumnKey(null);setSelectionAnchor(null);
                         setSelectedCell(null);setPlaceholderPosition({row:index,column:0});
                         setBlankEditing(null);gridRef.current?.focus({preventScroll:true});}}
-                      title={'Selecionar toda a linha '+(index+2)}>{index+2}</th>
+                      title={'Selecionar toda a linha '+(index+2)}>{index+2}
+                      <span className="sheet-row-resize-handle" role="separator"
+                        aria-label={'Arrastar para ajustar a altura da linha '+(index+2)}
+                        title="Arraste a borda inferior para mudar a altura"
+                        onPointerDown={event=>beginRowResize(event,index+2)}/>
+                    </th>
                     {visibleColumns.map((column,ci)=>{
                       const chosen=placeholderPosition?.row===index&&placeholderPosition.column===ci;
                       const selectedColumn=selectionMode==='column'&&selectedColumnKey===column.key;
@@ -1957,7 +1982,7 @@ export default function App() {
                     className={(selectedRowIds.includes(row.id)?'bulk-selected-row ':'')+
                       (selectionMode==='row'&&selectedRowIds.includes(row.id)?'sheet-whole-row-selected ':'')+
                       (selectionMode==='cell'&&selectedCell?.row.id===row.id?'sheet-row-active':'')}
-                    style={{height:normalizeRowHeight(rowHeights[row.id]||35)}}
+                    style={{height:rowHeightAt(Number(row.sheetRowNumber??ri+2),row)}}
                     data-status={String(row.data?.C ?? row.status ?? '')}>
                   <th scope="row" className={'sheet-row-number '+
                     (selectionMode==='row'&&selectedRowIds.includes(row.id)?'sheet-row-selected ':'')+
@@ -1975,7 +2000,8 @@ export default function App() {
                     <span className="sheet-row-resize-handle" role="separator"
                       aria-label={'Arrastar para ajustar altura da linha '+row.sequence}
                       title="Arraste para mudar a altura da linha"
-                      onPointerDown={event=>beginRowResize(event,row)}/>
+                      onPointerDown={event=>beginRowResize(event,
+                        Number(row.sheetRowNumber??ri+2),row)}/>
                   </th>
                   {visibleColumns.map((column, ci) => {
                     const selected = selectionMode === 'cell' && selectedPosition?.row === ri && selectedPosition.column === ci;
