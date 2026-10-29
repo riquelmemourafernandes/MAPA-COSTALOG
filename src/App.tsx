@@ -244,7 +244,13 @@ export default function App() {
     setGridViewport({scrollTop:node.scrollTop,height:node.clientHeight});
     return () => observer.disconnect();
   }, [active, token]);
-  useEffect(() => { setSelectedRowIds([]); }, [page, query, status, filterColumn, filterValue, columnFilters]);
+  // Infinite-scroll page loads must preserve row selection.
+  useEffect(() => {
+    setSelectedRowIds([]);
+    lastRequestedPageRef.current=0;
+    if(gridRef.current) gridRef.current.scrollTop=0;
+    setGridViewport(current=>({...current,scrollTop:0}));
+  }, [query,status,filterColumn,filterValue,columnFilters]);
   const selectedRows = rows.filter(row => selectedRowIds.includes(row.id));
   const editableColumns = columns.filter(column => column.editable);
   const preferenceKey = 'mapa-costalog-columns:' + userKey;
@@ -614,7 +620,7 @@ export default function App() {
     } finally { setBulkBusy(false); }
   }
   async function saveCell(row: RecordRow, column: Column, value: string): Promise<boolean> {
-    if (!apiBase || !token || !column.editable || userRole === 'CONSULTA') return false;
+    if (!apiBase || !token || !column.editable || userRole === 'CONSULTA' || gridMutationBusyRef.current) return false;
     const previousValue = valueText(row.data?.[column.key]);
     if (value === previousValue) return true;
     const parsed = LOCKED_COLUMN_FORMAT[column.key]
@@ -882,7 +888,7 @@ export default function App() {
 
   function beginCellEdit(rowIndex: number, columnIndex: number, replacement?: string) {
     const row = displayedRows[rowIndex], column = visibleColumns[columnIndex];
-    if (!row || !column || !token || userRole === 'CONSULTA' || !column.editable || editingBusyRef.current) return;
+    if (!row || !column || !token || userRole === 'CONSULTA' || !column.editable || editingBusyRef.current || gridMutationBusyRef.current) return;
     // Boolean columns are edited directly through checkboxes, never a text editor.
     if (isCheckboxColumn(column.key, column.dataType)) return;
     setSelectionAnchor({ rowId: row.id, columnKey: column.key });
