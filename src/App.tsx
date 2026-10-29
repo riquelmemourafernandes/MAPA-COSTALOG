@@ -145,6 +145,21 @@ function loadLocalDemoSheet(): { columns: Column[]; rows: RecordRow[]; total: nu
   return { columns: fallbackColumns, rows: fallbackRows, total: fallbackRows.length, maxSheetRowNumber: 25 };
 }
 const initialLocalDemoSheet = isGitHubPagesPreview ? loadLocalDemoSheet() : null;
+function parseCsvMatrix(input: string): string[][] {
+  const text = input.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const result: string[][] = []; let row: string[] = []; let field = ''; let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      if (quoted && text[i + 1] === '"') { field += '"'; i++; }
+      else quoted = !quoted;
+    } else if (char === ',' && !quoted) { row.push(field); field = ''; }
+    else if (char === '\n' && !quoted) { row.push(field); result.push(row); row = []; field = ''; }
+    else field += char;
+  }
+  if (field.length || row.length) { row.push(field); result.push(row); }
+  return result;
+}
 
 export default function App() {
   const [active, setActive] = useState('MAPA 2.0');
@@ -172,6 +187,7 @@ export default function App() {
   const cellSaveBusyRef = useRef(false);
   const gridMutationBusyRef = useRef(false);
   const editorRef = useRef<HTMLInputElement>(null);
+  const localCsvInputRef = useRef<HTMLInputElement>(null);
   const [token, setToken] = useState(() => isGitHubPagesPreview ? 'local-demo' : apiBase ? sessionStorage.getItem('mapa-costalog-token') || '' : '');
   const [userKey, setUserKey] = useState(() => isGitHubPagesPreview ? 'local-demo' : sessionStorage.getItem('mapa-costalog-user') || 'usuario');
   const [userRole, setUserRole] = useState(() => isGitHubPagesPreview ? 'ADMIN' : sessionStorage.getItem('mapa-costalog-role') || '');
