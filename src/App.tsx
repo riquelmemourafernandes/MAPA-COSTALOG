@@ -17,7 +17,7 @@ import {
   parseEditableValue, selectionBounds, serializeSelection, gridKeyboardAction, planClearSelection,
   type GridPosition
 } from './sheet-grid.js';
-import { Activity, Bell, Bold, GripVertical, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Menu, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound, ShieldCheck } from 'lucide-react';
+import { Activity, Bell, Bold, GripVertical, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Menu, Moon, Sun, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound, ShieldCheck } from 'lucide-react';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean; required?: boolean };
 type ValidationItem = { key: string; label: string; dataType: string; total: number; missing: number };
@@ -174,6 +174,15 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
     localStorage.getItem('mapa-costalog-sidebar-collapsed') === 'yes');
+  // Theme applies to the application chrome, never to operational cell colors.
+  const [structuralDarkMode,setStructuralDarkMode] = useState(() =>
+    localStorage.getItem('mapa-costalog-structural-dark') === 'yes');
+  function toggleStructuralDarkMode(){
+    setStructuralDarkMode(previous=>{
+      localStorage.setItem('mapa-costalog-structural-dark',previous?'no':'yes');
+      return !previous;
+    });
+  }
   const [newRowsCount, setNewRowsCount] = useState(10);
   const [newRowsOpen, setNewRowsOpen] = useState(false);
   const [creatingRows, setCreatingRows] = useState(false);
@@ -1086,10 +1095,24 @@ export default function App() {
       });
     }
   }
-  function selectEntireRow(rowIndex: number) {
+  function selectEntireRow(rowIndex: number,shift=false,additive=false) {
     const row = displayedRows[rowIndex], firstColumn = visibleColumns[0];
     if (!row || !firstColumn) return;
     setOpenFilterKey(null);
+    // The row number replaces selection checkboxes. Shift extends the row
+    // interval; Ctrl/Cmd toggles additional rows for bulk actions.
+    setSelectedRowIds(previous=>{
+      if(shift && selectedRowId){
+        const anchor=displayedRows.findIndex(item=>item.id===selectedRowId);
+        if(anchor>=0){
+          const start=Math.min(anchor,rowIndex),end=Math.max(anchor,rowIndex);
+          return Array.from(new Set([...previous,...displayedRows.slice(start,end+1).map(item=>item.id)]));
+        }
+      }
+      if(additive)return previous.includes(row.id)
+        ?previous.filter(id=>id!==row.id):[...previous,row.id];
+      return [row.id];
+    });
     setSelectionMode('row'); setSelectedRowId(row.id); setSelectedColumnKey(null);
     setSelectedBlankRow(null);
     setSelectionAnchor({rowId:row.id,columnKey:firstColumn.key});
@@ -1611,7 +1634,8 @@ export default function App() {
     </main>;
   }
   return <div className={'app-shell ' + (sidebarCollapsed ? 'sidebar-collapsed' : '') +
-      (active === 'MAPA 1.0' ? ' map-fullscreen' : '')}>
+      (active === 'MAPA 1.0' ? ' map-fullscreen' : '') +
+      (structuralDarkMode ? ' structural-dark' : '')}>
     <aside className="sidebar">
       <button type="button" className="sidebar-hide-button" title="Recolher menu"
         aria-label="Recolher menu lateral" onClick={toggleSidebar}>☰</button>
@@ -1625,7 +1649,14 @@ export default function App() {
       <header className="topbar"><button type="button" className="sidebar-toggle" title={sidebarCollapsed?'Mostrar menu':'Ocultar menu'}
           aria-label={sidebarCollapsed?'Mostrar menu lateral':'Ocultar menu lateral'}
           aria-expanded={!sidebarCollapsed} onClick={toggleSidebar}><Menu size={18}/></button>
-        <div className="breadcrumbs">Operações <span>/</span> <b>{active}</b></div><div className="top-actions">{token && <button className="secondary" onClick={logout}><LogOut size={15}/> Sair</button>}<button className="icon-button" title="Notificações"><Bell size={18}/></button><div className="avatar small">C</div></div></header>
+        <div className="breadcrumbs">Operações <span>/</span> <b>{active}</b></div><div className="top-actions">
+          <button type="button" className="structural-theme-toggle"
+            aria-label={structuralDarkMode?'Ativar modo claro da estrutura':'Ativar modo escuro da estrutura'}
+            title={structuralDarkMode?'Modo claro (estrutura)':'Modo escuro (estrutura)'}
+            aria-pressed={structuralDarkMode} onClick={toggleStructuralDarkMode}>
+            {structuralDarkMode?<Sun size={15}/>:<Moon size={15}/>}
+            <span>{structuralDarkMode?'Modo claro':'Modo escuro'}</span>
+          </button>{token && <button className="secondary" onClick={logout}><LogOut size={15}/> Sair</button>}<button className="icon-button" title="Notificações"><Bell size={18}/></button><div className="avatar small">C</div></div></header>
       <section className={'content ' + (active === 'MAPA 1.0' ? 'map-content' : '')}>
         {active !== 'MAPA 1.0' && <div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPERAÇÕES</div><h1>{active}</h1><p>Grade operacional completa, com colunas configuráveis para cada usuário.</p></div></div>}
         {active !== 'MAPA 1.0' && <div className="notice"><ClipboardList size={17}/><span>{apiBase ? (token ? notice : 'Entre com sua conta para acessar os dados reais.') : 'Configure VITE_API_URL para conectar a aplicação à API. Nenhum dado fictício será exibido.'}</span></div>}
@@ -1784,9 +1815,13 @@ export default function App() {
                 </tr>}
                 {renderedSlots.map(({row,ri,index}) => {
                   if(!row) return <tr key={'virtual-'+index}
-                    className={'sheet-virtual-empty-row '+(selectedBlankRow===index?'sheet-virtual-row-selected':'')}
+                    className={'sheet-virtual-empty-row '+
+                      (selectedBlankRow===index?'sheet-virtual-row-selected ':'')+
+                      (selectionMode==='cell' && placeholderPosition?.row===index?'sheet-row-active ':'')}
                     style={{height:SHEET_DEFAULT_HEIGHT}}>
-                    <th scope="row" className={'sheet-row-number '+(selectedBlankRow===index?'sheet-row-selected':'')}
+                    <th scope="row" className={'sheet-row-number '+
+                      (selectedBlankRow===index?'sheet-row-selected ':'')+
+                      (selectionMode==='cell'&&placeholderPosition?.row===index?'sheet-row-active-header':'')}
                       onClick={()=>{setSelectedBlankRow(index);setSelectionMode('row');
                         setSelectedRowId(null);setSelectedColumnKey(null);setSelectionAnchor(null);
                         setSelectedCell(null);setPlaceholderPosition({row:index,column:0});
@@ -1842,25 +1877,25 @@ export default function App() {
                       ? pendingRowStatus[row.id] : (row.data?.C ?? row.status)
                   );
                   const conditionalTextColor = conditionalBackground ? statusRowTextColor(conditionalBackground) : undefined;
-                  return <tr key={row.id} className={selectedRowIds.includes(row.id) ? 'bulk-selected-row' : ''}
+                  return <tr key={row.id}
+                    className={(selectedRowIds.includes(row.id)?'bulk-selected-row ':'')+
+                      (selectionMode==='row'&&selectedRowIds.includes(row.id)?'sheet-whole-row-selected ':'')+
+                      (selectionMode==='cell'&&selectedCell?.row.id===row.id?'sheet-row-active':'')}
                     style={{height:normalizeRowHeight(rowHeights[row.id]||35)}}
                     data-status={String(row.data?.C ?? row.status ?? '')}>
-                  <th scope="row" className={'sheet-row-number '+ (selectionMode === 'row' && selectedRowId===row.id ? 'sheet-row-selected' : '')}
+                  <th scope="row" className={'sheet-row-number '+
+                    (selectionMode==='row'&&selectedRowIds.includes(row.id)?'sheet-row-selected ':'')+
+                    (selectionMode==='cell'&&selectedCell?.row.id===row.id?'sheet-row-active-header':'')}
                     onContextMenu={event=>openSheetContext(event,'row',ri)}
                     onClick={event=>{
-                      if(!(event.target as HTMLElement).closest('input,button,.sheet-row-resize-handle'))
-                        selectEntireRow(ri);
+                      if(!(event.target as HTMLElement).closest('button,.sheet-row-resize-handle'))
+                        selectEntireRow(ri,event.shiftKey,event.ctrlKey||event.metaKey);
                     }}>
-                    {userRole !== 'CONSULTA' && <input type="checkbox" aria-label={'Marcar registro ' + row.sequence + ' para edição em massa'}
-                      checked={selectedRowIds.includes(row.id)}
-                      title="Marcar registro para edição em massa"
-                      onChange={event => setSelectedRowIds(previous => event.target.checked
-                        ? [...previous.filter(id => id !== row.id), row.id]
-                        : previous.filter(id => id !== row.id))} />}
                     <button className="sheet-row-select" type="button"
                       title={'Selecionar toda a linha ' + (sheetCanvas ? Number(row.sheetRowNumber??ri+2) : ri+2)}
                       aria-label={'Selecionar linha inteira ' + (sheetCanvas ? Number(row.sheetRowNumber??ri+2) : ri+2)}
-                      onClick={()=>selectEntireRow(ri)}>{sheetCanvas ? Number(row.sheetRowNumber??ri+2) : ri+2}</button>
+                      onClick={event=>{event.stopPropagation();selectEntireRow(ri,event.shiftKey,event.ctrlKey||event.metaKey);}}>
+                      {sheetCanvas ? Number(row.sheetRowNumber??ri+2) : ri+2}</button>
                     <span className="sheet-row-resize-handle" role="separator"
                       aria-label={'Arrastar para ajustar altura da linha '+row.sequence}
                       title="Arraste para mudar a altura da linha"
