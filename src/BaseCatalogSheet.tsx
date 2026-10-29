@@ -102,8 +102,8 @@ export default function BaseCatalogSheet({apiBase,token,userRole,onOpenMapa}:Pro
   return <section className="bc-page">
     <header className="bc-head"><div>
       <p>MAPA-COSTALOG / CADASTROS</p><h2>BASE de cadastros</h2>
-      <span>Uma planilha simples para alimentar os menus de seleção do MAPA 1.0.</span>
-    </div><button className="bc-outline" onClick={onOpenMapa}>Abrir MAPA 1.0</button></header>
+      <span>Uma planilha simples para alimentar os menus de seleção do MAPA 2.0.</span>
+    </div><button className="bc-outline" onClick={onOpenMapa}>Abrir MAPA 2.0</button></header>
     <nav className="bc-tabs" aria-label="Cadastros e importação">
       <button className={tab==="base"?"active":""} onClick={()=>setTab("base")}>BASE de cadastros</button>
       <button className={tab==="import"?"active":""} onClick={()=>setTab("import")}>Importação de testes</button>
