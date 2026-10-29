@@ -772,10 +772,15 @@ export default function App() {
         setRows(previous=>mergeLoadedRows(previous,body.items as RecordRow[]));
       }).catch(error=>{
         if(!controller.signal.aborted)setApiError(error instanceof Error?error.message:'Falha na grade.');
-      }).finally(()=>inFlightGridChunksRef.current.delete(chunk));
+      }).finally(()=>{
+        inFlightGridChunksRef.current.delete(chunk);
+        if(controller.signal.aborted && !loadedGridChunksRef.current.has(chunk)){
+          setGridViewport(previous=>({...previous}));
+        }
+      });
     }
     return ()=>controller.abort();
-  },[sheetCanvas,token,active,apiBase,windowed.start,windowed.end,gridRangeSupported]);
+  },[sheetCanvas,token,active,apiBase,windowed.start,windowed.end]);
   function handleGridScroll(event: React.UIEvent<HTMLDivElement>) {
     const node=event.currentTarget;
     setGridViewport({scrollTop:node.scrollTop,height:node.clientHeight});
@@ -1670,13 +1675,13 @@ export default function App() {
         </section>}
         {active === 'MAPA 1.0' && <>
         <section className="panel mapa-grid-panel">
-          <div className="panel-heading compact-map-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>Planilha operacional · edite as células autorizadas diretamente na grade.</p></div><div className="panel-actions">{token && userRole !== 'CONSULTA' && <>
+          <div className="panel-heading compact-map-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>Planilha operacional · edite as células autorizadas diretamente na grade.</p></div><div className="panel-actions">{token && userRole !== 'CONSULTA' && !sheetCanvas && <>
         <button className="primary" disabled={loading||creatingRows} onClick={()=>void createRow()} title="Inserir uma linha">
           <Plus size={16}/> Nova linha</button>
         <button className="secondary" onClick={()=>setNewRowsOpen(value=>!value)} disabled={creatingRows}
           title="Adicionar várias linhas de uma vez"><Plus size={14}/> Várias linhas</button>
       </>}<button className="secondary" onClick={()=>setColumnMenu(value=>!value)}><Columns3 size={16}/> Escolher colunas ({visibleColumns.length})</button></div></div>
-          {newRowsOpen && <div className="sheet-add-many">
+          {newRowsOpen && !sheetCanvas && <div className="sheet-add-many">
             <label>Adicionar linhas <input type="number" min={1} max={100} step={1}
               aria-label="Número de linhas para criar" value={newRowsCount}
               onChange={event=>setNewRowsCount(Number(event.target.value))}/></label>
@@ -2022,6 +2027,10 @@ export default function App() {
             </div>
           </div>}
           <footer className="table-footer"><span>{apiBase && token ? 'Dados do banco • edição individual com auditoria' : 'Sem dados de demonstração'}</span><span><span className="green-dot"/> {visibleColumns.length} coluna(s) selecionada(s)</span></footer>
+          {sheetCanvas && gridRangeSupported===false && <div className="sheet-grid-compat-alert" role="status">
+            A API conectada ainda não suporta as linhas virtuais editáveis.
+            Conecte a API de homologação atualizada para cadastrar diretamente na grade.
+          </div>}
           <div className="sheet-scroll-status" role="status">
             <span>{sheetCanvas
               ? 'Cabeçalho: linha 1 · '+(SHEET_MAX_ROW-1).toLocaleString('pt-BR')+
