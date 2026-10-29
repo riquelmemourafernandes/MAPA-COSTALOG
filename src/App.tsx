@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  canPasteMatrix, moveGridPosition, parseClipboardGrid,
+  parseEditableValue, selectionBounds, serializeSelection,
+  type GridPosition
+} from './sheet-grid.js';
 import { Activity, Bell, Bold, GripVertical, Palette, PaintBucket, ChevronDown, ClipboardList, Columns3, Filter, History, LayoutDashboard, LogOut, Plus, Save, Search, Settings2, Table2, Truck, Users, Waypoints, X, UserRound, ShieldCheck } from 'lucide-react';
 
 type Column = { key: string; label: string; position: number; dataType: string; editable: boolean; visible: boolean; required?: boolean };
@@ -39,6 +44,7 @@ export default function App() {
   const [bulkValue, setBulkValue] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const [token, setToken] = useState(() => apiBase ? sessionStorage.getItem('mapa-costalog-token') || '' : '');
   const [userKey, setUserKey] = useState(() => sessionStorage.getItem('mapa-costalog-user') || 'usuario');
   const [userRole, setUserRole] = useState(() => sessionStorage.getItem('mapa-costalog-role') || '');
@@ -72,6 +78,10 @@ export default function App() {
   const [viewName, setViewName] = useState('');
   const [showViewTools, setShowViewTools] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{row: RecordRow; column: Column} | null>(null);
+  const [selectionAnchor, setSelectionAnchor] = useState<{rowId: string; columnKey: string} | null>(null);
+  const [pastePreview, setPastePreview] = useState<{matrix: string[][]; start: GridPosition} | null>(null);
+  const [pasteBusy, setPasteBusy] = useState(false);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<{key:string; direction:'asc'|'desc'} | null>(null);
   const [cellStyles, setCellStyles] = useState<Record<string, CellStyle>>({});
@@ -93,6 +103,14 @@ export default function App() {
   const selectedRows = rows.filter(row => selectedRowIds.includes(row.id));
   const editableColumns = columns.filter(column => column.editable);
   const preferenceKey = 'mapa-costalog-columns:' + userKey;
+  const widthKey = 'mapa-costalog-widths:' + userKey;
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(widthKey) || '{}') as Record<string, unknown>;
+      setColumnWidths(Object.fromEntries(Object.entries(saved)
+        .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] >= 90 && entry[1] <= 520)));
+    } catch { setColumnWidths({}); }
+  }, [widthKey]);
 
   useEffect(() => {
     if (!apiBase || !token) return;
@@ -410,12 +428,11 @@ export default function App() {
     if (!apiBase || !token || !column.editable) return;
     const previousValue = valueText(row.data?.[column.key]);
     if (value === previousValue) return;
-    const parsedValue: unknown = value === '' ? null :
-      (column.dataType === 'number' || column.dataType === 'currency' ? Number(value.replace(',', '.')) :
-      column.dataType === 'boolean' ? value.toLocaleLowerCase('pt-BR') === 'true' || value.toLocaleLowerCase('pt-BR') === 'sim' : value);
-    if ((column.dataType === 'number' || column.dataType === 'currency') && value !== '' && !Number.isFinite(parsedValue as number)) {
-      setApiError('Informe um número válido na coluna ' + column.label + '.'); return;
+    const parsed = parseEditableValue(column.dataType, value);
+    if (!parsed.ok) {
+      setApiError(parsed.message + ' na coluna ' + column.label + '.'); return;
     }
+    const parsedValue = parsed.value;
     try {
       const response = await fetch(apiBase + '/api/v1/mapa/' + encodeURIComponent(row.id), {
         method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
@@ -467,6 +484,153 @@ export default function App() {
       return sortConfig.direction === 'asc' ? compared : -compared;
     });
   }, [rows, query, filterColumn, filterValue, columnFilters, visibleColumns, sortConfig]);
+
+  // Keyboard/grid operations only inspect the currently loaded page and never
+  // request hidden rows, bypass permissions or change operational data in tests.
+  const selectedPosition = useMemo(() => {
+    if (!selectedCell) return null;
+    const row = displayedRows.findIndex(item => item.id === selectedCell.row.id);
+    const column = visibleColumns.findIndex(item => item.key === selectedCell.column.key);
+    return row >= 0 && column >= 0 ? { row, column } : null;
+  }, [displayedRows, visibleColumns, selectedCell]);
+  const selectedBounds = useMemo(() => {
+    if (!selectedPosition) return null;
+    const anchorRow = selectionAnchor ? displayedRows.findIndex(item => item.id === selectionAnchor.rowId) : -1;
+    const anchorColumn = selectionAnchor ? visibleColumns.findIndex(item => item.key === selectionAnchor.columnKey) : -1;
+    return selectionBounds(
+      anchorRow >= 0 && anchorColumn >= 0 ? { row: anchorRow, column: anchorColumn } : selectedPosition,
+      selectedPosition
+    );
+  }, [selectedPosition, selectionAnchor, displayedRows, visibleColumns]);
+
+  function selectGridCell(rowIndex: number, columnIndex: number, extend = false, moveFocus = false) {
+    const row = displayedRows[rowIndex], column = visibleColumns[columnIndex];
+    if (!row || !column) return;
+    if (!extend || !selectionAnchor) setSelectionAnchor({ rowId: row.id, columnKey: column.key });
+    setSelectedCell({ row, column });
+    if (moveFocus) {
+      const target = gridRef.current?.querySelector<HTMLElement>(
+        '[data-grid-row="' + rowIndex + '"][data-grid-column="' + columnIndex + '"]'
+      );
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }
+  function onGridKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const element = event.target as HTMLElement;
+    if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(element.tagName) || !selectedPosition || pasteBusy) return;
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(event.key)) return;
+    event.preventDefault();
+    const next = moveGridPosition(selectedPosition, event.key, displayedRows.length, visibleColumns.length, event.shiftKey);
+    selectGridCell(next.row, next.column, event.shiftKey && event.key.startsWith('Arrow'), true);
+  }
+  function selectedGridText(): string {
+    if (!selectedBounds) return '';
+    return serializeSelection(selectedBounds, (row, column) =>
+      valueText(displayedRows[row]?.data?.[visibleColumns[column]?.key]));
+  }
+  function onGridCopy(event: React.ClipboardEvent<HTMLDivElement>) {
+    if (!selectedBounds || window.getSelection()?.toString()) return;
+    event.preventDefault();
+    event.clipboardData.setData('text/plain', selectedGridText());
+  }
+  async function copyGridSelection() {
+    if (!selectedBounds) return;
+    try {
+      await navigator.clipboard.writeText(selectedGridText());
+      setNotice('Seleção copiada para a área de transferência.');
+    } catch { setApiError('Não foi possível copiar. Selecione a célula e utilize Ctrl+C.'); }
+  }
+  function onGridPaste(event: React.ClipboardEvent<HTMLDivElement>) {
+    const element = event.target as HTMLElement;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)) return;
+    event.preventDefault();
+    if (userRole === 'CONSULTA') { setApiError('Seu perfil permite apenas consultar a planilha.'); return; }
+    if (!selectedPosition || pasteBusy) return;
+    const matrix = parseClipboardGrid(event.clipboardData.getData('text/plain'));
+    if (!canPasteMatrix(matrix, selectedPosition, displayedRows.length, visibleColumns.length, 200) ||
+        matrix[0].length > 40) {
+      setApiError('A colagem deve caber na página atual, ser retangular e conter no máximo 200 células (até 40 colunas por linha).');
+      return;
+    }
+    for (let offset = 0; offset < matrix[0].length; offset++) {
+      if (!visibleColumns[selectedPosition.column + offset]?.editable) {
+        setApiError('A seleção inclui coluna protegida. Nenhuma alteração foi aplicada.');
+        return;
+      }
+    }
+    for (let row = 0; row < matrix.length; row++) for (let column = 0; column < matrix[row].length; column++) {
+      const definition = visibleColumns[selectedPosition.column + column];
+      const parsed = parseEditableValue(definition.dataType, matrix[row][column]);
+      if (!parsed.ok) {
+        setApiError('Colagem inválida na coluna ' + definition.label + ': ' + parsed.message + '. Nenhuma alteração foi aplicada.');
+        return;
+      }
+    }
+    setApiError('');
+    setPastePreview({ matrix, start: selectedPosition });
+  }
+  async function applyGridPaste() {
+    if (!pastePreview || pasteBusy || !token || userRole === 'CONSULTA') return;
+    const { matrix, start } = pastePreview;
+    if (!canPasteMatrix(matrix, start, displayedRows.length, visibleColumns.length, 200)) return;
+    setPasteBusy(true);
+    let updated = 0;
+    try {
+      // One audited PATCH per row, sequentially, with optimistic concurrency.
+      for (let i = 0; i < matrix.length; i++) {
+        const row = displayedRows[start.row + i];
+        const changes: Record<string, string | number | boolean | null> = {};
+        for (let j = 0; j < matrix[i].length; j++) {
+          const column = visibleColumns[start.column + j];
+          if (!column?.editable) throw new Error('A colagem inclui coluna protegida.');
+          const parsed = parseEditableValue(column.dataType, matrix[i][j]);
+          if (!parsed.ok) throw new Error('Valor inválido em ' + column.label + '.');
+          if (valueText(row.data?.[column.key]) !== matrix[i][j]) changes[column.key] = parsed.value;
+        }
+        if (!Object.keys(changes).length) continue;
+        const response = await fetch(apiBase + '/api/v1/mapa/' + encodeURIComponent(row.id), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ changes, expectedUpdatedAt: row.updatedAt })
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body?.error?.message || 'Falha ao salvar a linha #' + row.sequence);
+        setRows(previous => previous.map(item => item.id === row.id ? body.item as RecordRow : item));
+        updated++;
+      }
+      setNotice('Colagem concluída: ' + updated + ' linha(s) atualizada(s), com histórico de auditoria.');
+      setApiError('');
+    } catch (error) {
+      setApiError('Colagem interrompida após ' + updated + ' linha(s) salva(s): ' +
+        (error instanceof Error ? error.message : 'Erro de gravação') + '. Atualize a grade antes de tentar novamente.');
+    } finally {
+      setPasteBusy(false);
+      setPastePreview(null);
+    }
+  }
+  function beginColumnResize(event: React.PointerEvent<HTMLSpanElement>, column: Column) {
+    if (event.button !== 0) return;
+    event.preventDefault(); event.stopPropagation();
+    const th = event.currentTarget.closest('th');
+    const startWidth = th?.getBoundingClientRect().width || 180;
+    const startX = event.clientX;
+    const onMove = (move: PointerEvent) => {
+      const width = Math.max(90, Math.min(520, Math.round(startWidth + move.clientX - startX)));
+      setColumnWidths(previous => ({ ...previous, [column.key]: width }));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setColumnWidths(previous => {
+        localStorage.setItem(widthKey, JSON.stringify(previous));
+        return previous;
+      });
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
+  }
+
   if (!token) {
     return <main className="auth-layout">
       <div className="auth-intro">
