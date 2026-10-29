@@ -1081,6 +1081,39 @@ export default function App() {
         }
         if(failed)throw new Error(failed.message+
           (completed.length?' '+completed.length+' linha(s) já confirmada(s) foram mantidas.':''));
+      }else if(entry.kind==='checkboxes'){
+        if(!isGitHubPagesPreview)throw new Error('Caixas personalizadas só podem ser desfeitas na demonstração local.');
+        const expected=direction==='undo'?entry.after:entry.before;
+        const desired=direction==='undo'?entry.before:entry.after;
+        if(entry.keys.some(key=>Boolean(customCheckboxCells[key])!==Boolean(expected[key])))
+          throw new Error('Uma caixa desta seleção mudou desde a alteração.');
+        for(const edit of entry.edits){
+          const current=rowsRef.current.find(row=>row.id===edit.rowId);
+          if(!matchesUndoState(current,edit,direction))
+            throw new Error('O valor da célula foi alterado depois da inserção da caixa.');
+        }
+        const nextCells={...customCheckboxCells};
+        for(const key of entry.keys){
+          if(desired[key])nextCells[key]=true;
+          else delete nextCells[key];
+        }
+        if(entry.edits.length){
+          const updatedRows=rowsRef.current.map(row=>{
+            const edit=entry.edits.find(item=>item.rowId===row.id);
+            if(!edit)return row;
+            const data={...row.data,...(direction==='undo'?edit.before:edit.after)};
+            return {...row,data,updatedAt:new Date().toISOString(),
+              ...(Object.prototype.hasOwnProperty.call(data,'C')?{status:valueText(data.C)}:{})};
+          });
+          rowsRef.current=updatedRows;
+          setRows(updatedRows);
+        }
+        setCustomCheckboxCells(nextCells);
+        source.pop();target.push(entry);
+        if(target.length>60)target.shift();
+        syncUndoCounts();
+        setUndoFeedback((direction==='undo'?'Desfeito: ':'Refeito: ')+entry.label);
+        setNotice('Alteração de caixas de seleção '+(direction==='undo'?'desfeita':'refeita')+'.');
       }else if(entry.kind==='style'){
         const existing=entry.target==='cell'?cellStyles:
           entry.target==='row'?rowStyles:columnStyles;
@@ -1604,8 +1637,10 @@ export default function App() {
   function beginCellEdit(rowIndex: number, columnIndex: number, replacement?: string) {
     const row = displayedRows[rowIndex], column = visibleColumns[columnIndex];
     if (!row || !column || !token || userRole === 'CONSULTA' || !column.editable || editingBusyRef.current || gridMutationBusyRef.current) return;
-    // Boolean columns are edited directly through checkboxes, never a text editor.
-    if (isCheckboxColumn(column.key, column.dataType)) return;
+    // All checkbox cells, including user-inserted ones, use the checkbox UI.
+    const position=Number(row.sheetRowNumber??row.sequence+1);
+    if (isCheckboxColumn(column.key, column.dataType) ||
+      customCheckboxCells[customCheckboxKey(position,column.key)]) return;
     setSelectionAnchor({ rowId: row.id, columnKey: column.key });
     setSelectionMode('cell');
     setSelectedRowId(null);
@@ -1869,6 +1904,9 @@ export default function App() {
       return;
     }
     if(action==='clear'){await clearGridSelection();return;}
+    if(action==='add-checkbox'||action==='remove-checkbox'){
+      updateCheckboxSelection(action==='add-checkbox');return;
+    }
     if(action==='insert-rows'){setNewRowsOpen(true);return;}
     if(action==='conditional'){setShowStatusColors(true);return;}
     if(action==='sort-asc'||action==='sort-desc'){
@@ -2541,6 +2579,8 @@ export default function App() {
       case 'newRow': void createRow(); break;
       case 'manyRows': setNewRowsOpen(true); break;
       case 'newColumn': addLocalColumn(); break;
+      case 'insertCheckbox': updateCheckboxSelection(true); break;
+      case 'removeCheckbox': updateCheckboxSelection(false); break;
       case 'bold': updateSelectedStyle({ bold: !selectedStyle.bold }); break;
       case 'formatText': updateSelectedStyle({ format: 'text' }); break;
       case 'formatNumber': updateSelectedStyle({ format: 'number' }); break;
