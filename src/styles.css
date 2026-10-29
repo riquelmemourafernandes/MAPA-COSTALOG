@@ -193,3 +193,89 @@ td:hover .cell-history,.cell-history:focus{opacity:1}
 .sheet-paste-modal>small{display:block;color:#677a6d;line-height:1.5;font-size:11px}
 .sheet-paste-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 @media(max-width:700px){.sheet-action-strip .sheet-guide{flex-basis:100%;order:3}.mapa-grid-panel .sheet-grid-wrap{min-height:310px}}
+
+
+/* Excel / Google Sheets-style visible gridlines (including empty cells). */
+.mapa-grid-panel .sheet-table {
+  border-top: 1px solid #b9c8bd;
+  border-left: 1px solid #b9c8bd;
+  background: #fff;
+}
+.mapa-grid-panel .sheet-table thead th {
+  border-right: 1px solid #bccbbb !important;
+  border-bottom: 1px solid #b6c5b8 !important;
+}
+.mapa-grid-panel .sheet-table tbody tr {
+  height: 35px;
+}
+.mapa-grid-panel .sheet-table tbody td,
+.mapa-grid-panel .sheet-table tbody th.sheet-row-number {
+  border-right: 1px solid #c6d2c8 !important;
+  border-bottom: 1px solid #c6d2c8 !important;
+}
+.mapa-grid-panel .sheet-table tbody td {
+  height: 35px;
+  background-color: #fff;
+  padding: 0 5px;
+}
+.mapa-grid-panel .sheet-table tbody td.sheet-range-cell {
+  background-color: #e7f2e1;
+}
+.mapa-grid-panel .sheet-table tbody td.selected-cell {
+  box-shadow: inset 0 0 0 2px #38884e;
+  outline: 0 !important;
+  background-color: #f8fcf6;
+}
+.mapa-grid-panel .sheet-table tbody td.selected-cell.sheet-range-cell {
+  background-color: #e8f3e5;
+}
+.mapa-grid-panel .sheet-table .cell-content,
+.mapa-grid-panel .sheet-table .cell-content > span {
+  min-height: 34px;
+}
+.mapa-grid-panel .sheet-table .cell-content > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+  cursor: cell;
+}
+.mapa-grid-panel .sheet-table .cell-content > span:focus {
+  outline: 0;
+}
+.mapa-grid-panel .sheet-table .sheet-cell-editor {
+  display: block;
+  width: 100%;
+  height: 33px;
+  padding: 3px 5px;
+  border: 1px solid #35874a;
+  border-radius: 0;
+  outline: 0;
+  background: #fff;
+  color: #142a1d;
+  font: inherit;
+  font-size: 12px;
+  box-shadow: none;
+}
+.mapa-grid-panel .sheet-table .sheet-placeholder-row td {
+  height: 35px;
+  background: #fff;
+}
+.mapa-grid-panel .sheet-table .sheet-placeholder-row td span {
+  display: block;
+  height: 24px;
+}
+.sheet-empty-message {
+  position: sticky;
+  left: 0;
+  width: fit-content;
+  max-width: min(560px, 90%);
+  margin: 10px;
+  padding: 11px 13px;
+  border: 1px solid #d4e2d3;
+  border-radius: 7px;
+  color: #4f6655;
+  background: #f4faf2;
+  font-size: 12px;
+  line-height: 1.5;
+}
