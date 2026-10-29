@@ -962,3 +962,33 @@ html.costalog-dark .sheet-cell-options {
   padding-top:0!important;
   padding-bottom:0!important;
 }
+
+
+/* Spreadsheet formula bar: familiar name box + fx input, without restyling cell data. */
+.app-shell .mapa-grid-panel .sheet-formula-bar{
+  display:flex;align-items:center;gap:8px;min-height:42px;padding:6px 12px;
+  background:var(--brand-panel);border-bottom:1px solid var(--brand-border);color:var(--brand-ink);
+}
+.app-shell .mapa-grid-panel .sheet-formula-address{
+  display:inline-flex;align-items:center;justify-content:center;min-width:66px;height:29px;
+  padding:0 9px;border:1px solid var(--brand-border);border-radius:6px;
+  color:var(--brand-ink);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;
+  background:var(--brand-raised);
+}
+.app-shell .mapa-grid-panel .sheet-formula-fx{
+  display:inline-flex;align-items:center;justify-content:center;min-width:26px;
+  font-family:Georgia,serif;font-size:17px;font-style:italic;font-weight:700;color:var(--brand-muted);
+}
+.app-shell .mapa-grid-panel .sheet-formula-input{
+  flex:1;min-width:0;height:30px;padding:4px 9px;border:1px solid var(--brand-border);
+  border-radius:6px;background:var(--brand-input);color:var(--brand-ink);
+  font:13px ui-monospace,SFMono-Regular,Menlo,monospace;outline-offset:1px;
+}
+.app-shell .mapa-grid-panel .sheet-formula-input:focus{border-color:var(--costalog-red);outline:1px solid var(--costalog-red)}
+.app-shell .mapa-grid-panel .sheet-formula-input:disabled{opacity:.7;cursor:not-allowed}
+.app-shell .mapa-grid-panel .sheet-formula-apply{min-width:32px;height:30px;padding:0 8px;font-weight:800;color:var(--costalog-red)!important}
+@media(max-width:640px){
+  .app-shell .mapa-grid-panel .sheet-formula-bar{gap:5px;padding:6px}
+  .app-shell .mapa-grid-panel .sheet-formula-address{min-width:48px;padding:0 5px}
+  .app-shell .mapa-grid-panel .sheet-formula-input{font-size:12px}
+}
