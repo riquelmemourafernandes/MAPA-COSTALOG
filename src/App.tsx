@@ -773,9 +773,17 @@ export default function App() {
       // Focus only after the editor is removed from the DOM, so the next
       // keyboard action stays inside the grid (instead of leaving the table).
       if (move) selectGridCell(move.row, move.column, false, true);
+      else {
+        // Mouse dropdown confirmation leaves the cell selected and keyboard-ready.
+        window.requestAnimationFrame(() => {
+          const cell = Array.from(gridRef.current?.querySelectorAll<HTMLElement>('[data-cell-id]') || [])
+            .find(item => item.dataset.cellId === row.id + ':' + column.key);
+          cell?.focus({ preventScroll: true });
+        });
+      }
     } else {
       // Validation or API error: preserve the typed value and editor position.
-      editorRef.current?.focus();
+      (editorRef.current || gridRef.current?.querySelector<HTMLInputElement>('[role="combobox"]'))?.focus();
     }
   }
 
