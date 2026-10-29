@@ -909,3 +909,56 @@ html.costalog-dark .sheet-cell-options {
   outline:none!important;
   box-shadow:none!important;
 }
+
+
+/* MAPA 2.0 — dimensions from the uploaded MAPA 1.0 Excel sheet.
+   Header row: 22.5pt = 30px; row 2: 15pt = 20px;
+   rows 3–101: 14.25pt = 19px. User resizing still wins. */
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row>th{
+  height:30px!important;
+  max-height:30px!important;
+  min-height:0!important;
+  padding-top:0!important;
+  padding-bottom:0!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row .sheet-filter-trigger{
+  height:30px!important;
+  min-height:0!important;
+  padding-top:0!important;
+  padding-bottom:0!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>th.sheet-row-number{
+  height:var(--mapa-row-height,19px)!important;
+  max-height:var(--mapa-row-height,19px)!important;
+  min-height:0!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody th.sheet-row-number{
+  padding:0!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody th.sheet-row-number .sheet-row-select{
+  padding:0 2px!important;
+  min-height:0!important;
+  height:max(10px,calc(var(--mapa-row-height,19px) - 2px))!important;
+  line-height:normal;
+  border:0!important;
+  vertical-align:middle;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody td .cell-content:has(.sheet-cell-dropdown-editor),
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody td .cell-content>span.sheet-cell-dropdown-editor{
+  height:max(0px,calc(var(--mapa-row-height,19px) - 1px))!important;
+  max-height:max(0px,calc(var(--mapa-row-height,19px) - 1px))!important;
+  min-height:0!important;
+  padding:0!important;
+  margin:0!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody td .sheet-cell-dropdown-editor .sheet-cell-editor,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody td .sheet-cell-dropdown-editor .sheet-cell-dropdown-caret,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody td .sheet-boolean-wrapper,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody td .sheet-blank-editor{
+  height:max(0px,calc(var(--mapa-row-height,19px) - 2px))!important;
+  max-height:max(0px,calc(var(--mapa-row-height,19px) - 2px))!important;
+  min-height:0!important;
+  padding-top:0!important;
+  padding-bottom:0!important;
+}
