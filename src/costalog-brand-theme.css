@@ -1,0 +1,488 @@
+/*
+  COSTALOG brand system — design reference: red/black operational modules.
+  Applied to both authenticated pages and signed-out pages.
+  IMPORTANT: .sheet-table tbody td and existing status hex colors are NEVER themed.
+*/
+:root{
+  --costalog-red:#e60028;
+  --costalog-red-hot:#ff1739;
+  --costalog-red-deep:#ae0021;
+  --costalog-radius-card:18px;
+  --costalog-radius-control:10px;
+}
+.app-shell:not(.structural-dark),.auth-layout:not(.structural-dark){
+  --brand-bg:#f7f5f6;
+  --brand-sidebar:#fff;
+  --brand-header:#fff;
+  --brand-panel:#fff;
+  --brand-raised:#f4eff1;
+  --brand-input:#fff;
+  --brand-border:#e6dde1;
+  --brand-ink:#19191e;
+  --brand-muted:#74727a;
+  --brand-soft-ink:#4c4850;
+  --brand-elevation:0 13px 36px rgba(54,10,23,.055);
+  --brand-hero-right:linear-gradient(145deg,#fff8f9,#fff);
+}
+.app-shell.structural-dark,.auth-layout.structural-dark{
+  --brand-bg:#0b0b0e;
+  --brand-sidebar:#111114;
+  --brand-header:#131316;
+  --brand-panel:#18171b;
+  --brand-raised:#242126;
+  --brand-input:#242127;
+  --brand-border:#373035;
+  --brand-ink:#f7f5f6;
+  --brand-muted:#b0a9af;
+  --brand-soft-ink:#dad4d8;
+  --brand-elevation:0 16px 40px rgba(0,0,0,.20);
+  --brand-hero-right:linear-gradient(145deg,#171216,#20191c);
+}
+html:not(.costalog-dark) body,html:not(.costalog-dark) #root{
+  background:#f7f5f6;
+  color:#19191e;
+}
+html.costalog-dark body,html.costalog-dark #root{
+  background:#0b0b0e!important;
+  color:#f7f5f6!important;
+}
+:is(.app-shell,.auth-layout){
+  color:var(--brand-ink);
+  background:var(--brand-bg);
+  accent-color:var(--costalog-red);
+}
+.app-shell .main,.app-shell .content{
+  background:var(--brand-bg)!important;
+  color:var(--brand-ink);
+}
+.app-shell .page-heading h1,.app-shell .section-intro h2,
+.app-shell .quick-panel h3,.app-shell .panel:not(.mapa-grid-panel) h2,
+.app-shell .panel:not(.mapa-grid-panel) h3{
+  color:var(--brand-ink)!important;
+}
+.app-shell :is(.page-heading p,.section-intro p,.eyebrow,.quick-panel p,.app-footer),
+.app-shell :is(.metric-top,.metric-card small,.overview-card small,.feature-row p){
+  color:var(--brand-muted)!important;
+}
+.app-shell :is(.page-heading .eyebrow,.section-intro .eyebrow){
+  color:var(--costalog-red)!important;
+  letter-spacing:.14em;
+  font-weight:800;
+}
+/* Sidebar. The active route uses a vivid, unmistakable Costalog red. */
+.app-shell .sidebar{
+  background:var(--brand-sidebar)!important;
+  color:var(--brand-ink)!important;
+  border-right:1px solid var(--brand-border)!important;
+}
+.app-shell .brand-mark{
+  color:#fff!important;
+  background:linear-gradient(135deg,var(--costalog-red-hot),var(--costalog-red-deep))!important;
+  border-radius:12px;
+}
+.app-shell .brand strong{color:var(--brand-ink)!important;font-size:15px;letter-spacing:.05em}
+.app-shell .brand span{color:var(--brand-muted)!important;letter-spacing:.16em}
+.app-shell .workspace{
+  color:var(--brand-soft-ink)!important;
+  background:var(--brand-raised);
+  border-color:var(--brand-border)!important;
+}
+.app-shell .nav-label{
+  color:var(--brand-muted)!important;
+  letter-spacing:.17em;
+}
+.app-shell .nav-item{
+  background:transparent!important;
+  color:var(--brand-soft-ink)!important;
+  font-weight:600;
+  transition:background .16s ease,color .16s ease;
+}
+.app-shell .nav-item:hover:not(.active){
+  color:var(--brand-ink)!important;
+  background:var(--brand-raised)!important;
+}
+.app-shell .nav-item.active,.app-shell .nav-item.active:hover{
+  background:linear-gradient(100deg,#f20b2d,#be0021)!important;
+  color:#fff!important;
+  box-shadow:0 7px 17px rgba(192,0,34,.2);
+}
+.app-shell .nav-item.active :is(svg,span){color:#fff!important}
+.app-shell .nav-item.active .nav-count{
+  background:rgba(255,255,255,.19)!important;color:#fff!important;
+}
+.app-shell .sidebar-bottom .connection{
+  border-color:var(--brand-border)!important;
+  color:var(--brand-muted)!important;
+}
+.app-shell .workspace-dot,.app-shell .connection-dot{
+  background:var(--costalog-red-hot)!important;
+}
+.app-shell .sidebar-bottom .user{
+  background:var(--brand-raised)!important;
+  color:var(--brand-ink)!important;
+  border:1px solid var(--brand-border);
+}
+.app-shell .sidebar-bottom .user small{color:var(--brand-muted)!important}
+.app-shell .avatar{
+  background:linear-gradient(135deg,#fa1740,#af001d)!important;
+  color:#fff!important;
+}
+.app-shell .sidebar-hide-button{
+  background:var(--brand-raised)!important;
+  color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+/* App header and controls. */
+.app-shell .topbar{
+  background:var(--brand-header)!important;
+  border-bottom:1px solid var(--brand-border)!important;
+  color:var(--brand-ink)!important;
+}
+.app-shell .breadcrumbs{color:var(--brand-muted)!important}
+.app-shell .breadcrumbs b{color:var(--brand-ink)!important}
+.app-shell .breadcrumbs span{color:var(--costalog-red)!important}
+.app-shell .sidebar-toggle,.app-shell .topbar .icon-button{
+  color:var(--brand-muted)!important;
+}
+.app-shell .sidebar-toggle:hover,.app-shell .topbar .icon-button:hover{
+  background:var(--brand-raised)!important;
+  color:var(--costalog-red)!important;
+}
+.app-shell .structural-theme-toggle,.auth-layout .structural-theme-toggle{
+  background:var(--brand-raised)!important;
+  color:var(--brand-ink)!important;
+  border:1px solid var(--brand-border)!important;
+}
+.app-shell .structural-theme-toggle:hover,.auth-layout .structural-theme-toggle:hover{
+  border-color:var(--costalog-red)!important;
+  color:var(--costalog-red)!important;
+}
+.app-shell .primary,.app-shell button.primary:not(:disabled),
+.auth-layout .primary,.auth-layout button.primary:not(:disabled){
+  background:linear-gradient(105deg,#ee1237,#b50025)!important;
+  color:#fff!important;
+  border-color:transparent!important;
+  border-radius:var(--costalog-radius-control);
+  box-shadow:0 9px 22px rgba(207,0,34,.16);
+  font-weight:750;
+}
+.app-shell .primary:hover:not(:disabled),.auth-layout .primary:hover:not(:disabled){
+  background:linear-gradient(105deg,#ff2d51,#d5002b)!important;
+  box-shadow:0 11px 23px rgba(207,0,34,.23);
+}
+.app-shell button:disabled,.auth-layout button:disabled{cursor:not-allowed;opacity:.55}
+.app-shell .secondary,
+.app-shell .panel:not(.mapa-grid-panel) button.secondary,
+.app-shell .column-picker button.secondary{
+  background:var(--brand-panel)!important;
+  color:var(--brand-soft-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell .secondary:hover:not(:disabled){
+  color:var(--costalog-red)!important;
+  border-color:var(--costalog-red)!important;
+}
+.app-shell :is(input:not([type=checkbox]):not([type=radio]):not([type=color]),select,textarea):focus-visible,
+.auth-layout :is(input,textarea,select):focus-visible,
+.app-shell button:focus-visible,.auth-layout button:focus-visible{
+  outline:2px solid var(--costalog-red)!important;
+  outline-offset:2px;
+}
+/* Site-wide cards, status/overview, users, integrations. */
+.app-shell .panel:not(.mapa-grid-panel),
+.app-shell :is(.metric-card,.overview-card,.status-card,.feature-row,.quick-panel,.next-step,.empty-state,.column-picker){
+  background:var(--brand-panel)!important;
+  border-color:var(--brand-border)!important;
+  color:var(--brand-ink)!important;
+  box-shadow:var(--brand-elevation);
+  border-radius:var(--costalog-radius-card);
+}
+.app-shell .panel:not(.mapa-grid-panel) .panel-heading h2,
+.app-shell :is(.metric-card,.overview-card,.next-step,.feature-row,.quick-panel) strong,
+.app-shell :is(.metric-card,.overview-card,.next-step,.feature-row,.quick-panel) b{
+  color:var(--brand-ink)!important;
+}
+.app-shell :is(.metric-card,.overview-card) strong{letter-spacing:-.04em}
+.app-shell :is(.next-icon,.feature-icon){
+  background:var(--brand-raised)!important;
+  color:var(--costalog-red)!important;
+}
+.app-shell .status-indicator{background:var(--costalog-red)!important}
+.app-shell .status-card:hover{border-color:var(--costalog-red)!important}
+.app-shell .notice:not(.api-error){
+  background:var(--brand-raised)!important;
+  border-color:var(--brand-border)!important;
+  color:var(--brand-soft-ink)!important;
+}
+.app-shell .notice:not(.api-error) svg{color:var(--costalog-red)}
+.app-shell .validation-ok{background:var(--brand-raised)!important;color:var(--brand-ink)!important}
+.app-shell .validation-warning{background:var(--brand-raised)!important;color:var(--brand-ink)!important}
+.app-shell :is(.profile-role,.password-section,.saved-view-item,.column-picker){
+  background:var(--brand-panel)!important;
+  border-color:var(--brand-border)!important;
+  color:var(--brand-ink)!important;
+}
+.app-shell .content:not(.map-content) :is(input:not([type=checkbox]):not([type=radio]):not([type=color]),textarea,select){
+  background:var(--brand-input)!important;
+  color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+  color-scheme:normal;
+}
+.app-shell.structural-dark .content:not(.map-content) :is(input,select,textarea){color-scheme:dark}
+.app-shell .content:not(.map-content) :is(input,textarea)::placeholder{color:var(--brand-muted)!important}
+.app-shell .content:not(.map-content) table:not(.sheet-table) th{
+  background:var(--brand-raised)!important;
+  color:var(--brand-soft-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell .content:not(.map-content) table:not(.sheet-table) td{
+  background:var(--brand-panel)!important;
+  color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell .content:not(.map-content) table:not(.sheet-table) tbody tr:hover td{
+  background:var(--brand-raised)!important;
+}
+.app-shell :is(.column-options,.column-picker,.saved-view-item),
+.app-shell :is(.history-modal,.modal){
+  background:var(--brand-panel)!important;color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell :is(.history-modal,.modal) :is(h2,h3,strong,b){color:var(--brand-ink)!important}
+.app-shell .modal-backdrop{background:rgba(5,3,6,.73)!important}
+.app-shell .history-modal :is(.history-list article,.history-list p,.history-meta time){
+  color:var(--brand-soft-ink)!important;border-color:var(--brand-border)!important;
+}
+/* The BASE catalog and the local test import prototype follow the same theme. */
+.app-shell :is(.bc-lists,.bc-sheet,.bc-add,.bc-offline-demo,.basep-list-nav,.basep-detail,.basep-import,.basep-panel){
+  background:var(--brand-panel)!important;color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell :is(.bc-head h2,.bc-sheet-head h3,.basep-head h2,.basep-section-head h3){
+  color:var(--brand-ink)!important;
+}
+.app-shell :is(.bc-lists button,.bc-tabs button,.basep-tabs button,.basep-list-nav button){
+  color:var(--brand-soft-ink)!important;
+}
+.app-shell :is(.bc-lists button.active,.bc-tabs button.active,.basep-tabs button.active,.basep-list-nav button.active){
+  background:rgba(230,0,40,.12)!important;color:var(--costalog-red)!important;
+  border-color:var(--costalog-red)!important;
+}
+.app-shell :is(.bc-table th,.basep-table th){
+  background:var(--brand-raised)!important;
+  color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell :is(.bc-table td,.basep-table td,.bc-table td:first-child,.basep-table tbody tr:nth-child(even) td){
+  background:var(--brand-panel)!important;
+  color:var(--brand-soft-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell :is(.bc-search,.bc-add-fields input,.bc-inline-edit input,.basep-search,.basep-paste,.basep-table-wrap){
+  background:var(--brand-input)!important;
+  color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell :is(.bc-info,.bc-notice,.basep-banner,.basep-safety,.basep-linked){
+  background:var(--brand-raised)!important;color:var(--brand-soft-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell :is(.bc-primary,.basep-primary){background:var(--costalog-red)!important;color:#fff!important}
+.app-shell :is(.bc-outline,.bc-commands button,.bc-inline-edit button,.basep-actions button:not(.basep-primary)){
+  background:var(--brand-raised)!important;color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+/* MAPA 2.0: only frame, toolbar, headers, menus and row/letter labels.
+   NEVER override the background or text colors of .sheet-table tbody td. */
+.app-shell .mapa-grid-panel{
+  background:var(--brand-panel)!important;
+  border-color:var(--brand-border)!important;
+  color:var(--brand-ink)!important;
+}
+.app-shell .mapa-grid-panel :is(.panel-heading,.toolbar,.sheet-action-strip,.sheet-scroll-status,.sheet-add-many,.table-footer){
+  background:var(--brand-panel)!important;
+  border-color:var(--brand-border)!important;
+  color:var(--brand-ink)!important;
+}
+.app-shell .mapa-grid-panel .panel-heading h2{color:var(--brand-ink)!important}
+.app-shell .mapa-grid-panel .toolbar :is(.searchbox,.select-wrap,input:not([type=checkbox]),select),
+.app-shell .mapa-grid-panel .sheet-action-strip :is(button.secondary,.sheet-format-select,.sheet-address){
+  color:var(--brand-ink)!important;
+  background:var(--brand-input)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell .mapa-grid-panel .toolbar input::placeholder{color:var(--brand-muted)!important}
+.app-shell .mapa-grid-panel .toolbar select{color:var(--brand-ink)!important}
+.app-shell .mapa-grid-panel .sheet-status-legend,
+.app-shell .mapa-grid-panel .sheet-filter-popover,
+.app-shell .mapa-grid-panel .sheet-context-menu{
+  background:var(--brand-panel)!important;
+  color:var(--brand-ink)!important;
+  border-color:var(--brand-border)!important;
+}
+.app-shell .mapa-grid-panel .sheet-status-legend-item{border-color:var(--brand-border)!important}
+.app-shell .mapa-grid-panel .sheet-status-legend-item code{color:var(--brand-muted)!important}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th{
+  color:var(--brand-soft-ink)!important;
+  background:var(--brand-raised)!important;
+  border-right:1px solid var(--brand-border)!important;
+  border-bottom:1px solid var(--brand-border)!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th.sheet-column-active-header,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th.sheet-column-active-header{
+  background:rgba(230,0,40,.18)!important;color:var(--brand-ink)!important;
+  box-shadow:inset 0 -3px 0 var(--costalog-red)!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th.sheet-column-selected,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th.sheet-column-selected{
+  background:var(--costalog-red-deep)!important;color:#fff!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row>th,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row>th{
+  background:#151417!important;color:#fff!important;
+  border-bottom:2px solid var(--costalog-red)!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row th.sheet-column-selected{
+  background:#9a0025!important;
+}
+.app-shell .mapa-grid-panel .sheet-table tbody th.sheet-row-number,
+.app-shell.structural-dark .mapa-grid-panel .sheet-table tbody th.sheet-row-number{
+  background:var(--brand-raised)!important;color:var(--brand-soft-ink)!important;
+}
+.app-shell .mapa-grid-panel .sheet-table tbody th.sheet-row-number.sheet-row-selected,
+.app-shell .mapa-grid-panel .sheet-table tbody th.sheet-row-number.sheet-row-active-header,
+.app-shell.structural-dark .mapa-grid-panel .sheet-table tbody th.sheet-row-number.sheet-row-selected,
+.app-shell.structural-dark .mapa-grid-panel .sheet-table tbody th.sheet-row-number.sheet-row-active-header{
+  background:var(--costalog-red-deep)!important;color:#fff!important;
+  box-shadow:inset 3px 0 0 #ff7d90!important;
+}
+.app-shell .mapa-grid-panel .sheet-grid-wrap{background:#fff!important}
+.app-shell .mapa-grid-panel .sheet-table tbody td{
+  /* No background, color, filter or overlay rules here. Status hex is authoritative. */
+  border-right-color:#000!important;
+  border-bottom-color:#000!important;
+}
+.app-shell .mapa-grid-panel .sheet-table td.selected-cell{
+  outline-color:#ec0032!important;
+}
+.app-shell .mapa-grid-panel .sheet-table td.selected-cell::after{
+  background:#ec0032!important;
+}
+/* Login and request-access: branded red feature panel with neutral form panel. */
+.auth-layout{background:var(--brand-bg)!important;color:var(--brand-ink)!important}
+.auth-layout .auth-intro,
+.auth-layout.structural-dark .auth-intro{
+  color:#fff!important;
+  background:linear-gradient(135deg,#fc1740 0%,#dd002d 38%,#90001e 100%)!important;
+  position:relative;isolation:isolate;overflow:hidden;
+}
+.auth-layout .auth-intro::before{
+  content:"";position:absolute;z-index:-1;top:-25%;right:-32%;
+  width:85%;aspect-ratio:1;border:1px solid rgba(255,255,255,.16);
+  border-radius:50%;pointer-events:none;
+}
+.auth-layout .auth-intro::after{
+  content:"";position:absolute;z-index:-1;bottom:-33%;left:-35%;
+  width:85%;aspect-ratio:1;border:1px solid rgba(255,255,255,.11);
+  border-radius:50%;pointer-events:none;
+}
+.auth-layout .auth-logo{
+  background:#fff!important;color:var(--costalog-red-deep)!important;
+}
+.auth-layout .auth-brand strong{color:#fff!important}
+.auth-layout .auth-brand small,.auth-layout .auth-intro-copy p,
+.auth-layout .auth-intro-foot{color:#ffe0e6!important}
+.auth-layout .auth-intro .auth-eyebrow{color:#ffe0e6!important}
+.auth-layout .auth-content,.auth-layout.structural-dark .auth-content{
+  background:var(--brand-bg)!important;
+}
+.auth-layout .auth-card,.auth-layout.structural-dark .auth-card{
+  background:var(--brand-panel)!important;
+  border:1px solid var(--brand-border)!important;
+  color:var(--brand-ink)!important;
+  box-shadow:var(--brand-elevation)!important;
+  border-radius:22px;
+}
+.auth-layout .auth-card-heading h2,
+.auth-layout.structural-dark .auth-card-heading h2{color:var(--brand-ink)!important}
+.auth-layout .auth-card-heading p,
+.auth-layout.structural-dark .auth-card-heading p{color:var(--brand-muted)!important}
+.auth-layout .auth-tabs,.auth-layout.structural-dark .auth-tabs{
+  background:var(--brand-raised)!important;
+}
+.auth-layout .auth-tabs button,.auth-layout.structural-dark .auth-tabs button{
+  color:var(--brand-muted)!important;
+}
+.auth-layout .auth-tabs button.selected,.auth-layout.structural-dark .auth-tabs button.selected{
+  background:var(--brand-panel)!important;
+  color:var(--costalog-red)!important;
+  box-shadow:0 2px 7px rgba(0,0,0,.05);
+}
+.auth-layout .auth-form label,.auth-layout.structural-dark .auth-form label{
+  color:var(--brand-ink)!important;
+}
+.auth-layout .auth-form input,.auth-layout.structural-dark .auth-form input{
+  background:var(--brand-input)!important;
+  color:var(--brand-ink)!important;
+  border:1px solid var(--brand-border)!important;
+}
+.auth-layout .auth-form input:focus{border-color:var(--costalog-red)!important}
+.auth-layout .auth-note,.auth-layout.structural-dark .auth-note{
+  background:var(--brand-raised)!important;
+  color:var(--brand-soft-ink)!important;
+}
+.auth-layout .auth-diagnostics,.auth-layout.structural-dark .auth-diagnostics{
+  border-color:var(--brand-border)!important;
+}
+.auth-layout :is(.auth-diagnostic-button,.auth-diagnostics a){color:var(--costalog-red)!important}
+/* Portal components mount under <body>, not .app-shell. */
+html.costalog-dark .sheet-cell-options{
+  background:#1f1d21!important;color:#f7f3f4!important;
+  border-color:#463b42!important;
+}
+html.costalog-dark .sheet-cell-option{background:#1f1d21!important;color:#f7f3f4!important}
+html.costalog-dark .sheet-cell-option:hover,html.costalog-dark .sheet-cell-option.highlighted{
+  background:#4b202d!important;
+}
+/* Welcome banner, based on the reference screenshot. */
+.app-shell .costalog-welcome-hero{
+  display:flex;justify-content:space-between;align-items:center;gap:28px;
+  padding:clamp(24px,3vw,42px);margin-bottom:22px;
+  min-height:174px;border-radius:23px;overflow:hidden;position:relative;
+  background:linear-gradient(106deg,#550014 0%,#ad0021 47%,#f20a2e 100%);
+  color:#fff;
+}
+.app-shell .costalog-welcome-hero::after{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.14;
+  background-image:linear-gradient(rgba(255,255,255,.18) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.18) 1px,transparent 1px);
+  background-size:33px 33px;
+  mask-image:linear-gradient(90deg,transparent 20%,#000);
+}
+.costalog-welcome-copy{position:relative;z-index:1;max-width:720px}
+.costalog-welcome-copy small{
+  display:block;color:#ffe4e8;letter-spacing:.16em;font-weight:800;font-size:10px;
+  text-transform:uppercase;
+}
+.costalog-welcome-copy h2{
+  margin:12px 0 10px;color:#fff!important;
+  font-size:clamp(24px,2.5vw,36px);letter-spacing:-.04em;line-height:1.1;
+}
+.costalog-welcome-copy p{margin:0;color:#ffe8ec;font-size:13px;line-height:1.6}
+.costalog-welcome-figures{display:flex;gap:12px;position:relative;z-index:1}
+.costalog-welcome-figure{
+  display:grid;gap:3px;min-width:100px;min-height:74px;padding:13px 15px;
+  border-radius:16px;background:rgba(255,255,255,.13);
+  border:1px solid rgba(255,255,255,.23);backdrop-filter:blur(4px);
+}
+.costalog-welcome-figure strong{font-size:27px;color:#fff!important;line-height:1}
+.costalog-welcome-figure span{font-size:10px;color:#ffe8ec}
+@media(max-width:700px){
+  .app-shell .costalog-welcome-hero{flex-direction:column;align-items:flex-start}
+  .costalog-welcome-figures{width:100%}
+  .costalog-welcome-figure{flex:1;min-width:0}
+}
+@media(prefers-reduced-motion:reduce){
+  .app-shell .nav-item,.app-shell .primary{transition:none}
+}
