@@ -55,4 +55,11 @@ test("Enter move a seleção; F2 edita; Enter durante edição confirma", () => 
   assert.equal(gridKeyboardAction("Escape", false), "ignore");
   assert.deepEqual(moveGridPosition({row:1,column:1}, "Enter", 5, 4), {row:2,column:1});
   assert.deepEqual(moveGridPosition({row:1,column:1}, "Enter", 5, 4, true), {row:0,column:1});
+  assert.deepEqual(moveGridPosition({row:1,column:1}, "Tab", 5, 4), {row:1,column:2});
+  assert.deepEqual(moveGridPosition({row:1,column:1}, "Tab", 5, 4, true), {row:1,column:0});
+  assert.deepEqual(moveGridPosition({row:1,column:3}, "Tab", 5, 4), {row:2,column:0});
+  assert.deepEqual(moveGridPosition({row:1,column:0}, "Tab", 5, 4, true), {row:0,column:3});
+  assert.deepEqual(moveGridPosition({row:4,column:3}, "Tab", 5, 4), {row:4,column:0});
+  assert.equal(gridKeyboardAction("Enter", true), "confirm");
+  assert.equal(gridKeyboardAction("Tab", true), "confirm");
 });
