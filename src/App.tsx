@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { referenceHeader } from './reference-header.js';
 import BaseCatalogSheet from './BaseCatalogSheet.js';
 import {inheritRowPresentation,nearestPreviousRowId,type PresentationSnapshot} from './sheet-row-format.js';
 import SheetContextMenu from './SheetContextMenu.js';
@@ -60,75 +61,7 @@ const apiBase = isGitHubPagesPreview
     : isVercelSite ? window.location.origin : (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 // Cabeçalho conferido na linha 1 de MAPA IMPORTAÇÃO > MAPA 1.0 (A:BT).
 // As posições BL:BP não têm título; não deslocar os valores adjacentes.
-export const referenceHeader: Record<string, string> = {
-  "A":"DATA",
-  "B":"ATENDENTE",
-  "C":"STATUS",
-  "D":"CTE",
-  "E":"MODALIDADE",
-  "F":"DI / DTA",
-  "G":"ARM",
-  "H":"DEM",
-  "I":"PROC.",
-  "J":"PROG.",
-  "K":"ID PROG.",
-  "L":"CLIENTE",
-  "M":"ISCA",
-  "N":"REFERENCIA",
-  "O":"BL",
-  "P":"NAVIO",
-  "Q":"VALORES",
-  "R":"QTD",
-  "S":"PESO",
-  "T":"CONTAINER",
-  "U":"TIPO",
-  "V":"IMO",
-  "W":"CAVALO",
-  "X":"CARRETA",
-  "Y":"MOTORISTA",
-  "Z":"CONTATO",
-  "AA":"OK?",
-  "AB":"2º VIAGEM",
-  "AC":"FRETE",
-  "AD":"RV",
-  "AE":"CIOT",
-  "AF":"MDF",
-  "AG":"CATEGORIA",
-  "AH":"SM/AE",
-  "AI":"TRAVA GR",
-  "AJ":"TERMINAL COLETA",
-  "AK":"CIDADE",
-  "AL":"DATA / HORA - COLETA",
-  "AM":"Nº AGEND.",
-  "AN":"ENTREGA - 1",
-  "AO":"KM",
-  "AP":"DATA / HORA - ENTREGA - 1",
-  "AQ":"ENDERECO - ENTREGA - 1",
-  "AR":"ENTREGA - 2",
-  "AS":"DATA / HORA - ENTREGA - 2",
-  "AT":"ENDERECO - ENTREGA - 2",
-  "AU":"CHEGADA NO TERMINAL / EADI",
-  "AV":"SAÍDA DO TERMINAL / EADI",
-  "AW":"CHEGADA NO CLIENTE",
-  "AX":"SAÍDA DO CLIENTE",
-  "AY":"STATUS",
-  "AZ":"ARMADOR",
-  "BA":"OBS",
-  "BB":"STATUS UNIDADE VAZIA",
-  "BC":"MINUTA/AG",
-  "BD":"TERMINAL DE VAZIO",
-  "BE":"CIDADE - DEPOT",
-  "BF":"DATA / HORA - DEPOT",
-  "BG":"P.S.",
-  "BH":"DATA ENTREGA VAZIO",
-  "BI":"P.S. DEVIDO?",
-  "BJ":"EIR ENVIADO",
-  "BK":"📷",
-  "BQ":"CRÍTICO?",
-  "BR":"ENVIADO P/ FATURAMENTO",
-  "BS":"PROG.ENCERRADA",
-  "BT":"PROC. ENCERRADO"
-};
+
 const referenceColumnKeys = new Set(Object.keys(referenceHeader).concat(['BL','BM','BN','BO','BP']));
 const nav = [
   { name: 'Visão geral', icon: LayoutDashboard }, { name: 'MAPA 2.0', icon: Table2 },
