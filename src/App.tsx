@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import BaseCatalogSheet from './BaseCatalogSheet.js';
+import {inheritRowPresentation,nearestPreviousRowId,type PresentationSnapshot} from './sheet-row-format.js';
 import SheetContextMenu from './SheetContextMenu.js';
 import {type SheetContextKind,type SheetContextAction} from './sheet-context-menu.js';
 import { SCROLL_BATCH_SIZE, normalizeCreateCount,
@@ -112,7 +113,7 @@ const referenceHeader: Record<string, string> = {
 };
 const referenceColumnKeys = new Set(Object.keys(referenceHeader).concat(['BL','BM','BN','BO','BP']));
 const nav = [
-  { name: 'Visão geral', icon: LayoutDashboard }, { name: 'MAPA 1.0', icon: Table2 },
+  { name: 'Visão geral', icon: LayoutDashboard }, { name: 'MAPA 2.0', icon: Table2 },
   { name: 'Status operacional', icon: Activity }, { name: 'Cadastros', icon: Users }, { name: 'Minha conta', icon: UserRound }, { name: 'Usuários', icon: Users }, { name: 'Integrações', icon: Waypoints }
 ];
 function valueText(value: unknown): string {
@@ -121,7 +122,7 @@ function valueText(value: unknown): string {
   return String(value);
 }
 export default function App() {
-  const [active, setActive] = useState('MAPA 1.0');
+  const [active, setActive] = useState('MAPA 2.0');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [filterColumn, setFilterColumn] = useState('');
@@ -231,6 +232,10 @@ export default function App() {
   const [cellStyles, setCellStyles] = useState<Record<string, CellStyle>>({});
   const [rowStyles, setRowStyles] = useState<Record<string, CellStyle>>({});
   const [columnStyles, setColumnStyles] = useState<Record<string, CellStyle>>({});
+  const presentationRef=useRef<PresentationSnapshot>({rowStyles:{},cellStyles:{},rowHeights:{}});
+  useEffect(()=>{
+    presentationRef.current={rowStyles,cellStyles,rowHeights};
+  },[rowStyles,cellStyles,rowHeights]);
   const styleStorageKey = 'mapa-costalog-sheet-styles:' + userKey;
   useEffect(() => {
     try {
@@ -263,7 +268,7 @@ export default function App() {
     } catch { setRowHeights({}); }
   }, [rowHeightStorageKey]);
   useEffect(() => {
-    if (active !== 'MAPA 1.0' || !token) return;
+    if (active !== 'MAPA 2.0' || !token) return;
     const node = gridRef.current;
     if (!node) return;
     const observer = new ResizeObserver(() => {
@@ -417,6 +422,36 @@ export default function App() {
       ordered.splice(from, 1); ordered.splice(to, 0, sourceKey);
       localStorage.setItem(preferenceKey, JSON.stringify(ordered)); void persistPreferences({visibleKeys: ordered}); return ordered;
     });
+  }
+  // A newly created row inherits the preceding row's VISUAL formatting only.
+  // Never duplicate status, client, dates or any other operational field value.
+  function inheritNewRowFormat(item:RecordRow,position:number,knownRows:RecordRow[]):PresentationSnapshot|null {
+    const sourceId=nearestPreviousRowId(knownRows,position);
+    if(!sourceId)return null;
+    const previous=presentationRef.current;
+    const next=inheritRowPresentation(sourceId,item.id,columns.map(col=>col.key),previous);
+    if(!next.rowStyles[item.id] && !next.rowHeights[item.id] &&
+      !columns.some(col=>next.cellStyles[item.id+':'+col.key]))return null;
+    presentationRef.current=next;
+    setRowStyles(next.rowStyles);setCellStyles(next.cellStyles);setRowHeights(next.rowHeights);
+    localStorage.setItem(styleStorageKey,JSON.stringify({
+      rowStyles:next.rowStyles,columnStyles
+    }));
+    localStorage.setItem(rowHeightStorageKey,JSON.stringify(next.rowHeights));
+    return next;
+  }
+  async function syncNewRowFormat(snapshot:PresentationSnapshot|null){
+    if(!snapshot||!token)return;
+    try{
+      const response=await fetch(apiBase+'/api/v1/preferences',{
+        method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+        body:JSON.stringify({visibleKeys,columnOrder:visibleKeys,savedViews,
+          cellStyles:snapshot.cellStyles,rowStyles:snapshot.rowStyles,columnStyles})
+      });
+      if(!response.ok)throw new Error('API sem suporte à preferência de formatação.');
+    }catch{
+      setNotice('Formato herdado neste navegador; sincronização de estilos pendente na API.');
+    }
   }
   function styleKey(row: RecordRow, column: Column) { return row.id + ':' + column.key; }
   function effectiveCellStyle(row: RecordRow, column: Column): CellStyle {
@@ -607,7 +642,11 @@ export default function App() {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível criar o registro.');
       setQuery(''); setStatus(''); setPage(1);
-      setRows(previous => [body.item as RecordRow, ...previous]);
+      const created=body.item as RecordRow;
+      const priorPosition=Number(created.sheetRowNumber??created.sequence+1);
+      const inherited=inheritNewRowFormat(created,priorPosition,displayedRows);
+      setRows(previous => [created, ...previous]);
+      void syncNewRowFormat(inherited);
       setTotal(previous => previous + 1);
       setNotice('Novo registro criado. Preencha as colunas diretamente na grade.');
     } catch (error) {
@@ -699,7 +738,7 @@ export default function App() {
         event.preventDefault(); searchInputRef.current?.focus(); searchInputRef.current?.select();
       } else if (event.key === 'Escape' && !typing) {
         setQuery(''); setFilterColumn(''); setFilterValue(''); setStatus(''); setPage(1);
-      } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'n' && active === 'MAPA 1.0' && userRole !== 'CONSULTA') {
+      } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'n' && active === 'MAPA 2.0' && userRole !== 'CONSULTA') {
         event.preventDefault(); void createRow();
       }
     };
@@ -767,7 +806,7 @@ export default function App() {
     setGridRangeSupported(null);
   },[token]);
   useEffect(()=>{
-    if(!sheetCanvas||!token||active!=='MAPA 1.0'||gridRangeSupported===false)return;
+    if(!sheetCanvas||!token||active!=='MAPA 2.0'||gridRangeSupported===false)return;
     const first=Math.floor(windowed.start/100),last=Math.floor(Math.max(windowed.start,windowed.end-1)/100);
     const controller=new AbortController();
     for(let chunk=first;chunk<=Math.min(last,first+3);chunk++){
@@ -1017,7 +1056,10 @@ export default function App() {
         const body=await response.json().catch(()=>({}));
         if(!response.ok)throw new Error(body?.error?.message||
           'Não foi possível gravar esta linha. Verifique a API de homologação.');
-        setRows(previous=>mergeLoadedRows(previous,[body.item as RecordRow]));
+        const created=body.item as RecordRow;
+        const inherited=inheritNewRowFormat(created,index+2,displayedRows);
+        setRows(previous=>mergeLoadedRows(previous,[created]));
+        void syncNewRowFormat(inherited);
         setTotal(previous=>previous+1);
         setMaxSheetRowNumber(previous=>Math.max(previous,index+2));
         setNotice('Linha '+(index+2)+' criada automaticamente ao preencher a célula.');
@@ -1473,6 +1515,8 @@ export default function App() {
       const body=await response.json();
       const current=new Map<number,RecordRow>(
         (body.items as RecordRow[]).map(item=>[Number(item.sheetRowNumber),item]));
+      const knownRows=[...displayedRows,...(body.items as RecordRow[])];
+      let lastInherited:PresentationSnapshot|null=null;
       for(const item of requested){
         const old=current.get(item.position);
         const changes=Object.fromEntries(Object.entries(item.changes).filter(
@@ -1492,10 +1536,16 @@ export default function App() {
           'Erro ao salvar a linha '+item.position);
         setRows(previous=>mergeLoadedRows(previous,[savedBody.item as RecordRow])
           .map(row=>row.id===savedBody.item.id?savedBody.item as RecordRow:row));
-        if(!old)created++;
+        if(!old){
+          const createdRow=savedBody.item as RecordRow;
+          lastInherited=inheritNewRowFormat(createdRow,item.position,knownRows)??lastInherited;
+          knownRows.push(createdRow);
+          created++;
+        }
         saved++;
       }
       if(created)setTotal(previous=>previous+created);
+      void syncNewRowFormat(lastInherited);
       setMaxSheetRowNumber(previous=>Math.max(previous,...requested.map(item=>item.position)));
       setNotice('Colagem direta: '+saved+' linha(s) atualizada(s); '+
         created+' criada(s) automaticamente.');
@@ -1646,7 +1696,7 @@ export default function App() {
     </main>;
   }
   return <div className={'app-shell ' + (sidebarCollapsed ? 'sidebar-collapsed' : '') +
-      (active === 'MAPA 1.0' ? ' map-fullscreen' : '') +
+      (active === 'MAPA 2.0' ? ' map-fullscreen' : '') +
       (structuralDarkMode ? ' structural-dark' : '')}>
     <aside className="sidebar">
       <button type="button" className="sidebar-hide-button" title="Recolher menu"
@@ -1654,7 +1704,7 @@ export default function App() {
       <div className="brand"><div className="brand-mark"><Truck size={22}/></div><div><strong>COSTALOG</strong><span>OPERAÇÕES</span></div></div>
       <div className="workspace"><span className="workspace-dot"/> MAPA operacional <ChevronDown size={15}/></div>
       <div className="nav-label">MENU PRINCIPAL</div>
-      <nav>{nav.map(item => <button key={item.name} className={`nav-item ${active === item.name ? 'active' : ''}`} onClick={() => setActive(item.name)}><item.icon size={18}/><span>{item.name}</span>{item.name === 'MAPA 1.0' && <span className="nav-count">{columns.length}</span>}</button>)}</nav>
+      <nav>{nav.map(item => <button key={item.name} className={`nav-item ${active === item.name ? 'active' : ''}`} onClick={() => setActive(item.name)}><item.icon size={18}/><span>{item.name}</span>{item.name === 'MAPA 2.0' && <span className="nav-count">{columns.length}</span>}</button>)}</nav>
       <div className="sidebar-bottom"><div className="connection"><span className="connection-dot"/> {apiBase && token ? 'Conectado à API' : 'API não conectada'}</div><div className="user"><div className="avatar">C</div><div><b>Costalog</b><small>{token ? 'Usuário autenticado' : 'Acesso operacional'}</small></div><Settings2 size={17}/></div></div>
     </aside>
     <main className="main">
@@ -1669,18 +1719,18 @@ export default function App() {
             {structuralDarkMode?<Sun size={15}/>:<Moon size={15}/>}
             <span>{structuralDarkMode?'Modo claro':'Modo escuro'}</span>
           </button>{token && <button className="secondary" onClick={logout}><LogOut size={15}/> Sair</button>}<button className="icon-button" title="Notificações"><Bell size={18}/></button><div className="avatar small">C</div></div></header>
-      <section className={'content ' + (active === 'MAPA 1.0' ? 'map-content' : '')}>
-        {active !== 'MAPA 1.0' && <div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPERAÇÕES</div><h1>{active}</h1><p>Grade operacional completa, com colunas configuráveis para cada usuário.</p></div></div>}
-        {active !== 'MAPA 1.0' && <div className="notice"><ClipboardList size={17}/><span>{apiBase ? (token ? notice : 'Entre com sua conta para acessar os dados reais.') : 'Configure VITE_API_URL para conectar a aplicação à API. Nenhum dado fictício será exibido.'}</span></div>}
+      <section className={'content ' + (active === 'MAPA 2.0' ? 'map-content' : '')}>
+        {active !== 'MAPA 2.0' && <div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPERAÇÕES</div><h1>{active}</h1><p>Grade operacional completa, com colunas configuráveis para cada usuário.</p></div></div>}
+        {active !== 'MAPA 2.0' && <div className="notice"><ClipboardList size={17}/><span>{apiBase ? (token ? notice : 'Entre com sua conta para acessar os dados reais.') : 'Configure VITE_API_URL para conectar a aplicação à API. Nenhum dado fictício será exibido.'}</span></div>}
         {apiBase && !token && <form className="panel login-panel" onSubmit={login}><div><h2>Acessar MAPA COSTALOG</h2><p>Entre com seu usuário autorizado.</p></div><div className="login-fields"><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail corporativo" autoComplete="username"/><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha" autoComplete="current-password"/><button className="primary" disabled={loading}>{loading ? 'Conectando...' : 'Entrar'}</button></div>{apiError && <p className="api-error">{apiError}</p>}</form>}
         {apiBase && apiError && token && <div className="notice api-error"><span>{apiError}</span><button onClick={logout}>Fazer login novamente</button></div>}
         {active === 'Visão geral' && <section className="workspace-page">
           <div className="section-intro"><span className="eyebrow">INDICADORES DA OPERAÇÃO</span><h2>Visão geral da operação</h2><p>Indicadores consolidados diretamente do banco de dados, sem estimativas.</p></div>
           {!token ? <div className="empty-state">Entre com sua conta autorizada para consultar os indicadores reais.</div> : <>
-            <div className="overview-grid"><div className="overview-card"><span>Registros ativos</span><strong>{dashboardLoading ? '…' : (dashboardSummary?.activeRecords ?? '—')}</strong><small>Exclui registros arquivados</small></div><div className="overview-card"><span>Atualizados nos últimos 7 dias</span><strong>{dashboardLoading ? '…' : (dashboardSummary?.recentlyUpdated ?? '—')}</strong><small>Atividade recente</small></div><div className="overview-card"><span>Colunas configuradas</span><strong>{columns.length}</strong><small>Estrutura MAPA 1.0</small></div></div>
+            <div className="overview-grid"><div className="overview-card"><span>Registros ativos</span><strong>{dashboardLoading ? '…' : (dashboardSummary?.activeRecords ?? '—')}</strong><small>Exclui registros arquivados</small></div><div className="overview-card"><span>Atualizados nos últimos 7 dias</span><strong>{dashboardLoading ? '…' : (dashboardSummary?.recentlyUpdated ?? '—')}</strong><small>Atividade recente</small></div><div className="overview-card"><span>Colunas configuradas</span><strong>{columns.length}</strong><small>Estrutura MAPA 2.0</small></div></div>
             <div className="overview-grid"><div className={'overview-card ' + ((appointmentAlerts?.total || 0) > 0 ? 'validation-warning' : 'validation-ok')}><span>Agendamentos vencidos</span><strong>{appointmentAlertsLoading ? '…' : (appointmentAlerts?.total ?? '—')}</strong><small>Coletas e primeiras entregas pendentes</small></div><div className="overview-card"><span>Coletas vencidas</span><strong>{appointmentAlertsLoading ? '…' : (appointmentAlerts?.byKind?.collection ?? '—')}</strong><small>Conferência conforme AU ou AV</small></div><div className="overview-card"><span>Entregas vencidas</span><strong>{appointmentAlertsLoading ? '…' : (appointmentAlerts?.byKind?.delivery ?? '—')}</strong><small>Primeira entrega, conforme AW</small></div><div className={'overview-card ' + ((validationSummary?.items.length || 0) > 0 ? 'validation-warning' : 'validation-ok')}><span>Campos obrigatórios pendentes</span><strong>{validationLoading ? '…' : (validationSummary ? validationSummary.items.reduce((sum,item)=>sum+item.missing,0) : '—')}</strong><small>Soma de pendências por campo; um registro pode ter mais de uma</small></div></div>
             <div className="panel validation-panel"><div className="panel-heading"><div><h2>Distribuição por status</h2><p>Até 12 status com mais registros ativos.</p></div><button className="secondary" disabled={dashboardLoading} onClick={()=>{setDashboardLoading(true);fetch(apiBase + '/api/v1/dashboard/summary',{headers:{Authorization:'Bearer '+token}}).then(async response=>{const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body?.error?.message||'Falha ao atualizar indicadores.');setDashboardSummary(body as DashboardSummary);setApiError('');}).catch(error=>setApiError(error instanceof Error?error.message:'Falha ao atualizar painel.')).finally(()=>setDashboardLoading(false));}}>Atualizar indicadores</button></div>
-              {dashboardSummary?.statuses?.length ? <div className="status-grid">{dashboardSummary.statuses.map(item=><button className="status-card" key={item.status} disabled={item.status === 'Sem status'} title={item.status === 'Sem status' ? 'O filtro de registros sem status ainda não está disponível.' : 'Abrir registros deste status'} onClick={()=>{setStatus(item.status);setPage(1);setActive('MAPA 1.0')}}><span className="status-indicator"/><b>{item.status}</b><strong>{item.count}</strong><small>Ver registros</small></button>)}</div> : <div className="empty-state">{dashboardLoading ? 'Carregando indicadores…' : 'Não há registros ativos com status para exibir.'}</div>}
+              {dashboardSummary?.statuses?.length ? <div className="status-grid">{dashboardSummary.statuses.map(item=><button className="status-card" key={item.status} disabled={item.status === 'Sem status'} title={item.status === 'Sem status' ? 'O filtro de registros sem status ainda não está disponível.' : 'Abrir registros deste status'} onClick={()=>{setStatus(item.status);setPage(1);setActive('MAPA 2.0')}}><span className="status-indicator"/><b>{item.status}</b><strong>{item.count}</strong><small>Ver registros</small></button>)}</div> : <div className="empty-state">{dashboardLoading ? 'Carregando indicadores…' : 'Não há registros ativos com status para exibir.'}</div>}
               {dashboardSummary && <p className="validation-footnote">Atualizado em {new Date(dashboardSummary.generatedAt).toLocaleString('pt-BR')}. Os indicadores refletem os dados disponíveis no banco no momento da consulta.</p>}
             </div>
           </>}
@@ -1689,11 +1739,11 @@ export default function App() {
           </div>
           <div className="panel validation-panel"><div className="panel-heading"><div><h2>Agendamentos vencidos</h2><p>Coletas e entregas com data/hora do agendamento já passada e sem registro do marco operacional correspondente. Responsável conforme o campo ATENDENTE.</p></div><button className="secondary" disabled={appointmentAlertsLoading} onClick={()=>{setAppointmentAlertsLoading(true);fetch(apiBase + '/api/v1/dashboard/appointment-alerts'+(()=>{const params=new URLSearchParams();if(alertAttendantFilter!=='Todos')params.set('attendant',alertAttendantFilter);if(alertKindFilter!=='Todos')params.set('kind',alertKindFilter);return params.size?'?'+params.toString():''})(),{headers:{Authorization:'Bearer '+token}}).then(async response=>{const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body?.error?.message||'Falha ao atualizar alertas.');setAppointmentAlerts(body as AppointmentAlertSummary);setApiError('');}).catch(error=>setApiError(error instanceof Error?error.message:'Falha ao atualizar alertas.')).finally(()=>setAppointmentAlertsLoading(false));}}>Atualizar alertas</button></div>
             {appointmentAlerts && appointmentAlerts.total > 0 && <div className="toolbar" role="group" aria-label="Filtrar alertas"><button className={alertKindFilter==='Todos'?'primary':'secondary'} onClick={()=>{setAlertKindFilter('Todos');setShowAllAppointmentAlerts(false);}}>Todos ({appointmentAlerts.total})</button><button className={alertKindFilter==='Coleta'?'primary':'secondary'} onClick={()=>{setAlertKindFilter('Coleta');setShowAllAppointmentAlerts(false);}}>Coletas ({appointmentAlerts.byKind?.collection ?? appointmentAlerts.items.filter(item=>item.kind==='Coleta').length})</button><button className={alertKindFilter==='Entrega'?'primary':'secondary'} onClick={()=>{setAlertKindFilter('Entrega');setShowAllAppointmentAlerts(false);}}>Entregas ({appointmentAlerts.byKind?.delivery ?? appointmentAlerts.items.filter(item=>item.kind==='Entrega').length})</button><label className="filter-control">Atendente <select value={alertAttendantFilter} onChange={event=>{setAlertAttendantFilter(event.target.value);setShowAllAppointmentAlerts(false);}}><option value="Todos">Todos</option>{(appointmentAlerts.attendants || Array.from(new Set(appointmentAlerts.items.map(item=>item.attendant).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'pt-BR'))).map(attendant=><option key={attendant} value={attendant}>{attendant}</option>)}</select></label></div>}
-            {!token ? <div className="empty-state">Entre para consultar os agendamentos reais.</div> : appointmentAlertsLoading && !appointmentAlerts ? <div className="empty-state">Verificando agendamentos…</div> : appointmentAlerts?.items.length ? <div className="validation-list">{appointmentAlerts.items.filter(item=>(alertKindFilter==='Todos'||item.kind===alertKindFilter)&&(alertAttendantFilter==='Todos'||item.attendant===alertAttendantFilter)).slice(0,showAllAppointmentAlerts ? 100 : 8).map(item=><div className="validation-row" key={item.id + item.kind}><div className="validation-icon"><Bell size={17}/></div><div className="validation-field"><b>#{item.sequence} · {item.kind}</b><small>{item.clientName || 'Cliente não informado'}{item.container ? ' · '+item.container : ''}{item.cte ? ' · CT-e '+item.cte : ''}</small><small>Agendado: {new Date(item.scheduledAt).toLocaleString('pt-BR')} · Atendente: {item.attendant}</small></div><strong>{item.minutesLate >= 60 ? Math.floor(item.minutesLate/60)+' h' : item.minutesLate+' min'}</strong><button className="secondary" onClick={()=>{setQuery(item.container || item.cte || item.clientName || '');setStatus('');setFilterColumn('');setFilterValue('');setPage(1);setActive('MAPA 1.0')}}>Abrir</button></div>)}</div> : <div className="empty-state">{appointmentAlerts ? 'Nenhum agendamento vencido encontrado com os campos disponíveis.' : 'Aguardando consulta dos agendamentos.'}</div>}
+            {!token ? <div className="empty-state">Entre para consultar os agendamentos reais.</div> : appointmentAlertsLoading && !appointmentAlerts ? <div className="empty-state">Verificando agendamentos…</div> : appointmentAlerts?.items.length ? <div className="validation-list">{appointmentAlerts.items.filter(item=>(alertKindFilter==='Todos'||item.kind===alertKindFilter)&&(alertAttendantFilter==='Todos'||item.attendant===alertAttendantFilter)).slice(0,showAllAppointmentAlerts ? 100 : 8).map(item=><div className="validation-row" key={item.id + item.kind}><div className="validation-icon"><Bell size={17}/></div><div className="validation-field"><b>#{item.sequence} · {item.kind}</b><small>{item.clientName || 'Cliente não informado'}{item.container ? ' · '+item.container : ''}{item.cte ? ' · CT-e '+item.cte : ''}</small><small>Agendado: {new Date(item.scheduledAt).toLocaleString('pt-BR')} · Atendente: {item.attendant}</small></div><strong>{item.minutesLate >= 60 ? Math.floor(item.minutesLate/60)+' h' : item.minutesLate+' min'}</strong><button className="secondary" onClick={()=>{setQuery(item.container || item.cte || item.clientName || '');setStatus('');setFilterColumn('');setFilterValue('');setPage(1);setActive('MAPA 2.0')}}>Abrir</button></div>)}</div> : <div className="empty-state">{appointmentAlerts ? 'Nenhum agendamento vencido encontrado com os campos disponíveis.' : 'Aguardando consulta dos agendamentos.'}</div>}
             {appointmentAlerts && <p className="validation-footnote">Análise em {new Date(appointmentAlerts.generatedAt).toLocaleString('pt-BR')}. Total de alertas: {appointmentAlerts.total}. {showAllAppointmentAlerts ? 'Exibindo até 100 alertas para o filtro atual.' : 'Exibindo os 8 primeiros alertas do filtro atual.'} Nenhuma data foi alterada.</p>}
             {appointmentAlerts && (appointmentAlerts.filteredTotal ?? appointmentAlerts.items.length) > 8 && <button className="secondary" onClick={()=>setShowAllAppointmentAlerts(value=>!value)}>{showAllAppointmentAlerts ? 'Mostrar menos' : `Ver todos os ${Math.min(appointmentAlerts.filteredTotal ?? appointmentAlerts.items.length,100)} alertas`}</button>}
           </div>
-          <div className="panel quick-panel"><div><h3>Acesso rápido</h3><p>Consulte e edite os registros operacionais na grade.</p></div><button className="primary" onClick={()=>setActive('MAPA 1.0')}><Table2 size={16}/> Abrir MAPA 1.0</button></div>
+          <div className="panel quick-panel"><div><h3>Acesso rápido</h3><p>Consulte e edite os registros operacionais na grade.</p></div><button className="primary" onClick={()=>setActive('MAPA 2.0')}><Table2 size={16}/> Abrir MAPA 2.0</button></div>
         </section>}
         {active === 'Status operacional' && <section className="workspace-page">
           <div className="section-intro"><span className="eyebrow">ACOMPANHAMENTO</span><h2>Status e validações operacionais</h2><p>Consulte os status existentes e identifique campos obrigatórios ainda não preenchidos nos registros ativos.</p></div>
@@ -1707,11 +1757,11 @@ export default function App() {
             {validationSummary && <p className="validation-footnote">Última análise: {new Date(validationSummary.checkedAt).toLocaleString('pt-BR')}. Esta verificação usa apenas colunas marcadas como obrigatórias; regras de prazo ainda precisam ser configuradas conforme o processo da operação.</p>}
           </div>
           <div className="section-intro status-section-intro"><h2>Status dos registros</h2><p>Selecione um status para abrir os registros correspondentes.</p></div>
-          <div className="status-grid">{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><button className="status-card" key={value} onClick={()=>{setStatus(value);setPage(1);setActive('MAPA 1.0')}}><span className="status-indicator"/><b>{value}</b><small>Ver registros com este status</small></button>)}</div>
+          <div className="status-grid">{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><button className="status-card" key={value} onClick={()=>{setStatus(value);setPage(1);setActive('MAPA 2.0')}}><span className="status-indicator"/><b>{value}</b><small>Ver registros com este status</small></button>)}</div>
           {rows.every(row=>!row.status) && <div className="empty-state">Não há status preenchidos nos registros carregados.</div>}
-          <button className="secondary" onClick={()=>{setStatus('');setActive('MAPA 1.0')}}>Limpar filtro e abrir grade</button>
+          <button className="secondary" onClick={()=>{setStatus('');setActive('MAPA 2.0')}}>Limpar filtro e abrir grade</button>
         </section>}
-        {active === 'Cadastros' && <BaseCatalogSheet userRole={userRole} apiBase={apiBase} token={token} onOpenMapa={() => setActive('MAPA 1.0')} />}
+        {active === 'Cadastros' && <BaseCatalogSheet userRole={userRole} apiBase={apiBase} token={token} onOpenMapa={() => setActive('MAPA 2.0')} />}
 
         {active === 'Minha conta' && <section className="workspace-page"><div className="section-intro"><span className="eyebrow">CONTA PESSOAL</span><h2>Meu cadastro</h2><p>Atualize seu nome, e-mail e senha.</p></div><form className="panel profile-form" onSubmit={saveProfile}><label>Nome completo<input required minLength={2} value={profileName} onChange={event=>setProfileName(event.target.value)}/></label><label>E-mail<input required type="email" value={profileEmail} onChange={event=>setProfileEmail(event.target.value)}/></label><div className="profile-role">Perfil de acesso <strong>{profile?.role||userRole||'—'}</strong><small>Permissões são alteradas por um administrador.</small></div><div className="password-section"><h3>Alterar senha (opcional)</h3><label>Senha atual<input type="password" autoComplete="current-password" value={currentPassword} onChange={event=>setCurrentPassword(event.target.value)} required={Boolean(newPassword)}/></label><label>Nova senha<input type="password" minLength={10} autoComplete="new-password" value={newPassword} onChange={event=>setNewPassword(event.target.value)} placeholder="Mínimo de 10 caracteres"/></label></div><button className="primary" type="submit"><Save size={15}/> Salvar meu cadastro</button></form></section>}
         {active === 'Usuários' && <section className="workspace-page"><div className="section-intro"><span className="eyebrow">ADMINISTRAÇÃO</span><h2>Usuários e permissões</h2><p>Crie contas, altere perfis e bloqueie acessos.</p></div>{userRole!=='ADMIN'?<div className="empty-state">Esta área é exclusiva para administradores.</div>:<><form className="panel create-user-form" onSubmit={createUser}><h3>Novo usuário</h3><div className="user-form-grid"><label>Nome<input required minLength={2} value={newUserName} onChange={event=>setNewUserName(event.target.value)}/></label><label>E-mail<input required type="email" value={newUserEmail} onChange={event=>setNewUserEmail(event.target.value)}/></label><label>Senha inicial<input required type="password" minLength={10} value={newUserPassword} onChange={event=>setNewUserPassword(event.target.value)}/></label><label>Perfil<select value={newUserRole} onChange={event=>setNewUserRole(event.target.value)}><option value="CONSULTA">Consulta</option><option value="OPERACAO">Operação</option><option value="SUPERVISOR">Supervisor</option><option value="ADMIN">Administrador</option></select></label></div><button className="primary" type="submit"><Plus size={15}/> Criar usuário</button></form><div className="panel users-table-panel"><div className="panel-heading"><div><h2>Usuários cadastrados</h2><p>{users.length} conta(s) · {users.filter(item=>item.pendingApproval).length} solicitação(ões) pendente(s)</p></div></div><div className="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th><th>Ações</th></tr></thead><tbody>{users.map(item=><tr key={item.id}><td>{item.name}</td><td>{item.email}</td><td><select value={item.role} disabled={item.id===profile?.id} onChange={event=>void updateUser(item,{role:event.target.value})}><option value="CONSULTA">Consulta</option><option value="OPERACAO">Operação</option><option value="SUPERVISOR">Supervisor</option><option value="ADMIN">Administrador</option></select></td><td><span className={item.active?'feature-state connected':'feature-state'}>{item.active?'Ativo':item.pendingApproval?'Pendente':'Bloqueado'}</span></td><td><button className="secondary" disabled={item.id===profile?.id} onClick={()=>{if(item.pendingApproval && !window.confirm('Você confirmou a identidade e o e-mail desta pessoa antes de liberar o acesso?')) return; void updateUser(item,{active:!item.active});}}>{item.active?'Bloquear':item.pendingApproval?'Aprovar acesso':'Reativar'}</button></td></tr>)}</tbody></table></div></div></>}</section>}
@@ -1719,9 +1769,9 @@ export default function App() {
           <div className="section-intro"><span className="eyebrow">CONEXÕES DO SISTEMA</span><h2>Integrações</h2><p>Estado de acesso aos recursos centrais do MAPA COSTALOG.</p></div>
           <div className="feature-list"><div className="feature-row"><div className="feature-icon"><Waypoints size={19}/></div><div><b>API MAPA COSTALOG</b><p>{apiBase || 'Endereço da API não configurado no frontend.'}</p></div><span className={apiBase && token ? 'feature-state connected' : 'feature-state'}>{apiBase && token ? 'Sessão ativa' : 'Sem sessão'}</span></div><div className="feature-row"><div className="feature-icon"><Activity size={19}/></div><div><b>Banco de dados</b><p>Registros consultados pela API e armazenados no PostgreSQL/Supabase.</p></div><span className="feature-state">{token ? 'Acesso autenticado' : 'Aguardando login'}</span></div><div className="notice"><ClipboardList size={17}/><span>Sincronizações externas adicionais ainda precisam ser implementadas e testadas.</span></div></div>
         </section>}
-        {active === 'MAPA 1.0' && <>
+        {active === 'MAPA 2.0' && <>
         <section className="panel mapa-grid-panel">
-          <div className="panel-heading compact-map-heading"><div><h2><Table2 size={19}/> MAPA 1.0</h2><p>Planilha operacional · edite as células autorizadas diretamente na grade.</p></div><div className="panel-actions">{token && userRole !== 'CONSULTA' && !sheetCanvas && <>
+          <div className="panel-heading compact-map-heading"><div><h2><Table2 size={19}/> MAPA 2.0</h2><p>Planilha operacional · edite as células autorizadas diretamente na grade.</p></div><div className="panel-actions">{token && userRole !== 'CONSULTA' && !sheetCanvas && <>
         <button className="primary" disabled={loading||creatingRows} onClick={()=>void createRow()} title="Inserir uma linha">
           <Plus size={16}/> Nova linha</button>
         <button className="secondary" onClick={()=>setNewRowsOpen(value=>!value)} disabled={creatingRows}
@@ -1779,7 +1829,7 @@ export default function App() {
           </div>
           <div className="table-wrap sheet-grid-wrap" ref={gridRef} tabIndex={0} onKeyDown={onGridKeyDown} onCopy={onGridCopy} onPaste={onGridPaste}
             onScroll={handleGridScroll}>
-            <table className="sheet-table" role="grid" aria-label="MAPA 1.0 - planilha operacional">
+            <table className="sheet-table" role="grid" aria-label="MAPA 2.0 - planilha operacional">
               <colgroup>
                 <col style={{width: 65}} />
                 {visibleColumns.map(column => <col key={column.key} style={{width: columnWidths[column.key] || 180}} />)}
