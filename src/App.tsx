@@ -1754,6 +1754,17 @@ export default function App() {
         {apiBase && !token && <form className="panel login-panel" onSubmit={login}><div><h2>Acessar MAPA COSTALOG</h2><p>Entre com seu usuário autorizado.</p></div><div className="login-fields"><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail corporativo" autoComplete="username"/><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha" autoComplete="current-password"/><button className="primary" disabled={loading}>{loading ? 'Conectando...' : 'Entrar'}</button></div>{apiError && <p className="api-error">{apiError}</p>}</form>}
         {apiBase && apiError && token && <div className="notice api-error"><span>{apiError}</span><button onClick={logout}>Fazer login novamente</button></div>}
         {active === 'Visão geral' && <section className="workspace-page">
+          <div className="costalog-welcome-hero" aria-label="Boas-vindas à central Costalog">
+            <div className="costalog-welcome-copy">
+              <small>CENTRAL OPERACIONAL · MAPA COSTALOG</small>
+              <h2>Olá, {profileName.trim().split(/\s+/)[0] || 'equipe'}.</h2>
+              <p>Acompanhe os registros, documentos e cadastros da operação em um só lugar.</p>
+            </div>
+            <div className="costalog-welcome-figures" aria-label="Estrutura do MAPA 2.0">
+              <div className="costalog-welcome-figure"><strong>{columns.length}</strong><span>colunas</span></div>
+              <div className="costalog-welcome-figure"><strong>100</strong><span>linhas de teste</span></div>
+            </div>
+          </div>
           <div className="section-intro"><span className="eyebrow">INDICADORES DA OPERAÇÃO</span><h2>Visão geral da operação</h2><p>Indicadores consolidados diretamente do banco de dados, sem estimativas.</p></div>
           {!token ? <div className="empty-state">Entre com sua conta autorizada para consultar os indicadores reais.</div> : <>
             <div className="overview-grid"><div className="overview-card"><span>Registros ativos</span><strong>{dashboardLoading ? '…' : (dashboardSummary?.activeRecords ?? '—')}</strong><small>Exclui registros arquivados</small></div><div className="overview-card"><span>Atualizados nos últimos 7 dias</span><strong>{dashboardLoading ? '…' : (dashboardSummary?.recentlyUpdated ?? '—')}</strong><small>Atividade recente</small></div><div className="overview-card"><span>Colunas configuradas</span><strong>{columns.length}</strong><small>Estrutura MAPA 2.0</small></div></div>
