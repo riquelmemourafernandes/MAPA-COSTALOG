@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { columnIndexToKey, columnKeyToIndex, evaluateFormula, parseCellAddress, translateFormulaReferences } from './formula-engine.js';
 
 const values: Record<string, string | number | boolean | null> = {
-  A2: 2, A3: 3, A4: 4, B2: 8, C2: 'Cliente', D2: true
+  A2: 2, A3: 3, A4: 4, B2: 8, B3: 12, C2: 'Cliente', D2: true
 };
 const resolve = (row: number, column: string) => values[column + row] ?? null;
 
@@ -35,6 +35,10 @@ test('accepts Brazilian Portuguese function names and semicolon separators', () 
   assert.equal(evaluateFormula('=SE(A2>1;"OK";"NÃO")', resolve), 'OK');
   assert.equal(evaluateFormula('=SEERRO(1/0;7)', resolve), 7);
   assert.equal(evaluateFormula('=MAIÚSCULA("custo")', resolve), 'CUSTO');
+  assert.equal(evaluateFormula('=1,5+2', resolve), 3.5);
+  assert.equal(evaluateFormula('=PROCV("Cliente";C2:D2;2;FALSO)', resolve), true);
+  assert.equal(evaluateFormula('=ÍNDICE(A2:B3;2;2)', resolve), 12);
+  assert.equal(evaluateFormula('=CORRESP(8;A2:B2;0)', resolve), 2);
 });
 
 test('reports calculation errors and detects circular references', () => {
