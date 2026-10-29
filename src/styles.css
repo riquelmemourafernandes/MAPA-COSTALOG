@@ -476,3 +476,6 @@ td:hover .cell-history,.cell-history:focus{opacity:1}
 .app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row .sheet-corner{
   cursor:pointer;font-size:12px;
 }
+
+.sheet-grid-compat-alert{padding:7px 12px;background:#fff8e7;border-top:1px solid #e6d5ad;
+  color:#815f23;font-size:11px;line-height:1.5}
