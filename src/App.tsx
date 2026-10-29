@@ -1904,15 +1904,16 @@ export default function App() {
                     title="Linha 1: cabeçalho fixo">1</th>
                   {visibleColumns.map((column,ci)=><th key={column.key}
                     className={'sheet-column-header '+(selectionMode==='column'&&selectedColumnKey===column.key?'sheet-column-selected':'')}
-                    scope="col" onContextMenu={event=>openSheetContext(event,'column',undefined,ci)}>
+                    scope="col" title={'Clique para abrir o menu de '+(column.label||column.key)}
+                    onClick={event=>showColumnFilter(event,column)}
+                    onContextMenu={event=>openSheetContext(event,'column',undefined,ci)}>
                     <button type="button"
                       className={'sheet-filter-trigger '+(columnFilters[column.key]?'filter-active':'')}
-                      title={'Filtrar '+column.label}
-                      aria-label={'Abrir filtro da coluna '+(column.label||column.key)}
-                      aria-expanded={openFilterKey===column.key}
-                      onClick={event=>showColumnFilter(event,column)}>
+                      title={'Abrir menu de '+(column.label||column.key)}
+                      aria-label={'Abrir menu da coluna '+(column.label||column.key)}
+                      aria-haspopup="dialog"
+                      aria-expanded={openFilterKey===column.key}>
                       <span className="sheet-header-name">{column.label||'(sem título)'}</span>
-                      <span aria-hidden="true">{columnFilters[column.key]?'▼':'▾'}</span>
                     </button>
                   </th>)}
                 </tr>
