@@ -1071,13 +1071,16 @@ export default function App() {
     const element=event.target as HTMLElement;
     if(['INPUT','TEXTAREA','SELECT'].includes(element.tagName))return;
     event.preventDefault();
+    pasteGridText(event.clipboardData.getData('text/plain'));
+  }
+  function pasteGridText(plainText: string) {
     if(userRole==='CONSULTA'){setApiError('Seu perfil permite apenas consultar a planilha.');return;}
     if(pasteBusy||gridMutationBusyRef.current)return;
     if(!selectedPosition){
       setApiError(placeholderPosition?'A linha ainda é visual. Crie registros antes de colar.':'Selecione uma célula para colar.');
       return;
     }
-    const matrix=parseClipboardGrid(event.clipboardData.getData('text/plain'));
+    const matrix=parseClipboardGrid(plainText);
     if(!canPasteMatrix(matrix,selectedPosition,displayedRows.length,visibleColumns.length,2000)){
       setApiError('A colagem deve ser retangular, caber nas linhas carregadas e conter até 2.000 células.');
       return;
@@ -1441,6 +1444,7 @@ export default function App() {
                               void finishCellEdit(row,column,value,next);
                             }}
                             onCancel={()=>{setEditingCell(null);setEditValue('');}}
+                            onPasteCell={text=>{setEditingCell(null);setEditValue('');pasteGridText(text);}}
                           /> : <input ref={editorRef} autoFocus className="sheet-cell-editor"
                             type={column.key === 'A' ? 'date' : 'text'}
                             inputMode={column.key === 'Q' ? 'decimal' : undefined}
