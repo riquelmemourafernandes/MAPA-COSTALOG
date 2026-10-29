@@ -54,8 +54,7 @@ const isGitHubPagesPreview = typeof window !== 'undefined' &&
   window.location.pathname.startsWith('/MAPA-COSTALOG/');
 const previewHomologApi = (import.meta.env.VITE_HOMOLOG_API_URL || '').trim().replace(/\/+$/, '');
 const apiBase = isGitHubPagesPreview
-  ? (previewHomologApi === 'https://mapa-costalog-api-homologacao.onrender.com'
-      ? previewHomologApi : '')
+  ? ''
   : isVercelSite && /^https:\/\/[^/]+$/.test(previewHomologApi)
     ? previewHomologApi
     : isVercelSite ? window.location.origin : (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
