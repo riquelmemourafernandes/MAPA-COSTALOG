@@ -1978,7 +1978,9 @@ export default function App() {
         {active !== 'MAPA 2.0' && <div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPERAÇÕES</div><h1>{active}</h1><p>Grade operacional completa, com colunas configuráveis para cada usuário.</p></div></div>}
         {active !== 'MAPA 2.0' && <div className="notice"><ClipboardList size={17}/><span>{apiBase ? (token ? notice : 'Entre com sua conta para acessar os dados reais.') : 'Configure VITE_API_URL para conectar a aplicação à API. Nenhum dado fictício será exibido.'}</span></div>}
         {apiBase && !token && <form className="panel login-panel" onSubmit={login}><div><h2>Acessar MAPA COSTALOG</h2><p>Entre com seu usuário autorizado.</p></div><div className="login-fields"><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail corporativo" autoComplete="username"/><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha" autoComplete="current-password"/><button className="primary" disabled={loading}>{loading ? 'Conectando...' : 'Entrar'}</button></div>{apiError && <p className="api-error">{apiError}</p>}</form>}
-        {apiBase && apiError && token && <div className="notice api-error"><span>{apiError}</span><button onClick={logout}>Fazer login novamente</button></div>}
+        {apiBase && apiError && token && <div className="notice api-error" role="alert"><span>{apiError}</span>{apiError.startsWith('Ctrl+')?
+  <button onClick={()=>setApiError('')}>Fechar</button>:
+  <button onClick={logout}>Fazer login novamente</button>}</div>}
         {active === 'Visão geral' && <section className="workspace-page">
           <div className="costalog-welcome-hero" aria-label="Boas-vindas à central Costalog">
             <div className="costalog-welcome-copy">
