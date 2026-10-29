@@ -1,0 +1,15 @@
+.sheet-cell-dropdown-editor{display:flex;align-items:center;width:100%;height:100%;min-width:0}
+.mapa-grid-panel .sheet-table .sheet-cell-dropdown-editor .sheet-cell-editor{width:calc(100% - 19px);flex:1;min-width:0}
+.sheet-cell-dropdown-caret{border:0;border-left:1px solid #cbd6c9;background:#eff5ea;color:#41784e;min-width:19px;height:32px;display:grid;place-items:center;padding:0;cursor:pointer}
+.sheet-cell-options{position:fixed;z-index:1600;background:#fff;border:1px solid #bbd0bd;border-radius:4px;box-shadow:0 10px 28px #273b2b44;padding:5px;overflow:hidden;color:#263528;font-size:12px}
+.sheet-cell-options-heading{display:flex;align-items:center;gap:6px;font-size:10px;color:#718674;padding:7px 7px 9px;border-bottom:1px solid #edf2eb}
+.sheet-cell-options-scroll{max-height:245px;overflow:auto}
+.sheet-cell-option{width:100%;display:flex;align-items:center;justify-content:space-between;gap:9px;border:0;border-radius:3px;padding:8px 9px;text-align:left;background:#fff;color:#263b2d;font-size:11px;cursor:pointer;line-height:1.4}
+.sheet-cell-option:hover,.sheet-cell-option.highlighted{background:#edf4ff}
+.sheet-cell-option.clear{font-style:italic;color:#87948a}
+.sheet-cell-option span{flex:1;white-space:normal;overflow-wrap:anywhere}
+.sheet-cell-options-error{background:#fff4f0;color:#a63f38;padding:7px;border-radius:4px;font-size:10px}
+.sheet-cell-options-hint{background:#f5f8f2;color:#6f806f;padding:7px;border-radius:4px;font-size:10px;line-height:1.5}
+.sheet-cell-no-options{padding:14px 9px;color:#819087;font-size:11px}
+.mapa-grid-panel .sheet-table td.sheet-lookup-cell .cell-content>span[data-cell-id]::after{content:"▾";float:right;font-size:10px;color:#678a72;margin-left:5px}
+.mapa-grid-panel .sheet-table td.sheet-lookup-cell:not(.selected-cell):hover{background:#f5faf4}
