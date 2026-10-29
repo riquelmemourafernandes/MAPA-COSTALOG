@@ -1047,3 +1047,28 @@ html.costalog-dark .sheet-cell-options {
   .app-shell .mapa-grid-panel .sheet-menu-trigger{padding:6px 7px;font-size:11px}
   .app-shell .mapa-grid-panel .sheet-menu-dropdown{position:fixed;top:auto;left:8px;right:8px;max-width:none}
 }
+
+/* MAPA 2.0 / GitHub Pages — thin BLACK gridlines for every worksheet cell.
+   This covers populated and empty/virtual rows, header letters and labels,
+   and both structural themes without changing the colors inside the cells. */
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table{
+  border-top:1px solid #000!important;
+  border-left:1px solid #000!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td:not(.selected-cell),
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>th.sheet-row-number,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td:not(.selected-cell),
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>th.sheet-row-number{
+  border-right:1px solid #000!important;
+  border-bottom:1px solid #000!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row>th,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row>th,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row>th,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row>th{
+  border-right:1px solid #000!important;
+  border-bottom:1px solid #000!important;
+}
+/* Selected cell stays on its real boundary with the previously requested
+   thin red selection marker, never a second internal outline. */
