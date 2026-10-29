@@ -1011,3 +1011,74 @@ html.costalog-dark .sheet-cell-options-error{background:#532f30;color:#ffd9d9}
   border-right-color:#000!important;
   border-bottom-color:#000!important;
 }
+
+/* MAPA 2.0 — freely resize row/column boundaries without revealing extra text.
+   Small rows clip their contents instead of growing back to the text height. */
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table{
+  width: max-content;
+  min-width: 0 !important;
+  table-layout: fixed !important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer){
+  height: var(--mapa-row-height, 35px) !important;
+  max-height: var(--mapa-row-height, 35px) !important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>th.sheet-row-number{
+  height: var(--mapa-row-height, 35px) !important;
+  max-height: var(--mapa-row-height, 35px) !important;
+  min-height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td{
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: clip !important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>th.sheet-row-number{
+  overflow: visible !important; /* keep row-resize pointer handle accessible */
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer) .cell-content,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer) .cell-content>span,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr.sheet-virtual-empty-row td>span[role="gridcell"]{
+  display: block;
+  height: max(0px, calc(var(--mapa-row-height, 35px) - 1px)) !important;
+  max-height: max(0px, calc(var(--mapa-row-height, 35px) - 1px)) !important;
+  min-height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: clip !important;
+  box-sizing: border-box;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer) .sheet-boolean-wrapper{
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer) .sheet-cell-editor,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer) .sheet-blank-editor{
+  height: max(10px, calc(var(--mapa-row-height, 35px) - 1px)) !important;
+  min-height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  box-sizing: border-box;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr.sheet-virtual-empty-row>td{
+  height: var(--mapa-row-height, 35px) !important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-row-resize-handle{
+  height: 9px;
+  bottom: -4px;
+  cursor: row-resize;
+  touch-action: none;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-letter-header .sheet-resize-handle{
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+}
