@@ -3,6 +3,8 @@ import BaseCatalogSheet from './BaseCatalogSheet.js';
 import SheetColorPicker from './SheetColorPicker.js';
 import SheetDropdownEditor from './SheetDropdownEditor.js';
 import { BASE_COLUMN_LIST } from './sheet-dropdown-utils.js';
+import { STATUS_COLORS, statusRowColor, statusRowTextColor } from './sheet-status-rules.js';
+import { checkboxChecked, checkboxSaveText, isCheckboxColumn } from './sheet-checkbox.js';
 import {LOCKED_COLUMN_FORMAT,formatSheetValue,parseSheetValue,toDateInput,type SheetNumberFormat} from './sheet-formats.js';
 import { matchesColumnFilters, uniqueFilterValues, type ColumnFilterMap } from './column-filter.js';
 import {
@@ -169,6 +171,7 @@ export default function App() {
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [viewName, setViewName] = useState('');
   const [showViewTools, setShowViewTools] = useState(false);
+  const [showStatusColors, setShowStatusColors] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{row: RecordRow; column: Column} | null>(null);
   const [selectionMode, setSelectionMode] = useState<'cell'|'row'|'column'>('cell');
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
@@ -758,6 +761,8 @@ export default function App() {
   function beginCellEdit(rowIndex: number, columnIndex: number, replacement?: string) {
     const row = displayedRows[rowIndex], column = visibleColumns[columnIndex];
     if (!row || !column || !token || userRole === 'CONSULTA' || !column.editable || editingBusyRef.current) return;
+    // Boolean columns are edited directly through checkboxes, never a text editor.
+    if (isCheckboxColumn(column.key, column.dataType)) return;
     setSelectionAnchor({ rowId: row.id, columnKey: column.key });
     setSelectionMode('cell');
     setSelectedRowId(null);
@@ -856,6 +861,17 @@ export default function App() {
       return;
     }
     if (!selectedPosition) return;
+    const keyboardColumn = visibleColumns[selectedPosition.column];
+    const keyboardRow = displayedRows[selectedPosition.row];
+    if (event.key === ' ' && keyboardColumn && keyboardRow &&
+        isCheckboxColumn(keyboardColumn.key, keyboardColumn.dataType)) {
+      event.preventDefault();
+      if (keyboardColumn.editable && userRole !== 'CONSULTA') {
+        void saveCell(keyboardRow, keyboardColumn,
+          checkboxSaveText(!checkboxChecked(keyboardRow.data?.[keyboardColumn.key])));
+      }
+      return;
+    }
     if (gridKeyboardAction(event.key, false) === 'edit') {
       event.preventDefault();
       beginCellEdit(selectedPosition.row, selectedPosition.column);
@@ -1123,6 +1139,16 @@ export default function App() {
                 : 'Selecione uma célula'}</span>
             <span className="sheet-guide">Clique seleciona · Enter confirma e desce ↓ · Tab confirma e vai à direita → · Shift+Enter sobe · Shift+Tab volta · F2 edita</span>
             <button className="secondary" type="button" disabled={!selectedBounds} onClick={() => void copyGridSelection()}>Copiar seleção</button>
+            <div className="sheet-status-guide">
+              <button className="secondary" type="button" aria-expanded={showStatusColors}
+                onClick={() => setShowStatusColors(current => !current)}>Cores por status (C) ▾</button>
+              {showStatusColors && <div className="sheet-status-legend" role="group" aria-label="Padrões de cores por status">
+                {STATUS_COLORS.map(rule => <div key={rule.status} className="sheet-status-legend-item">
+                  <span className="sheet-status-swatch" style={{backgroundColor:rule.background}}/>
+                  <span>{rule.status}</span><code>{rule.background}</code>
+                </div>)}
+              </div>}
+            </div>
           </div>
           <div className="table-wrap sheet-grid-wrap" ref={gridRef} tabIndex={0} onKeyDown={onGridKeyDown} onCopy={onGridCopy} onPaste={onGridPaste}>
             <table className="sheet-table" role="grid" aria-label="MAPA 1.0 - planilha operacional">
@@ -1160,7 +1186,11 @@ export default function App() {
                 </tr>
               </thead>
               <tbody>
-                {displayedRows.map((row, ri) => <tr key={row.id} className={selectedRowIds.includes(row.id) ? 'bulk-selected-row' : ''}>
+                {displayedRows.map((row, ri) => {
+                  const conditionalBackground = statusRowColor(row.data?.C ?? row.status);
+                  const conditionalTextColor = conditionalBackground ? statusRowTextColor(conditionalBackground) : undefined;
+                  return <tr key={row.id} className={selectedRowIds.includes(row.id) ? 'bulk-selected-row' : ''}
+                    data-status={String(row.data?.C ?? row.status ?? '')}>
                   <th scope="row" className={'sheet-row-number '+ (selectionMode === 'row' && selectedRowId===row.id ? 'sheet-row-selected' : '')}>
                     {userRole !== 'CONSULTA' && <input type="checkbox" aria-label={'Marcar registro ' + row.sequence + ' para edição em massa'}
                       checked={selectedRowIds.includes(row.id)}
@@ -1179,23 +1209,45 @@ export default function App() {
                       ci >= selectedBounds.left && ci <= selectedBounds.right);
                     const editable = Boolean(token && userRole !== 'CONSULTA' && column.editable);
                     const lookup = Boolean(BASE_COLUMN_LIST[column.key]);
+                    const checkbox = isCheckboxColumn(column.key, column.dataType);
                     const style = effectiveCellStyle(row,column);
                     const displayFormat = LOCKED_COLUMN_FORMAT[column.key] ||
                       style.format || (column.dataType === 'currency' ? 'currency' :
                       column.dataType === 'date' ? 'date' : column.dataType === 'number' ? 'number' : 'text');
                     return <td key={column.key} aria-selected={inRange}
-                      className={(editable ? 'editable-cell ' : '') + (lookup ? 'sheet-lookup-cell ' : '') + (inRange ? 'sheet-range-cell ' : '') + (selected ? 'selected-cell ' : '')}
+                      className={(editable ? 'editable-cell ' : '') + (lookup ? 'sheet-lookup-cell ' : '') +
+                        (checkbox ? 'sheet-boolean-cell ' : '') + (inRange ? 'sheet-range-cell ' : '') +
+                        (selected ? 'selected-cell ' : '')}
                       style={{fontWeight: style.bold ? 'bold' : 'normal',
-                        color: style.color,
-                        textAlign: style.align || 'left',
-                        backgroundColor: style.background}}
+                        color: style.color || conditionalTextColor,
+                        textAlign: checkbox ? 'center' : (style.align || 'left'),
+                        backgroundColor: conditionalBackground ?? style.background}}
                       onClick={event => {
                         selectGridCell(ri, ci, event.shiftKey, !lookup);
                         if (lookup && editable && !event.shiftKey) beginCellEdit(ri, ci);
                       }}
-                      onDoubleClick={() => beginCellEdit(ri, ci)}>
+                      onDoubleClick={() => { if (!checkbox) beginCellEdit(ri, ci); }}>
                       <div className="cell-content">
-                        {editingCell?.rowId === row.id && editingCell.columnKey === column.key ? (
+                        {checkbox ? (
+                          <span className="sheet-boolean-wrapper"
+                            data-grid-row={ri} data-grid-column={ci}
+                            data-cell-id={row.id + ':' + column.key}
+                            tabIndex={selected ? 0 : -1}
+                            role="gridcell" aria-readonly={!editable}
+                            aria-label={column.key + row.sequence + ': ' + column.label}>
+                            <input type="checkbox"
+                              className="sheet-value-checkbox"
+                              aria-label={column.label + ' da linha ' + row.sequence}
+                              title={editable ? 'Marcar ou desmarcar' : 'Somente leitura'}
+                              checked={checkboxChecked(row.data?.[column.key])}
+                              disabled={!editable}
+                              onClick={event => event.stopPropagation()}
+                              onChange={event => {
+                                selectGridCell(ri, ci, false);
+                                void saveCell(row, column, checkboxSaveText(event.target.checked));
+                              }}/>
+                          </span>
+                        ) : editingCell?.rowId === row.id && editingCell.columnKey === column.key ? (
                           lookup ? <SheetDropdownEditor
                             columnKey={column.key} rowLabel={(column.label||column.key)+" linha "+row.sequence}
                             currentValue={valueText(row.data?.[column.key])} initialQuery={editValue}
@@ -1248,7 +1300,8 @@ export default function App() {
                       </div>
                     </td>;
                   })}
-                </tr>)}
+                </tr>;
+                })}
                 {!loading && displayedRows.length === 0 && Array.from({length: 12}, (_, index) =>
                   <tr className="sheet-placeholder-row" key={'placeholder-' + index} aria-label="Linha visual vazia, sem registro salvo">
                     <th scope="row" className="sheet-row-number">{index + 1}</th>
