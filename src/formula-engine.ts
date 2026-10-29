@@ -13,7 +13,7 @@ const isError = (v: unknown): v is string => typeof v === 'string' && /^#(?:REF!
 const FORMULA_ALIASES: Record<string, string> = {
   SOMA: 'SUM', MÉDIA: 'AVERAGE', MEDIA: 'AVERAGE', 'CONT.NÚM': 'COUNT',
   'CONT.VALORES': 'COUNTA', MÍNIMO: 'MIN', MINIMO: 'MIN', MÁXIMO: 'MAX', MAXIMO: 'MAX',
-  SE: 'IF', SEERRO: 'IFERROR', E: 'AND', OU: 'OR', NÃO: 'NOT', HOJE: 'TODAY', AGORA: 'NOW',
+  SE: 'IF', SEERRO: 'IFERROR', E: 'AND', OU: 'OR', NÃO: 'NOT', FALSO: 'FALSE', VERDADEIRO: 'TRUE', HOJE: 'TODAY', AGORA: 'NOW',
   ARRED: 'ROUND', 'ARREDONDAR.PARA.CIMA': 'ROUNDUP', 'ARREDONDAR.PARA.BAIXO': 'ROUNDDOWN',
   POTÊNCIA: 'POWER', RAIZ: 'SQRT', SOMASE: 'SUMIF', 'CONT.SE': 'COUNTIF',
   DATA: 'DATE', ANO: 'YEAR', MÊS: 'MONTH', DIA: 'DAY', ESQUERDA: 'LEFT', DIREITA: 'RIGHT',
