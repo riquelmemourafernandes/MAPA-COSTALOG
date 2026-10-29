@@ -1038,7 +1038,7 @@ export default function App() {
   // On an older API, the same selection works over the loaded page only.
   const formulaValues = useMemo(() => {
     const byPosition = new Map<number, RecordRow>();
-    rows.forEach((row, index) => byPosition.set(Number(row.sheetRowNumber ?? row.sequence + 1), row));
+    rows.forEach(row => byPosition.set(Number(row.sheetRowNumber ?? row.sequence + 1), row));
     const resolveCell = (rowNumber: number, columnKey: string, stack: Set<string> = new Set()): FormulaValue => {
       if (rowNumber === 1) return referenceHeader[columnKey] ?? '';
       const record = byPosition.get(rowNumber);
