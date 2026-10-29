@@ -4,7 +4,7 @@ import { Check, ChevronDown } from "lucide-react";
 import {
   confirmDropdownValue, initialDropdownSearch, searchOptions
 } from "./sheet-dropdown-utils.js";
-import { STATUS_COLORS } from "./sheet-status-rules.js";
+import { STATUS_COLORS, statusRowColor } from "./sheet-status-rules.js";
 import "./sheet-dropdown.css";
 
 type Props = {
@@ -178,6 +178,9 @@ export default function SheetDropdownEditor({
               role="option" aria-selected={highlight === index}
               onMouseEnter={() => setHighlight(index)}
               onClick={() => onConfirm(option, null, false)}>
+              {columnKey === "C" && statusRowColor(option) &&
+                <span className="sheet-status-option-swatch"
+                  style={{backgroundColor:statusRowColor(option) || undefined}} aria-hidden="true"/>}
               <span>{option}</span>
               {option === currentValue && <Check size={12} />}
             </button>
