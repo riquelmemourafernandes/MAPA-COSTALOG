@@ -3,7 +3,8 @@ import BaseCatalogSheet from './BaseCatalogSheet.js';
 import SheetContextMenu from './SheetContextMenu.js';
 import {type SheetContextKind,type SheetContextAction} from './sheet-context-menu.js';
 import { SCROLL_BATCH_SIZE, EMPTY_GRID_ROWS, normalizeCreateCount,
-  normalizeRowHeight, mergeLoadedRows, shouldLoadNextBatch, virtualRowWindow } from './sheet-layout.js';
+  normalizeRowHeight, mergeLoadedRows, shouldLoadNextBatch, virtualRowWindow,
+  sparseSheetWindow, SHEET_MAX_ROW, SHEET_DEFAULT_HEIGHT } from './sheet-layout.js';
 import SheetColorPicker from './SheetColorPicker.js';
 import SheetDropdownEditor from './SheetDropdownEditor.js';
 import { BASE_COLUMN_LIST } from './sheet-dropdown-utils.js';
@@ -24,7 +25,7 @@ type ValidationSummary = { checkedAt: string; totalRows: number; requiredFields:
 type DashboardSummary = { generatedAt: string; activeRecords: number; recentlyUpdated: number; statuses: { status: string; count: number }[] };
 type AppointmentAlert = { id: string; sequence: number; kind: 'Coleta' | 'Entrega'; scheduledAt: string; minutesLate: number; attendant: string; clientName: string | null; container: string | null; cte: string | null; status: string | null };
 type AppointmentAlertSummary = { generatedAt: string; total: number; filteredTotal?: number; byKind: { collection: number; delivery: number }; attendants?: string[]; items: AppointmentAlert[] };
-type RecordRow = { id: string; sequence: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
+type RecordRow = { id: string; sequence: number; sheetRowNumber?: number; data: Record<string, unknown>; status?: string | null; clientName?: string | null; container?: string | null; cte?: string | null; updatedAt: string };
 type SavedView = { name: string; visibleKeys: string[]; query: string; status: string };
 type CellStyle = { bold?: boolean; color?: string; background?: string; format?: SheetNumberFormat; align?: 'left'|'center'|'right' };
 type AuditEntry = { id: string; action: string; fieldKey?: string | null; beforeValue?: unknown; afterValue?: unknown; createdAt: string; user?: { name?: string; email?: string } | null };
@@ -183,6 +184,14 @@ export default function App() {
   const lastRequestedPageRef = useRef(0);
   const [retryRowsKey, setRetryRowsKey] = useState(0);
   const [total, setTotal] = useState(0);
+  const [maxSheetRowNumber,setMaxSheetRowNumber] = useState(1);
+  const [gridRangeSupported,setGridRangeSupported] = useState<boolean|null>(null);
+  const loadedGridChunksRef=useRef(new Set<number>());
+  const inFlightGridChunksRef=useRef(new Set<number>());
+  const [blankEditing,setBlankEditing] = useState<{index:number;columnKey:string}|null>(null);
+  const [blankDraft,setBlankDraft] = useState('');
+  const [blankSaving,setBlankSaving] = useState(false);
+  const [selectedBlankRow,setSelectedBlankRow] = useState<number|null>(null);
   const [columnMenu, setColumnMenu] = useState(false);
   const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
@@ -297,6 +306,7 @@ export default function App() {
       const incoming = Array.isArray(rowsBody.items) ? rowsBody.items as RecordRow[] : [];
       setRows(previous => page === 1 ? incoming : mergeLoadedRows(previous, incoming));
       setTotal(Number(rowsBody.total || 0));
+      setMaxSheetRowNumber(Number(rowsBody.maxSheetRowNumber || 1));
       setNotice('Dados carregados do banco de dados. As colunas visíveis são personalizadas por usuário.');
     }).catch(error => {
       if (cancelled) return;
@@ -704,12 +714,68 @@ export default function App() {
   }, [rows, query, filterColumn, filterValue, columnFilters, visibleColumns, sortConfig]);
 
 
-  const windowed = useMemo(() => virtualRowWindow(
-    displayedRows.map(row => rowHeights[row.id] || 35),
-    gridViewport.scrollTop,
-    gridViewport.height
-  ), [displayedRows, rowHeights, gridViewport.scrollTop, gridViewport.height]);
-  const visibleRenderedRows = displayedRows.slice(windowed.start,windowed.end);
+  const sheetCanvas = !query.trim() && !status && !filterColumn && !filterValue &&
+    !sortConfig && Object.keys(columnFilters).length===0;
+  const sheetRecordsByRow = useMemo(()=>{
+    const result=new Map<number,RecordRow>();
+    displayedRows.forEach((row,i)=>{
+      const pos=Number(row.sheetRowNumber ?? i+2);
+      if(Number.isInteger(pos)&&pos>=2&&pos<=SHEET_MAX_ROW)result.set(pos,row);
+    });
+    return result;
+  },[displayedRows]);
+  const rowIndexById = useMemo(() =>
+    new Map(displayedRows.map((row,index)=>[row.id,index])),[displayedRows]);
+  const sheetHeightOverrides = useMemo(()=>{
+    const result:Record<number,number>={};
+    for(const [position,row] of sheetRecordsByRow){
+      const height=rowHeights[row.id];
+      if(height)result[position]=height;
+    }
+    return result;
+  },[sheetRecordsByRow,rowHeights]);
+  const windowed = useMemo(() => sheetCanvas
+    ? sparseSheetWindow(gridViewport.scrollTop,gridViewport.height,sheetHeightOverrides)
+    : virtualRowWindow(displayedRows.map(row=>rowHeights[row.id]||SHEET_DEFAULT_HEIGHT),
+        gridViewport.scrollTop,gridViewport.height),
+  [sheetCanvas,displayedRows,sheetHeightOverrides,rowHeights,gridViewport.scrollTop,gridViewport.height]);
+  const renderedSlots = useMemo(()=>{
+    if(!sheetCanvas)return displayedRows.slice(windowed.start,windowed.end)
+      .map((row,i)=>({row,ri:windowed.start+i,index:windowed.start+i}));
+    return Array.from({length:windowed.end-windowed.start},(_,i)=>{
+      const index=windowed.start+i, row=sheetRecordsByRow.get(index+2);
+      return {row,ri:row?(rowIndexById.get(row.id)??-1):-1,index};
+    });
+  },[sheetCanvas,displayedRows,sheetRecordsByRow,rowIndexById,windowed.start,windowed.end]);
+  useEffect(()=>{
+    loadedGridChunksRef.current.clear();
+    inFlightGridChunksRef.current.clear();
+    setGridRangeSupported(null);
+  },[token]);
+  useEffect(()=>{
+    if(!sheetCanvas||!token||active!=='MAPA 1.0'||gridRangeSupported===false)return;
+    const first=Math.floor(windowed.start/100),last=Math.floor(Math.max(windowed.start,windowed.end-1)/100);
+    const controller=new AbortController();
+    for(let chunk=first;chunk<=Math.min(last,first+3);chunk++){
+      if(loadedGridChunksRef.current.has(chunk)||inFlightGridChunksRef.current.has(chunk))continue;
+      inFlightGridChunksRef.current.add(chunk);
+      fetch(apiBase+'/api/v1/mapa/grid?'+new URLSearchParams({
+        start:String(chunk*100+2),count:'100'
+      }),{headers:{Authorization:'Bearer '+token},signal:controller.signal}).then(async response=>{
+        if(response.status===404){setGridRangeSupported(false);return null;}
+        if(!response.ok)throw new Error('Não foi possível consultar a grade de linhas.');
+        return response.json();
+      }).then(body=>{
+        if(!body)return;
+        if(!Array.isArray(body.items))throw new Error('Resposta inválida da grade.');
+        loadedGridChunksRef.current.add(chunk);setGridRangeSupported(true);
+        setRows(previous=>mergeLoadedRows(previous,body.items as RecordRow[]));
+      }).catch(error=>{
+        if(!controller.signal.aborted)setApiError(error instanceof Error?error.message:'Falha na grade.');
+      }).finally(()=>inFlightGridChunksRef.current.delete(chunk));
+    }
+    return ()=>controller.abort();
+  },[sheetCanvas,token,active,apiBase,windowed.start,windowed.end,gridRangeSupported]);
   function handleGridScroll(event: React.UIEvent<HTMLDivElement>) {
     const node=event.currentTarget;
     setGridViewport({scrollTop:node.scrollTop,height:node.clientHeight});
