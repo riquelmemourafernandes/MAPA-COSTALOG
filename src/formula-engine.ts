@@ -41,7 +41,7 @@ function tokenize(s: string): Token[] {
     if (/^\s+/.test(r)) { i += r.match(/^\s+/)![0].length; continue; }
     const q = /^"(?:""|[^"])*"/.exec(r);
     if (q) { out.push({ kind: 'string', value: q[0].slice(1, -1).replace(/""/g, '"') }); i += q[0].length; continue; }
-    const n = /^(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?/.exec(r);
+    const n = /^(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[Ee][+-]?\d+)?/.exec(r);
     if (n) { out.push({ kind: 'number', value: n[0] }); i += n[0].length; continue; }
     const ref = /^\$?[A-Z]{1,3}\$?[1-9]\d*/i.exec(r);
     if (ref) { out.push({ kind: 'identifier', value: ref[0] }); i += ref[0].length; continue; }
@@ -220,7 +220,7 @@ function evalNode(n: Node, ctx: Context): FormulaValue | FormulaValue[] {
         const colStart = source.kind === 'cell' ? columnKeyToIndex(source.column) : Math.min(columnKeyToIndex(source.start.column), columnKeyToIndex(source.end.column));
         const colEnd = source.kind === 'cell' ? colStart : Math.max(columnKeyToIndex(source.start.column), columnKeyToIndex(source.end.column));
         const width = colEnd - colStart + 1, height = rowEnd - rowStart + 1;
-        const index = Math.trunc(num(scalar(2))), approximate = scalar(3) === null ? false : num(scalar(3)) !== 0;
+        const index = Math.trunc(num(scalar(2))), approximate = scalar(3) === null ? true : num(scalar(3)) !== 0;
         if (index < 1 || (n.name === 'VLOOKUP' ? index > width : index > height)) return '#REF!';
         const target = scalar(0);
         const equal = (a: FormulaValue, b: FormulaValue) => typeof a === 'number' && typeof b === 'number'
