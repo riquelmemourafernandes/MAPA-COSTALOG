@@ -132,6 +132,12 @@ app.post("/api/v1/auth/login", loginLimiter, async (req, res, next) => {
   }
 });
 
+// Public, read-only capability check allows previews to detect a stale backend
+// before attempting to create an access request. No account data is exposed.
+app.get("/api/v1/auth/capabilities", (_req, res) => {
+  res.json({ requestAccess: true, approvalRequired: true });
+});
+
 // Public registration only collects a request. It never issues a token or enables a user.
 const accessRequestLimiter = rateLimit({
   windowMs: 60 * 60_000,
