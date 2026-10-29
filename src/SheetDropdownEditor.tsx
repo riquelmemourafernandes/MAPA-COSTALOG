@@ -19,6 +19,11 @@ export default function SheetDropdownEditor({
   columnKey,rowLabel,currentValue,initialQuery,fallbackOptions,apiBase,token,onConfirm,onCancel
 }:Props){
   const inputRef=useRef<HTMLInputElement>(null);
+  useEffect(()=>{
+    // Clicking a populated dropdown selects its text, so the next keystroke
+    // searches from scratch just like Google Sheets.
+    if(initialQuery===currentValue) inputRef.current?.select();
+  },[]);
   const [query,setQuery]=useState(initialQuery);
   const [backendOptions,setBackendOptions]=useState<string[]|null>(null);
   const [loading,setLoading]=useState(false);
