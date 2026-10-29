@@ -46,10 +46,18 @@ type UserAdminItem = UserProfile & { createdAt?: string; updatedAt?: string; pen
 // can explicitly opt in to a SEPARATE staging backend using an environment
 // variable scoped to Preview only; never silently switch production traffic.
 const isVercelSite = typeof window !== 'undefined' && /(?:^|\.)vercel\.app$/.test(window.location.hostname);
+// Pages is strictly a staging frontend. Never fall back to the production
+// same-origin proxy or to VITE_API_URL when the staging API is not configured.
+const isGitHubPagesPreview = typeof window !== 'undefined' &&
+  window.location.hostname === 'riquelmemourafernandes.github.io' &&
+  window.location.pathname.startsWith('/MAPA-COSTALOG/');
 const previewHomologApi = (import.meta.env.VITE_HOMOLOG_API_URL || '').trim().replace(/\/+$/, '');
-const apiBase = isVercelSite && /^https:\/\/[^/]+$/.test(previewHomologApi)
-  ? previewHomologApi
-  : isVercelSite ? window.location.origin : (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const apiBase = isGitHubPagesPreview
+  ? (previewHomologApi === 'https://mapa-costalog-api-homologacao.onrender.com'
+      ? previewHomologApi : '')
+  : isVercelSite && /^https:\/\/[^/]+$/.test(previewHomologApi)
+    ? previewHomologApi
+    : isVercelSite ? window.location.origin : (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 // Cabeçalho conferido na linha 1 de MAPA IMPORTAÇÃO > MAPA 1.0 (A:BT).
 // As posições BL:BP não têm título; não deslocar os valores adjacentes.
 const referenceHeader: Record<string, string> = {
