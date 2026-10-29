@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import BaseCatalogSheet from './BaseCatalogSheet.js';
 import SheetContextMenu from './SheetContextMenu.js';
 import {type SheetContextKind,type SheetContextAction} from './sheet-context-menu.js';
-import { SCROLL_BATCH_SIZE, EMPTY_GRID_ROWS, normalizeCreateCount,
+import { SCROLL_BATCH_SIZE, normalizeCreateCount,
   normalizeRowHeight, mergeLoadedRows, shouldLoadNextBatch, virtualRowWindow,
   sparseSheetWindow, SHEET_MAX_ROW, SHEET_DEFAULT_HEIGHT } from './sheet-layout.js';
 import SheetColorPicker from './SheetColorPicker.js';
@@ -304,7 +304,7 @@ export default function App() {
         ? savedKeys.filter(key => referenceColumns.some(c => c.key === key))
         : referenceColumns.map(c => c.key));
       const incoming = Array.isArray(rowsBody.items) ? rowsBody.items as RecordRow[] : [];
-      setRows(previous => page === 1 ? incoming : mergeLoadedRows(previous, incoming));
+      setRows(previous => page === 1 && previous.length===0 ? incoming : mergeLoadedRows(previous, incoming));
       setTotal(Number(rowsBody.total || 0));
       setMaxSheetRowNumber(Number(rowsBody.maxSheetRowNumber || 1));
       setNotice('Dados carregados do banco de dados. As colunas visíveis são personalizadas por usuário.');
@@ -779,6 +779,7 @@ export default function App() {
   function handleGridScroll(event: React.UIEvent<HTMLDivElement>) {
     const node=event.currentTarget;
     setGridViewport({scrollTop:node.scrollTop,height:node.clientHeight});
+    if(sheetCanvas && gridRangeSupported!==false)return;
     if (lastRequestedPageRef.current === page + 1) return;
     if (page >= Math.ceil(total / pageSize)) return;
     if (shouldLoadNextBatch({
@@ -937,7 +938,7 @@ export default function App() {
     const column = visibleColumns.findIndex(item => item.key === selectedCell.column.key);
     return row >= 0 && column >= 0 ? { row, column } : null;
   }, [displayedRows, visibleColumns, selectedCell]);
-  useEffect(() => { if (displayedRows.length > 0) setPlaceholderPosition(null); }, [displayedRows.length]);
+
   const selectedBounds = useMemo(() => {
     if (!displayedRows.length || !visibleColumns.length) return null;
     if (selectionMode === 'column' && selectedColumnKey) {
@@ -1294,19 +1295,23 @@ export default function App() {
         columnIndex:selectedPosition.column,x:rect?.left||30,y:rect?.bottom||100});
       return;
     }
-    if (!selectedPosition && placeholderPosition && displayedRows.length === 0) {
-      const action = gridKeyboardAction(event.key, false);
-      if (action === 'move') {
+    if (!selectedPosition && placeholderPosition && sheetCanvas) {
+      const action=gridKeyboardAction(event.key,false);
+      if(action==='move'){
         event.preventDefault();
-        const next = moveGridPosition(placeholderPosition, event.key, 12, visibleColumns.length, event.shiftKey);
-        setPlaceholderPosition(next);
-        const target = gridRef.current?.querySelector<HTMLElement>(
-          '[data-grid-empty-row="' + next.row + '"][data-grid-empty-column="' + next.column + '"]');
-        target?.focus({ preventScroll: true });
-        target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      } else if (action === 'edit' || (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.length === 1)) {
+        const next=moveGridPosition(placeholderPosition,event.key,
+          SHEET_MAX_ROW-1,visibleColumns.length,event.shiftKey);
+        const record=sheetRecordsByRow.get(next.row+2);
+        if(record){
+          const index=displayedRows.findIndex(item=>item.id===record.id);
+          if(index>=0)selectGridCell(index,next.column,false,true);
+        }else selectBlankCell(next.row,next.column,false);
+      }else if(event.key==='Delete'||event.key==='Backspace'){
         event.preventDefault();
-        setNotice('Esta linha é apenas visual. Clique em “Novo registro” para criar uma linha operacional antes de editar.');
+      }else if(action==='edit' || (!event.ctrlKey&&!event.metaKey&&!event.altKey&&event.key.length===1)){
+        event.preventDefault();
+        selectBlankCell(placeholderPosition.row,placeholderPosition.column,true,
+          action==='edit'?'':event.key);
       }
       return;
     }
@@ -1945,8 +1950,11 @@ export default function App() {
           </div>}
           <footer className="table-footer"><span>{apiBase && token ? 'Dados do banco • edição individual com auditoria' : 'Sem dados de demonstração'}</span><span><span className="green-dot"/> {visibleColumns.length} coluna(s) selecionada(s)</span></footer>
           <div className="sheet-scroll-status" role="status">
-            <span>{displayedRows.length} de {total} registros carregados · Role para continuar</span>
-            {rows.length < total && <button className="secondary" disabled={loading}
+            <span>{sheetCanvas
+              ? 'Cabeçalho: linha 1 · '+(SHEET_MAX_ROW-1).toLocaleString('pt-BR')+
+                ' linhas virtuais · '+total+' registros salvos · Última linha preenchida: '+maxSheetRowNumber
+              : displayedRows.length+' de '+total+' registros carregados'}</span>
+            {!sheetCanvas && rows.length < total && <button className="secondary" disabled={loading}
               onClick={()=>{lastRequestedPageRef.current=page+1;setPage(value=>value+1)}}>
               {loading?'Carregando…':'Carregar mais linhas'}</button>}
           </div>
