@@ -870,3 +870,21 @@ html.costalog-dark .sheet-cell-options {
   border-color:#49424a!important;
   box-shadow:0 5px 18px rgba(0,0,0,.23);
 }
+
+/* Undo/redo feedback stays secondary to spreadsheet data. */
+.app-shell .sheet-action-strip .sheet-undo-feedback{
+  display:inline-block;
+  flex:0 1 auto;
+  max-width:min(420px,42vw);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:10px;
+  color:var(--brand-muted)!important;
+}
+@media(max-width:600px){
+  .app-shell .sheet-action-strip .sheet-undo-feedback{
+    order:3;
+    max-width:100%;
+  }
+}
