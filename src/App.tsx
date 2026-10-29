@@ -3,11 +3,12 @@ import BaseCatalogSheet from './BaseCatalogSheet.js';
 import {inheritRowPresentation,nearestPreviousRowId,type PresentationSnapshot} from './sheet-row-format.js';
 import SheetContextMenu from './SheetContextMenu.js';
 import {type SheetContextKind,type SheetContextAction} from './sheet-context-menu.js';
+import { sourceColumnWidth, sourceRowHeight } from './mapa-source-dimensions.js';
 import { SCROLL_BATCH_SIZE, normalizeCreateCount,
   normalizeRowHeight, mergeLoadedRows, shouldLoadNextBatch, virtualRowWindow,
   sparseSheetWindow, SHEET_MAX_ROW, SHEET_DEFAULT_HEIGHT,
   normalizeColumnWidth, totalSheetWidth, MIN_ROW_HEIGHT, MAX_ROW_HEIGHT,
-  MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH, DEFAULT_COLUMN_WIDTH, ROW_NUMBER_COLUMN_WIDTH } from './sheet-layout.js';
+  MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH, ROW_NUMBER_COLUMN_WIDTH } from './sheet-layout.js';
 import SheetColorPicker from './SheetColorPicker.js';
 import SheetDropdownEditor from './SheetDropdownEditor.js';
 import { BASE_COLUMN_LIST } from './sheet-dropdown-utils.js';
@@ -984,7 +985,7 @@ export default function App() {
   const rowIndexById = useMemo(() =>
     new Map(displayedRows.map((row,index)=>[row.id,index])),[displayedRows]);
   const sheetHeightOverrides = useMemo(()=>{
-    const result:Record<number,number>={};
+    const result:Record<number,number>={2:sourceRowHeight(2)};
     for(const [key,height] of Object.entries(rowHeights)){
       if(!key.startsWith('slot:'))continue;
       const position=Number(key.slice(5));
@@ -998,7 +999,7 @@ export default function App() {
     return result;
   },[sheetRecordsByRow,rowHeights]);
   const rowHeightAt=(position:number,row?:RecordRow):number =>
-    normalizeRowHeight(rowHeights['slot:'+position]??(row?rowHeights[row.id]:undefined)??SHEET_DEFAULT_HEIGHT);
+    normalizeRowHeight(rowHeights['slot:'+position]??(row?rowHeights[row.id]:undefined)??sourceRowHeight(position));
   const windowed = useMemo(() => sheetCanvas
     ? sparseSheetWindow(gridViewport.scrollTop,gridViewport.height,sheetHeightOverrides)
     : virtualRowWindow(displayedRows.map((row,index)=>
@@ -1498,7 +1499,7 @@ export default function App() {
     }
     if(action==='resize-column' && currentColumn){
       const answer=window.prompt('Largura da coluna em pixels (24 a 2400):',
-        String(columnWidths[currentColumn.key]??DEFAULT_COLUMN_WIDTH));
+        String(columnWidths[currentColumn.key]??sourceColumnWidth(currentColumn.key)));
       if(answer===null)return;
       const n=Number(answer);
       if(!Number.isInteger(n)||n<MIN_COLUMN_WIDTH||n>MAX_COLUMN_WIDTH){
@@ -2109,7 +2110,7 @@ export default function App() {
               <colgroup>
                 <col style={{width:ROW_NUMBER_COLUMN_WIDTH}} />
                 {visibleColumns.map(column => <col key={column.key}
-                  style={{width:normalizeColumnWidth(columnWidths[column.key]??DEFAULT_COLUMN_WIDTH)}} />)}
+                  style={{width:normalizeColumnWidth(columnWidths[column.key]??sourceColumnWidth(column.key))}} />)}
               </colgroup>
               <thead>
                 <tr className="sheet-letters-row">
