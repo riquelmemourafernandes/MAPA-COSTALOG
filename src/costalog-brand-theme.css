@@ -783,3 +783,90 @@ html.costalog-dark .sheet-cell-option:hover,html.costalog-dark .sheet-cell-optio
 
 /* Explicit safeguard: no theme paint on the editable worksheet area.
    Status fills, checkbox colors, borders and selections keep their rules. */
+/* MAPA 2.0 — minimal grid borders and simplified dropdowns (all themes).
+   Applies to the spreadsheet frame only, without repainting data cells. */
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table {
+  border:0!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>th.sheet-row-number,
+.app-shell.structural-dark.map-fullscreen .mapa-grid-panel .sheet-table tbody tr:not(.sheet-virtual-spacer)>td {
+  border-right:1px solid rgba(22,24,30,.10)!important;
+  border-bottom:1px solid rgba(22,24,30,.10)!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row>th,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row>th {
+  border-right:1px solid var(--brand-border)!important;
+  border-bottom:1px solid var(--brand-border)!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row th.sheet-column-header {
+  padding:0!important;
+  cursor:pointer;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row .sheet-filter-trigger {
+  display:flex;
+  width:100%;
+  height:100%;
+  min-height:34px;
+  align-items:center;
+  justify-content:flex-start;
+  padding:4px 8px!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:0;
+  background:transparent!important;
+  cursor:pointer;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row .sheet-filter-trigger:hover,
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row th.sheet-column-header:hover .sheet-filter-trigger {
+  background:rgba(255,255,255,.065)!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row .sheet-filter-trigger.filter-active .sheet-header-name {
+  text-decoration:underline;
+  text-decoration-color:var(--costalog-red);
+  text-underline-offset:3px;
+  text-decoration-thickness:2px;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row .sheet-header-name {
+  flex:1;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+/* The cell's menu gets only a tiny, discreet chevron. */
+.app-shell .mapa-grid-panel .sheet-table .sheet-cell-dropdown-editor .sheet-cell-editor {
+  width:calc(100% - 13px);
+  border:0!important;
+  outline:0!important;
+  box-shadow:none!important;
+  padding-left:3px!important;
+}
+.app-shell .mapa-grid-panel .sheet-table .sheet-cell-dropdown-caret {
+  flex:0 0 13px!important;
+  width:13px!important;
+  min-width:13px!important;
+  height:100%;
+  padding:0!important;
+  border:0!important;
+  background:transparent!important;
+  color:#737b82!important;
+}
+.app-shell .mapa-grid-panel .sheet-table .sheet-cell-dropdown-caret:hover {
+  color:var(--costalog-red)!important;
+}
+.app-shell .mapa-grid-panel .sheet-table .sheet-cell-dropdown-caret svg {
+  width:10px;
+  height:10px;
+}
+.app-shell .mapa-grid-panel .sheet-table td.sheet-lookup-cell .cell-content>span[data-cell-id]::after {
+  font-size:9px;
+  margin-left:2px;
+  color:#8c9299;
+}
+.sheet-cell-options {
+  border:1px solid #e2e4e8;
+  box-shadow:0 5px 15px rgba(14,15,20,.12);
+}
+html.costalog-dark .sheet-cell-options {
+  border-color:#49424a!important;
+  box-shadow:0 5px 18px rgba(0,0,0,.23);
+}
