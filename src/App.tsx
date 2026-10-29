@@ -174,7 +174,7 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
     localStorage.getItem('mapa-costalog-sidebar-collapsed') === 'yes');
-  // Theme applies to the application chrome, never to operational cell colors.
+  // Shared theme for every page, keeping operational spreadsheet cell colors unchanged.
   const [structuralDarkMode,setStructuralDarkMode] = useState(() =>
     localStorage.getItem('mapa-costalog-structural-dark') === 'yes');
   function toggleStructuralDarkMode(){
@@ -183,6 +183,11 @@ export default function App() {
       return !previous;
     });
   }
+  useEffect(()=>{
+    // The login and portaled menus also belong to the same site-wide theme.
+    document.documentElement.classList.toggle('costalog-dark',structuralDarkMode);
+    return ()=>document.documentElement.classList.remove('costalog-dark');
+  },[structuralDarkMode]);
   const [newRowsCount, setNewRowsCount] = useState(10);
   const [newRowsOpen, setNewRowsOpen] = useState(false);
   const [creatingRows, setCreatingRows] = useState(false);
@@ -1589,7 +1594,14 @@ export default function App() {
   }
 
   if (!token) {
-    return <main className="auth-layout">
+    return <main className={'auth-layout '+(structuralDarkMode?'structural-dark':'')}>
+      <button type="button" className="structural-theme-toggle auth-theme-toggle"
+        aria-label={structuralDarkMode?'Ativar modo claro':'Ativar modo escuro'}
+        title={structuralDarkMode?'Modo claro':'Modo escuro'}
+        aria-pressed={structuralDarkMode} onClick={toggleStructuralDarkMode}>
+        {structuralDarkMode?<Sun size={15}/>:<Moon size={15}/>}
+        <span>{structuralDarkMode?'Modo claro':'Modo escuro'}</span>
+      </button>
       <div className="auth-intro">
         <div className="auth-brand"><span className="auth-logo"><Truck size={28}/></span><div><strong>MAPA COSTALOG</strong><small>GESTÃO OPERACIONAL</small></div></div>
         <div className="auth-intro-copy"><span className="auth-eyebrow">AMBIENTE CORPORATIVO</span><h1>Controle logístico com acesso seguro.</h1><p>Operações, agendamentos e registros em um só lugar, com permissões individuais e histórico de alterações.</p></div>
@@ -1651,8 +1663,8 @@ export default function App() {
           aria-expanded={!sidebarCollapsed} onClick={toggleSidebar}><Menu size={18}/></button>
         <div className="breadcrumbs">Operações <span>/</span> <b>{active}</b></div><div className="top-actions">
           <button type="button" className="structural-theme-toggle"
-            aria-label={structuralDarkMode?'Ativar modo claro da estrutura':'Ativar modo escuro da estrutura'}
-            title={structuralDarkMode?'Modo claro (estrutura)':'Modo escuro (estrutura)'}
+            aria-label={structuralDarkMode?'Ativar modo claro do site':'Ativar modo escuro do site'}
+            title={structuralDarkMode?'Modo claro do site':'Modo escuro do site'}
             aria-pressed={structuralDarkMode} onClick={toggleStructuralDarkMode}>
             {structuralDarkMode?<Sun size={15}/>:<Moon size={15}/>}
             <span>{structuralDarkMode?'Modo claro':'Modo escuro'}</span>
