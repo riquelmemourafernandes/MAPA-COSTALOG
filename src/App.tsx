@@ -974,6 +974,177 @@ export default function App() {
     setEditingCell(null);
     gridRef.current?.focus({preventScroll:true});
   }
+  function selectAllLoadedCells() {
+    if(!displayedRows.length || !visibleColumns.length)return;
+    setSelectionMode('cell');
+    setSelectedRowId(null);setSelectedColumnKey(null);
+    setSelectionAnchor({rowId:displayedRows[0].id,columnKey:visibleColumns[0].key});
+    setSelectedCell({row:displayedRows[displayedRows.length-1],
+      column:visibleColumns[visibleColumns.length-1]});
+    gridRef.current?.focus({preventScroll:true});
+  }
+  function openSheetContext(event: React.MouseEvent<HTMLElement>, kind:SheetContextKind,
+    rowIndex?:number,columnIndex?:number) {
+    if(userRole!=='ADMIN')return;
+    event.preventDefault();event.stopPropagation();
+    if(editingCell)setEditingCell(null);
+    if(kind==='row' && rowIndex!==undefined){
+      const row=displayedRows[rowIndex];
+      if(row && !(selectedRowIds.includes(row.id) || (selectionMode==='row' && selectedRowId===row.id) ||
+        (selectedBounds && rowIndex>=selectedBounds.top && rowIndex<=selectedBounds.bottom)))
+        selectEntireRow(rowIndex);
+    }else if(kind==='column' && columnIndex!==undefined){
+      const column=visibleColumns[columnIndex];
+      if(column && !(selectionMode==='column' && selectedColumnKey===column.key))
+        selectEntireColumn(column);
+    }else if(kind==='cell' && rowIndex!==undefined && columnIndex!==undefined){
+      if(!selectedBounds || rowIndex<selectedBounds.top || rowIndex>selectedBounds.bottom ||
+        columnIndex<selectedBounds.left || columnIndex>selectedBounds.right)
+        selectGridCell(rowIndex,columnIndex,false,false);
+    }else if(kind==='all')selectAllLoadedCells();
+    setOpenFilterKey(null);
+    setSheetContextMenu({kind,x:event.clientX,y:event.clientY,rowIndex,columnIndex});
+  }
+  async function performSheetContextAction(action:SheetContextAction) {
+    const context=sheetContextMenu;
+    setSheetContextMenu(null);
+    if(userRole!=='ADMIN'||!context||adminSheetBusy)return;
+    const currentColumn=context.columnIndex===undefined?selectedCell?.column:
+      visibleColumns[context.columnIndex];
+    const currentRow=context.rowIndex===undefined?selectedCell?.row:displayedRows[context.rowIndex];
+    if(action==='select-all'){selectAllLoadedCells();return;}
+    if(action==='copy'||action==='cut'){
+      try{
+        if(!selectedBounds)throw new Error('Selecione uma célula antes de copiar.');
+        await navigator.clipboard.writeText(selectedGridText());
+        if(action==='cut')await clearGridSelection();
+        else setNotice('Conteúdo copiado. Use Ctrl+V para colar.');
+      }catch(error){setApiError(error instanceof Error?error.message:'Não foi possível copiar.');}
+      return;
+    }
+    if(action==='paste'||action==='paste-values'){
+      try {pasteGridText(await navigator.clipboard.readText());}
+      catch {setApiError('O navegador bloqueou a área de transferência. Use Ctrl+V.');}
+      return;
+    }
+    if(action==='clear'){await clearGridSelection();return;}
+    if(action==='insert-rows'){setNewRowsOpen(true);return;}
+    if(action==='conditional'){setShowStatusColors(true);return;}
+    if(action==='sort-asc'||action==='sort-desc'){
+      if(currentColumn)setSortConfig({key:currentColumn.key,
+        direction:action==='sort-asc'?'asc':'desc'});
+      return;
+    }
+    if(action==='filter'){
+      if(currentColumn){
+        const button=Array.from(gridRef.current?.querySelectorAll<HTMLButtonElement>('.sheet-filter-trigger')||[])
+          .find(el=>el.getAttribute('aria-label')===
+            'Abrir filtro da coluna '+(currentColumn.label||currentColumn.key));
+        button?.click();
+      }
+      return;
+    }
+    if(action==='dropdown'){
+      if(currentColumn && BASE_COLUMN_LIST[currentColumn.key] && currentRow){
+        const r=displayedRows.findIndex(item=>item.id===currentRow.id);
+        const c=visibleColumns.findIndex(item=>item.key===currentColumn.key);
+        if(r>=0&&c>=0)beginCellEdit(r,c);
+      }else setActive('Cadastros');
+      return;
+    }
+    if(action==='resize-row' && currentRow){
+      const answer=window.prompt('Altura da linha em pixels (32 a 800):',
+        String(rowHeights[currentRow.id]||35));
+      if(answer===null)return;
+      const n=Number(answer);
+      if(!Number.isInteger(n)||n<32||n>800){setApiError('Informe uma altura de 32 a 800 pixels.');return;}
+      setRowHeights(previous=>{
+        const next={...previous,[currentRow.id]:n};
+        localStorage.setItem(rowHeightStorageKey,JSON.stringify(next));
+        return next;
+      });
+      return;
+    }
+    if(action==='resize-column' && currentColumn){
+      const answer=window.prompt('Largura da coluna em pixels (90 a 520):',
+        String(columnWidths[currentColumn.key]||180));
+      if(answer===null)return;
+      const n=Number(answer);
+      if(!Number.isInteger(n)||n<90||n>520){setApiError('Informe uma largura de 90 a 520 pixels.');return;}
+      setColumnWidths(previous=>{
+        const next={...previous,[currentColumn.key]:n};
+        localStorage.setItem(widthKey,JSON.stringify(next));
+        return next;
+      });
+      return;
+    }
+    if(action==='hide-column' && currentColumn){
+      if(visibleColumns.length<=1){setApiError('Não é possível ocultar a última coluna.');return;}
+      const next=visibleKeys.filter(key=>key!==currentColumn.key);
+      setVisibleKeys(next);localStorage.setItem(preferenceKey,JSON.stringify(next));
+      void persistPreferences({visibleKeys:next});
+      setSelectedCell(null);
+      setNotice('Coluna '+currentColumn.key+' oculta apenas na sua visualização.');
+      return;
+    }
+    if(action==='delete-rows'){
+      const rowsInRange=selectedBounds
+        ?displayedRows.slice(selectedBounds.top,selectedBounds.bottom+1):[];
+      const checkboxRows=displayedRows.filter(row=>selectedRowIds.includes(row.id));
+      const candidates=context.kind==='row'&&currentRow
+        ?checkboxRows.some(item=>item.id===currentRow.id)?checkboxRows
+          :rowsInRange.some(item=>item.id===currentRow.id)?rowsInRange:[currentRow]
+        :rowsInRange;
+      const unique=[...new Map(candidates.map(item=>[item.id,item])).values()];
+      if(!unique.length){setApiError('Selecione uma ou mais linhas.');return;}
+      if(unique.length>100){setApiError('É possível excluir até 100 linhas por operação.');return;}
+      if(!window.confirm('Arquivar '+unique.length+' linha(s) selecionada(s)? Elas deixarão a grade, mas o histórico será preservado.'))return;
+      setAdminSheetBusy(true);
+      try{
+        const response=await fetch(apiBase+'/api/v1/mapa/archive-selected',{
+          method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+          body:JSON.stringify({ids:unique.map(row=>row.id)})
+        });
+        const body=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(response.status===404
+          ?'Exclusão indisponível na API atual. Conecte o backend de homologação.'
+          :body?.error?.message||'Falha ao arquivar as linhas.');
+        setSelectedRowIds([]);setSelectedCell(null);setSelectionAnchor(null);
+        setRows(previous=>previous.filter(row=>!unique.some(item=>item.id===row.id)));
+        setTotal(previous=>Math.max(0,previous-unique.length));
+        setNotice(unique.length+' linha(s) arquivada(s) com auditoria.');
+        setPage(1);lastRequestedPageRef.current=0;
+        setRetryRowsKey(value=>value+1);
+      }catch(error){setApiError(error instanceof Error?error.message:'Falha na exclusão.');}
+      finally{setAdminSheetBusy(false);}
+      return;
+    }
+    if(action==='delete-column' && currentColumn){
+      if(visibleColumns.length<=1){setApiError('Não é possível excluir a última coluna.');return;}
+      if(!window.confirm('Excluir a coluna '+currentColumn.key+' ('+currentColumn.label+
+        ') da grade compartilhada? Valores antigos e histórico serão preservados.'))return;
+      setAdminSheetBusy(true);
+      try{
+        const response=await fetch(apiBase+'/api/v1/config/columns/'+encodeURIComponent(currentColumn.key)+'/archive',{
+          method:'PATCH',headers:{Authorization:'Bearer '+token}
+        });
+        const body=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(response.status===404
+          ?'A API conectada ainda não oferece a exclusão de colunas. Use homologação.'
+          :body?.error?.message||'Não foi possível excluir a coluna.');
+        setColumns(previous=>previous.filter(item=>item.key!==currentColumn.key));
+        setVisibleKeys(previous=>{
+          const next=previous.filter(key=>key!==currentColumn.key);
+          localStorage.setItem(preferenceKey,JSON.stringify(next));
+          return next;
+        });
+        setSelectedCell(null);setSelectionAnchor(null);setSelectedColumnKey(null);
+        setNotice('Coluna '+currentColumn.key+' arquivada para todos. Os dados históricos foram mantidos.');
+      }catch(error){setApiError(error instanceof Error?error.message:'Falha ao excluir a coluna.');}
+      finally{setAdminSheetBusy(false);}
+    }
+  }
+
   function onGridKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const element = event.target as HTMLElement;
     if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(element.tagName) ||
