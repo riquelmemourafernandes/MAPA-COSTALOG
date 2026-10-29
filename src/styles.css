@@ -440,3 +440,39 @@ td:hover .cell-history,.cell-history:focus{opacity:1}
   height:32px;width:100%;padding:2px 5px;border:1px solid #298449;
   background:white;color:#1a3021;box-shadow:none;
 }
+
+/* Column letters (Excel row above the actual row-1 field headers). */
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th{
+  position:sticky;top:0!important;z-index:9;height:25px!important;
+  padding:0!important;background:#c8f1d0!important;color:#17482e!important;
+  border-right:1px solid #a2cbb0!important;border-bottom:1px solid #84ba96!important;
+  text-align:center;vertical-align:middle;user-select:none;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row th.sheet-column-selected{
+  background:#8cdb9b!important;
+}
+.sheet-letter-header{cursor:cell;position:relative}
+.sheet-letter-button{display:block;width:100%;height:24px;padding:0 14px 0 6px;
+  border:0;background:transparent;color:inherit;font-size:11px;font-weight:800;cursor:pointer}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row th{
+  position:sticky;top:25px!important;z-index:8;height:37px!important;
+  border-right:1px solid #374b40!important;border-bottom:2px solid #348d4e!important;
+  background:#101b17!important;color:#edfff3!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row th.sheet-column-selected{
+  background:#235e3d!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row .sheet-filter-trigger{
+  display:flex;align-items:center;gap:8px;width:100%;height:34px;
+  background:transparent!important;color:#effff3!important;font-size:11px;
+  font-weight:800;padding:4px 8px!important;border:0;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row .sheet-filter-trigger:hover{
+  background:#26392e!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-label-row .sheet-header-number{
+  text-align:center;font-size:12px;color:#b5eabf!important;
+}
+.app-shell.map-fullscreen .mapa-grid-panel .sheet-table thead tr.sheet-letters-row .sheet-corner{
+  cursor:pointer;font-size:12px;
+}
