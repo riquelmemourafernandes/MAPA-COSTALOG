@@ -10,6 +10,18 @@ type Node =
   | { kind: 'binary'; operator: string; left: Node; right: Node }
   | { kind: 'call'; name: string; args: Node[] };
 const isError = (v: unknown): v is string => typeof v === 'string' && /^#(?:REF!|DIV\/0!|VALUE!|NAME\?|NUM!|N\/A|ERROR!)/i.test(v);
+const FORMULA_ALIASES: Record<string, string> = {
+  SOMA: 'SUM', MÉDIA: 'AVERAGE', MEDIA: 'AVERAGE', 'CONT.NÚM': 'COUNT',
+  'CONT.VALORES': 'COUNTA', MÍNIMO: 'MIN', MINIMO: 'MIN', MÁXIMO: 'MAX', MAXIMO: 'MAX',
+  SE: 'IF', SEERRO: 'IFERROR', E: 'AND', OU: 'OR', NÃO: 'NOT', HOJE: 'TODAY', AGORA: 'NOW',
+  ARRED: 'ROUND', 'ARREDONDAR.PARA.CIMA': 'ROUNDUP', 'ARREDONDAR.PARA.BAIXO': 'ROUNDDOWN',
+  POTÊNCIA: 'POWER', RAIZ: 'SQRT', SOMASE: 'SUMIF', 'CONT.SE': 'COUNTIF',
+  DATA: 'DATE', ANO: 'YEAR', MÊS: 'MONTH', DIA: 'DAY', ESQUERDA: 'LEFT', DIREITA: 'RIGHT',
+  'EXT.TEXTO': 'MID', 'NÚM.CARACT': 'LEN', MAIÚSCULA: 'UPPER', MINÚSCULA: 'LOWER',
+  ARRUMAR: 'TRIM', VALOR: 'VALUE', 'ÉCÉL.VAZIA': 'ISBLANK', 'ÉNÚM': 'ISNUMBER',
+  'ÉTEXTO': 'ISTEXT', 'ÉERROS': 'ISERROR', SUBSTITUIR: 'SUBSTITUTE',
+  LOCALIZAR: 'FIND', PROCURAR: 'SEARCH'
+};
 export function columnKeyToIndex(key: string): number {
   let n = 0; for (const char of key.toUpperCase()) { const c = char.charCodeAt(0); if (c < 65 || c > 90) return -1; n = n * 26 + c - 64; } return n - 1;
 }
@@ -33,7 +45,7 @@ function tokenize(s: string): Token[] {
     if (n) { out.push({ kind: 'number', value: n[0] }); i += n[0].length; continue; }
     const ref = /^\$?[A-Z]{1,3}\$?[1-9]\d*/i.exec(r);
     if (ref) { out.push({ kind: 'identifier', value: ref[0] }); i += ref[0].length; continue; }
-    const id = /^[A-Z_][A-Z0-9_.]*/i.exec(r);
+    const id = /^[\\p{L}_][\\p{L}0-9_.]*/iu.exec(r);
     if (id) { out.push({ kind: 'identifier', value: id[0] }); i += id[0].length; continue; }
     const op = /^(?:<=|>=|<>|!=|==|[+\-*/^&%=<>():;,])/.exec(r);
     if (op) { out.push({ kind: 'operator', value: op[0] }); i += op[0].length; continue; }
@@ -72,7 +84,7 @@ class Parser {
         if (this.accept(':')) { const end = this.take(); const ref2 = end.kind === 'identifier' ? parseCellAddress(end.value) : null; if (!ref2) throw Error('Invalid range'); return { kind: 'range', start: ref, end: ref2 }; }
         return { kind: 'cell', ...ref };
       }
-      const name = t.value.toUpperCase();
+      const rawName = t.value.toLocaleUpperCase('pt-BR');\n      const name = FORMULA_ALIASES[rawName] || rawName;
       if (name === 'TRUE') return { kind: 'literal', value: true };
       if (name === 'FALSE') return { kind: 'literal', value: false };
       if (this.accept('(')) {
