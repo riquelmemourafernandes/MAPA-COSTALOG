@@ -3,6 +3,7 @@ import { referenceHeader } from './reference-header.js';
 import BaseCatalogSheet from './BaseCatalogSheet.js';
 import {inheritRowPresentation,nearestPreviousRowId,type PresentationSnapshot} from './sheet-row-format.js';
 import SheetContextMenu from './SheetContextMenu.js';
+import {columnEdgeScrollStep,dropSideAt,moveVisibleColumn,type ColumnDropSide} from './sheet-column-drag.js';
 import {type SheetContextKind,type SheetContextAction} from './sheet-context-menu.js';
 import { sourceColumnWidth, sourceRowHeight } from './mapa-source-dimensions.js';
 import { SCROLL_BATCH_SIZE, normalizeCreateCount,
@@ -353,6 +354,12 @@ export default function App() {
   const [pasteBusy, setPasteBusy] = useState(false);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+  const [columnDropTarget,setColumnDropTarget]=useState<{key:string;side:ColumnDropSide}|null>(null);
+  const columnOptionsRef=useRef<HTMLDivElement>(null);
+  const columnDragRef=useRef<{
+    source:string|null;x:number;y:number;frame:number|null;
+    target:{key:string;side:ColumnDropSide}|null;
+  }>({source:null,x:0,y:0,frame:null,target:null});
   const [sortConfig, setSortConfig] = useState<{key:string; direction:'asc'|'desc'} | null>(null);
   const [cellStyles, setCellStyles] = useState<Record<string, CellStyle>>({});
   const [rowStyles, setRowStyles] = useState<Record<string, CellStyle>>({});
@@ -546,15 +553,92 @@ export default function App() {
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [token, userKey, userRole, preferenceKey]);
-  function reorderColumn(sourceKey: string, targetKey: string) {
-    if (sourceKey === targetKey) return;
-    setVisibleKeys(previous => {
-      const ordered = [...previous]; const from = ordered.indexOf(sourceKey); const to = ordered.indexOf(targetKey);
-      if (from < 0 || to < 0) return previous;
-      ordered.splice(from, 1); ordered.splice(to, 0, sourceKey);
-      localStorage.setItem(preferenceKey, JSON.stringify(ordered)); void persistPreferences({visibleKeys: ordered}); return ordered;
-    });
+  function reorderColumn(sourceKey:string,targetKey:string,side:ColumnDropSide) {
+    const ordered=moveVisibleColumn(visibleKeys,sourceKey,targetKey,side);
+    if(ordered.every((key,index)=>key===visibleKeys[index]))return;
+    setVisibleKeys(ordered);
+    localStorage.setItem(preferenceKey,JSON.stringify(ordered));
+    void persistPreferences({visibleKeys:ordered});
   }
+  function updateColumnDropTarget(x:number,y:number){
+    const list=columnOptionsRef.current;
+    const dragging=columnDragRef.current.source;
+    if(!list||!dragging)return;
+    const rows=Array.from(list.querySelectorAll<HTMLElement>('[data-column-drag-key]'));
+    let nearest:HTMLElement|null=null;
+    let distance=Infinity;
+    for(const row of rows){
+      const rect=row.getBoundingClientRect();
+      if(rect.bottom<list.getBoundingClientRect().top || rect.top>list.getBoundingClientRect().bottom)continue;
+      const delta=y<rect.top?rect.top-y:y>rect.bottom?y-rect.bottom:0;
+      if(delta<distance){nearest=row;distance=delta;}
+      if(delta===0)break;
+    }
+    const key=nearest?.dataset.columnDragKey;
+    const rect=nearest?.getBoundingClientRect();
+    const next=key&&rect&&key!==dragging
+      ?{key,side:dropSideAt(y,rect.top,rect.height)}:null;
+    const previous=columnDragRef.current.target;
+    if(previous?.key===next?.key&&previous?.side===next?.side)return;
+    columnDragRef.current.target=next;
+    setColumnDropTarget(next);
+  }
+  function columnDragScrollFrame(){
+    const state=columnDragRef.current;
+    state.frame=null;
+    const list=columnOptionsRef.current;
+    if(!state.source||!list)return;
+    const rect=list.getBoundingClientRect();
+    const step=columnEdgeScrollStep(state.y,rect.top,rect.bottom);
+    if(!step)return;
+    const before=list.scrollTop;
+    list.scrollTop=Math.max(0,Math.min(list.scrollHeight-list.clientHeight,before+step));
+    if(list.scrollTop!==before)updateColumnDropTarget(state.x,state.y);
+    if(state.source)state.frame=window.requestAnimationFrame(columnDragScrollFrame);
+  }
+  function onColumnDragStart(event:React.DragEvent<HTMLDivElement>,key:string){
+    if((event.target as HTMLElement).closest('input,button')){event.preventDefault();return;}
+    columnDragRef.current.source=key;
+    columnDragRef.current.target=null;
+    event.dataTransfer.effectAllowed='move';
+    event.dataTransfer.setData('text/plain',key);
+    setDraggedColumn(key);
+  }
+  function onColumnListDragOver(event:React.DragEvent<HTMLDivElement>){
+    if(!columnDragRef.current.source)return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect='move';
+    columnDragRef.current.x=event.clientX;
+    columnDragRef.current.y=event.clientY;
+    updateColumnDropTarget(event.clientX,event.clientY);
+    const rect=event.currentTarget.getBoundingClientRect();
+    if(columnEdgeScrollStep(event.clientY,rect.top,rect.bottom)!==0&&
+       columnDragRef.current.frame===null)
+      columnDragRef.current.frame=window.requestAnimationFrame(columnDragScrollFrame);
+  }
+  function finishColumnDrag(){
+    const current=columnDragRef.current;
+    if(current.frame!==null)window.cancelAnimationFrame(current.frame);
+    current.source=null;current.frame=null;current.target=null;
+    setDraggedColumn(null);
+    setColumnDropTarget(null);
+  }
+  function onColumnListDrop(event:React.DragEvent<HTMLDivElement>){
+    if(!columnDragRef.current.source)return;
+    event.preventDefault();
+    updateColumnDropTarget(event.clientX,event.clientY);
+    const {source,target}=columnDragRef.current;
+    if(source&&target)reorderColumn(source,target.key,target.side);
+    finishColumnDrag();
+  }
+  useEffect(()=>{
+    if(!columnMenu)finishColumnDrag();
+  },[columnMenu]);
+  useEffect(()=>()=>{
+    const frame=columnDragRef.current.frame;
+    if(frame!==null)window.cancelAnimationFrame(frame);
+  },[]);
+
   // A newly created row inherits the preceding row's VISUAL formatting only.
   // Never duplicate status, client, dates or any other operational field value.
   function inheritNewRowFormat(item:RecordRow,position:number,knownRows:RecordRow[]):PresentationSnapshot|null {
@@ -2514,7 +2598,31 @@ export default function App() {
             <button className="secondary" onClick={()=>setNewRowsOpen(false)}>Cancelar</button>
             <small>{isGitHubPagesPreview ? 'Até 100 por operação · alterações salvas apenas neste navegador' : 'Até 100 por operação · registros reais somente após confirmar'}</small>
           </div>}
-          {columnMenu && <div className="column-picker"><div className="column-picker-actions"><b>Colunas exibidas e sequência</b><button className="secondary" onClick={()=>{const all=columns.map(c=>c.key);setVisibleKeys(all);localStorage.setItem(preferenceKey,JSON.stringify(all));void persistPreferences({visibleKeys:all});}}>Mostrar todas</button><button className="secondary" onClick={()=>{const defaults=columns.filter(c=>c.visible).map(c=>c.key);setVisibleKeys(defaults);localStorage.setItem(preferenceKey,JSON.stringify(defaults));void persistPreferences({visibleKeys:defaults});}}>Restaurar padrão</button></div><div className="column-options">{[...columns].sort((a,b)=>{const ai=visibleKeys.indexOf(a.key),bi=visibleKeys.indexOf(b.key);return ai<0?(bi<0?a.position-b.position:1):bi<0?-1:ai-bi}).map(column=><div className={"column-option "+(draggedColumn===column.key?"dragging":"")} key={column.key} draggable onDragStart={()=>setDraggedColumn(column.key)} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();if(draggedColumn)reorderColumn(draggedColumn,column.key);setDraggedColumn(null)}} onDragEnd={()=>setDraggedColumn(null)}><GripVertical size={15} className="drag-handle"/><input type="checkbox" checked={visibleKeys.includes(column.key)} onChange={()=>toggleColumn(column.key)}/><span>{column.label || '(coluna sem título)'}</span></div>)}</div><div className="saved-view-tools"><button className="secondary" onClick={()=>setShowViewTools(value=>!value)}><Filter size={14}/> Filtros personalizados</button>{showViewTools&&<div className="saved-view-editor"><div className="saved-view-save"><input value={viewName} onChange={event=>setViewName(event.target.value)} placeholder="Nome da configuração"/><button className="primary" onClick={()=>void saveCurrentView()}><Save size={14}/> Salvar filtro</button></div>{savedViews.map(view=><div className="saved-view-item" key={view.name}><button onClick={()=>applyView(view)}>{view.name}</button><small>{view.visibleKeys.length} colunas · {view.status||'Todos os status'}{view.query?' · busca: '+view.query:''}</small><button title="Excluir filtro" onClick={()=>{const next=savedViews.filter(item=>item.name!==view.name);setSavedViews(next);void persistPreferences({savedViews:next});}}><X size={14}/></button></div>)}</div>}</div></div>}<div className="toolbar"><div className="searchbox"><Search size={16}/><input ref={searchInputRef} value={query} onChange={e=>{setPage(1);setQuery(e.target.value)}} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="">Todos os status</option>{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><option key={value} value={value}>{value}</option>)}</select></div><div className="select-wrap"><Columns3 size={16}/><select aria-label="Filtrar por coluna" value={filterColumn} onChange={e=>{setPage(1);setFilterColumn(e.target.value)}}><option value="">Todas as colunas</option>{columns.map(column=><option key={column.key} value={column.key}>{column.label || column.key}</option>)}</select></div><input aria-label="Valor do filtro de coluna" className="column-filter-input" value={filterValue} onChange={e=>{setPage(1);setFilterValue(e.target.value)}} placeholder="Valor da coluna..."/><button className="secondary" onClick={()=>{setFilterColumn('');setFilterValue('');setColumnFilters({});setPage(1)}} disabled={!filterColumn&&!filterValue&&!Object.keys(columnFilters).length}>Limpar filtro</button><button className="secondary" disabled={!selectedCell} onClick={()=>selectedCell&&void openHistory(selectedCell.row,selectedCell.column)}><History size={14}/> Histórico da célula selecionada</button><button className="secondary" disabled={!canFormatSelection} title="Negrito na célula, linha ou coluna selecionada" onClick={()=>updateSelectedStyle({bold:!selectedStyle.bold})}><Bold size={14}/> Negrito</button><SheetColorPicker kind="text" value={selectedStyle.color||'#47584E'} disabled={!canFormatSelection}
+          {columnMenu && <div className="column-picker"><div className="column-picker-actions"><b>Colunas exibidas e sequência</b><button className="secondary" onClick={()=>{const all=columns.map(c=>c.key);setVisibleKeys(all);localStorage.setItem(preferenceKey,JSON.stringify(all));void persistPreferences({visibleKeys:all});}}>Mostrar todas</button><button className="secondary" onClick={()=>{const defaults=columns.filter(c=>c.visible).map(c=>c.key);setVisibleKeys(defaults);localStorage.setItem(preferenceKey,JSON.stringify(defaults));void persistPreferences({visibleKeys:defaults});}}>Restaurar padrão</button></div><div className={'column-options'+(draggedColumn?' column-drag-active':'')}
+  ref={columnOptionsRef}
+  onDragOver={onColumnListDragOver}
+  onDrop={onColumnListDrop}
+  role="list"
+  aria-label="Arraste colunas para mudar a ordem; a lista rola automaticamente nas extremidades">
+  {[...columns].sort((a,b)=>{
+    const ai=visibleKeys.indexOf(a.key),bi=visibleKeys.indexOf(b.key);
+    return ai<0?(bi<0?a.position-b.position:1):bi<0?-1:ai-bi;
+  }).map(column=><div
+    className={'column-option'+(draggedColumn===column.key?' dragging':'')+
+      (columnDropTarget?.key===column.key?' column-drop-'+columnDropTarget.side:'')}
+    key={column.key}
+    role="listitem"
+    data-column-drag-key={column.key}
+    draggable
+    onDragStart={event=>onColumnDragStart(event,column.key)}
+    onDragEnd={finishColumnDrag}>
+    <GripVertical size={15} className="drag-handle"/>
+    <input type="checkbox" aria-label={'Mostrar coluna '+column.key+' '+column.label}
+      checked={visibleKeys.includes(column.key)}
+      onChange={()=>toggleColumn(column.key)}/>
+    <span><strong className="column-option-key">{column.key}</strong> {column.label || '(coluna sem título)'}</span>
+  </div>)}
+</div><div className="saved-view-tools"><button className="secondary" onClick={()=>setShowViewTools(value=>!value)}><Filter size={14}/> Filtros personalizados</button>{showViewTools&&<div className="saved-view-editor"><div className="saved-view-save"><input value={viewName} onChange={event=>setViewName(event.target.value)} placeholder="Nome da configuração"/><button className="primary" onClick={()=>void saveCurrentView()}><Save size={14}/> Salvar filtro</button></div>{savedViews.map(view=><div className="saved-view-item" key={view.name}><button onClick={()=>applyView(view)}>{view.name}</button><small>{view.visibleKeys.length} colunas · {view.status||'Todos os status'}{view.query?' · busca: '+view.query:''}</small><button title="Excluir filtro" onClick={()=>{const next=savedViews.filter(item=>item.name!==view.name);setSavedViews(next);void persistPreferences({savedViews:next});}}><X size={14}/></button></div>)}</div>}</div></div>}<div className="toolbar"><div className="searchbox"><Search size={16}/><input ref={searchInputRef} value={query} onChange={e=>{setPage(1);setQuery(e.target.value)}} placeholder="Buscar em todos os campos..."/></div><div className="select-wrap"><Filter size={16}/><select value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="">Todos os status</option>{Array.from(new Set(rows.map(row=>row.status).filter((value): value is string=>Boolean(value)))).sort().map(value=><option key={value} value={value}>{value}</option>)}</select></div><div className="select-wrap"><Columns3 size={16}/><select aria-label="Filtrar por coluna" value={filterColumn} onChange={e=>{setPage(1);setFilterColumn(e.target.value)}}><option value="">Todas as colunas</option>{columns.map(column=><option key={column.key} value={column.key}>{column.label || column.key}</option>)}</select></div><input aria-label="Valor do filtro de coluna" className="column-filter-input" value={filterValue} onChange={e=>{setPage(1);setFilterValue(e.target.value)}} placeholder="Valor da coluna..."/><button className="secondary" onClick={()=>{setFilterColumn('');setFilterValue('');setColumnFilters({});setPage(1)}} disabled={!filterColumn&&!filterValue&&!Object.keys(columnFilters).length}>Limpar filtro</button><button className="secondary" disabled={!selectedCell} onClick={()=>selectedCell&&void openHistory(selectedCell.row,selectedCell.column)}><History size={14}/> Histórico da célula selecionada</button><button className="secondary" disabled={!canFormatSelection} title="Negrito na célula, linha ou coluna selecionada" onClick={()=>updateSelectedStyle({bold:!selectedStyle.bold})}><Bold size={14}/> Negrito</button><SheetColorPicker kind="text" value={selectedStyle.color||'#47584E'} disabled={!canFormatSelection}
   onSelect={color=>updateSelectedStyle({color})}/>
 <SheetColorPicker kind="background" value={selectedStyle.background||'#FFFFFF'} disabled={!canFormatSelection}
   onSelect={background=>updateSelectedStyle({background})}/>
