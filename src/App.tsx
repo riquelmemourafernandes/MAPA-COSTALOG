@@ -155,6 +155,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [columns, setColumns] = useState<Column[]>([]);
   const [rows, setRows] = useState<RecordRow[]>([]);
+  const [pendingRowStatus, setPendingRowStatus] = useState<Record<string, string>>({});
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(null);
   const [validationLoading, setValidationLoading] = useState(false);
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null);
@@ -589,6 +590,13 @@ export default function App() {
       setApiError(parsed.message + ' na coluna ' + column.label + '.');
       return false;
     }
+    // Apply the conditional row color immediately while the audited PATCH
+    // is in flight. On failure, remove this preview and show the old color.
+    if (column.key === 'C') {
+      setPendingRowStatus(previous => ({
+        ...previous, [row.id]: typeof parsed.value === 'string' ? parsed.value : ''
+      }));
+    }
     try {
       const response = await fetch(apiBase + '/api/v1/mapa/' + encodeURIComponent(row.id), {
         method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
@@ -604,6 +612,12 @@ export default function App() {
       setApiError(error instanceof Error ? error.message : 'Falha ao salvar.');
       setNotice('A alteração não foi confirmada. Atualize a tela antes de continuar.');
       return false;
+    } finally {
+      if (column.key === 'C') {
+        setPendingRowStatus(previous => {
+          const next = { ...previous }; delete next[row.id]; return next;
+        });
+      }
     }
   }
 
@@ -1187,7 +1201,10 @@ export default function App() {
               </thead>
               <tbody>
                 {displayedRows.map((row, ri) => {
-                  const conditionalBackground = statusRowColor(row.data?.C ?? row.status);
+                  const conditionalBackground = statusRowColor(
+                    Object.prototype.hasOwnProperty.call(pendingRowStatus, row.id)
+                      ? pendingRowStatus[row.id] : (row.data?.C ?? row.status)
+                  );
                   const conditionalTextColor = conditionalBackground ? statusRowTextColor(conditionalBackground) : undefined;
                   return <tr key={row.id} className={selectedRowIds.includes(row.id) ? 'bulk-selected-row' : ''}
                     data-status={String(row.data?.C ?? row.status ?? '')}>
