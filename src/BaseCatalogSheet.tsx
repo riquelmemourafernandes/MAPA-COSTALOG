@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, ChevronDown, Database, Pencil, Plus, Search, X } from "lucide-react";
+import { Check, Database, Pencil, Plus, Search, X } from "lucide-react";
 import BasePrototype from "./BasePrototype.js";
 import { DEMO_LISTS } from "./base-prototype-data.js";
 import "./base-catalog-sheet.css";
